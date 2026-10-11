@@ -340,6 +340,18 @@ side effect of the design.
   and BLAKE2b, hence those; each has an audited counterpart in `@noble/*` for
   the app. A ChaCha cipher rather than AES-GCM for the readers' sake: the
   phone decrypts in pure JS, where ChaCha is the faster of the two.
+- **Encrypted files are named `<plain name>.nge`** ("N Gauge Encrypted", as
+  the `NGE1` magic): `drive_<stamp>.csv.nge`, `trip_<stamp>.gpx.nge`. Readers
+  decide by the name, decrypting gives back the plain name, and nobody opens
+  ciphertext in a spreadsheet and takes the log for corrupt (suggested by the
+  owner, 2026-10-11). Numbered files keep one sequence across both.
+- **The throwaway secrets come from a stirred pool, not straight from the
+  RNG.** The ESP32-S3's RNG is only guaranteed true-random while the radio
+  runs (WiFi or BT). The AP is up from boot, but drops while driving
+  (AP_DRIVE_OFF) - exactly when a GPX may open, at the first fix on the road.
+  So RNG output is stirred into a BLAKE2b pool on every logger pass with the
+  AP up; a secret is BLAKE2b(pool, fresh RNG output), and the pool is then
+  ratcheted so the secret cannot be recomputed from it.
 - **One test vector holds the readers to the writer.** `tests/test_logcrypt.cpp`
   writes `tests/vectors/logcrypt-v1.json` from the pod's C code and fails if
   the format drifts from it; the app's tests decrypt that file with `@noble/*`
