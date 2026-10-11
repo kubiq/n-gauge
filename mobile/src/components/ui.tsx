@@ -1,14 +1,23 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, S } from '@/theme';
 
-/** `underHeader`: a stack screen with a header, which already clears the status bar. */
+/**
+ * `underHeader`: a stack screen with a header (trip, server, scan), which
+ * already clears the status bar - and has no tab bar below it, so it keeps
+ * clear of Android's navigation buttons itself: the app draws edge to edge.
+ * The space is scroll padding, not a margin, so content still scrolls behind
+ * the transparent bar but its end stops above it.
+ */
 export function Screen({ children, underHeader }: { children: ReactNode; underHeader?: boolean }) {
+  const insets = useSafeAreaInsets();
   return (
     <SafeAreaView style={styles.screen} edges={underHeader ? [] : ['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>{children}</ScrollView>
+      <ScrollView contentContainerStyle={[styles.scroll, underHeader && { paddingBottom: S.md + insets.bottom }]}>
+        {children}
+      </ScrollView>
     </SafeAreaView>
   );
 }

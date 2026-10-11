@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Note, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
@@ -16,11 +17,14 @@ export default function Scan() {
   const [wrong, setWrong] = useState(false);
   // onBarcodeScanned fires per frame; take the first good one only.
   const done = useRef(false);
+  // The hint floats over the camera, so it keeps clear of the navigation
+  // buttons itself (the app draws edge to edge).
+  const insets = useSafeAreaInsets();
 
   if (!perm) return null;
   if (!perm.granted) {
     return (
-      <Screen>
+      <Screen underHeader>
         <Note>The camera reads the QR code on the pod’s WiFi screen. Nothing else is recorded.</Note>
         <Button title="Allow camera" onPress={requestPerm} />
       </Screen>
@@ -43,7 +47,7 @@ export default function Scan() {
           setCreds(c).then(() => router.back());
         }}
       />
-      <View style={styles.hint}>
+      <View style={[styles.hint, { bottom: S.lg + insets.bottom }]}>
         <Note tone={wrong ? 'bad' : undefined}>
           {wrong ? 'That is not the pod’s WiFi code.' : 'Point at the QR on the pod’s WiFi screen.'}
         </Note>
@@ -54,5 +58,5 @@ export default function Scan() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
-  hint: { position: 'absolute', bottom: S.lg, left: S.md, right: S.md, padding: S.md, backgroundColor: '#000a', borderRadius: 8 },
+  hint: { position: 'absolute', left: S.md, right: S.md, padding: S.md, backgroundColor: '#000a', borderRadius: 8 },
 });
