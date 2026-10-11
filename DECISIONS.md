@@ -317,22 +317,33 @@ side effect of the design.
   boot to be any better than the plaintext - one-way eFuses, decided against.
 - **Per segment, a throwaway key.** Each time the pod opens a log (a new file,
   or after a boot or wake) it makes an ephemeral X25519 key pair, derives the
-  segment key as HKDF-SHA256(X25519(eph, pub), salt = eph_pub ‖ pub, info =
-  "n-gauge log v1"), writes eph_pub in a segment header, and forgets eph's
-  private half. Afterwards not even the pod can read what it wrote; the only
-  key ever exposed is the open segment's, in RAM - gone when the power is.
-  Nothing secret is ever stored on the pod.
+  segment key as BLAKE2b-256(X25519(eph, pub) ‖ eph_pub ‖ pub ‖ "n-gauge log
+  v1") - as libsodium's key exchange hashes its shared secret with both public
+  keys - writes eph_pub in a segment header, and forgets eph's private half.
+  Afterwards not even the pod can read what it wrote; the only key ever
+  exposed is the open segment's, in RAM - gone when the power is. Nothing
+  secret is ever stored on the pod.
 - **Records, not a stream.** Each batch the logger already flushes (1-2 s) is
-  one ChaCha20-Poly1305 record: the nonce a per-segment counter, the segment
+  one XChaCha20-Poly1305 record: the nonce a per-segment counter, the segment
   header as associated data. On the card: `type | length | body` blocks, a
   header block (magic, version, eph_pub) then record blocks (ciphertext +
   16-byte tag). So the file stays **append-only** - the sync's {name, size}
   listing and Range resume keep working unchanged - and a record cut off by a
   power loss fails its tag and is dropped, everything before it intact.
-- **ChaCha20-Poly1305 over AES-GCM** for the readers' sake: the phone decrypts
-  in pure JS (`@noble/ciphers`), where ChaCha is the faster of the two; on the
-  pod either is negligible against ~10 KB/s of logging (mbedTLS has both, and
-  X25519).
+  The exact layout is in `firmware/car_gauge_v1/logcrypt.h`.
+- **Monocypher, not the core's mbedTLS.** The plan was ChaCha20-Poly1305 and
+  HKDF-SHA256 from mbedTLS, but the Arduino core's prebuilt mbedTLS has
+  ChaCha20 and Poly1305 switched off (`CONFIG_MBEDTLS_CHACHA20_C` unset) - and
+  a crypto library that is one portable C file (Monocypher 4.0.2, BSD-2/CC0,
+  vendored, checked against its GitHub tag and its own test suite) runs the
+  same code in the host tests. Its primitives are X25519, XChaCha20-Poly1305
+  and BLAKE2b, hence those; each has an audited counterpart in `@noble/*` for
+  the app. A ChaCha cipher rather than AES-GCM for the readers' sake: the
+  phone decrypts in pure JS, where ChaCha is the faster of the two.
+- **One test vector holds the readers to the writer.** `tests/test_logcrypt.cpp`
+  writes `tests/vectors/logcrypt-v1.json` from the pod's C code and fails if
+  the format drifts from it; the app's tests decrypt that file with `@noble/*`
+  and re-encrypt it to the same bytes.
 - **The GPX's closing tags move to the reader.** The writer keeps
   `</trkseg></trk></gpx>` at the end by writing it and seeking back over it
   at the next batch (`gpxWriteTail()` / `gpxCommit()`) - a rewrite in place,
