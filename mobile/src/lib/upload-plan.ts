@@ -22,11 +22,17 @@ export type UploadStep =
    */
   | { kind: 'send'; offset: number };
 
-export function planUpload(e: InboxEntry, server: number | undefined): UploadStep {
+/**
+ * `appendOnly`: false for a GPX. The pod rewrites a GPX's closing tags in
+ * place, so a server copy that is ahead of what we recorded as uploaded may
+ * end in stale tags rather than in bytes of a lost reply - it is replaced.
+ */
+export function planUpload(e: InboxEntry, server: number | undefined, appendOnly = true): UploadStep {
   if (e.pending === 0) return { kind: 'none' };
   const s = server ?? 0;
   const end = e.uploaded + e.pending;
   if (s === end) return { kind: 'done', size: s };
+  if (!appendOnly && s > e.uploaded) return { kind: 'send', offset: 0 };
   if (s < end) return { kind: 'send', offset: s };
   return { kind: 'send', offset: 0 };
 }

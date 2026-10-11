@@ -1,9 +1,10 @@
 // What to pull from the pod. Pure, so it can be tested without a pod.
 //
-// Files are compared by {name, size} only. The logger never rewrites the
-// middle of a file - it appends, and a numbered drive log is renamed to its
-// dated name once the clock is known (a new name, so a new file here) - so a
-// file that grew only needs its tail, fetched with a Range request.
+// Files are compared by {name, size} only. The logger appends - and a
+// numbered drive log is renamed to its dated name once the clock is known (a
+// new name, so a new file here) - so a file that grew only needs its tail,
+// fetched with a Range request. One exception: a GPX's closing tags are
+// rewritten at every batch; pull() in store.ts continues over them.
 
 export type PodFile = { name: string; size: number };
 

@@ -1,10 +1,12 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { TrackMap } from '@/components/track-map';
-import { Card, Note, Row, Screen } from '@/components/ui';
+import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
+import { shareGpx } from '@/lib/share';
 import type { CsvSummary, TrackPoint } from '@/lib/trips';
 
 export default function TripScreen() {
@@ -15,6 +17,7 @@ export default function TripScreen() {
   // In state, not read from the cache during render - see trips.tsx.
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     if (!t) return;
@@ -78,6 +81,23 @@ export default function TripScreen() {
       <Card title="Files">
         {t.gpx ? <Row label="Track" value={t.gpx} tone="dim" /> : null}
         {t.csv ? <Row label="Car data" value={t.csv} tone="dim" /> : null}
+        {t.gpx ? (
+          <Button
+            title="Share the track (GPX)"
+            kind="plain"
+            busy={sharing}
+            onPress={async () => {
+              setSharing(true);
+              try {
+                await shareGpx(t.gpx!);
+              } catch (e) {
+                Alert.alert('Share', String((e as Error).message));
+              } finally {
+                setSharing(false);
+              }
+            }}
+          />
+        ) : null}
       </Card>
     </Screen>
   );

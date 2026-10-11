@@ -30,6 +30,14 @@ test('server behind what we recorded (it lost data): resend from where it is', (
   assert.deepEqual(planUpload({ uploaded: 1000, pending: 200 }, undefined), { kind: 'send', offset: 0 });
 });
 
+// A GPX's tail is rewritten in place: a server copy ahead of what we
+// recorded may end in stale closing tags, so it is replaced, not continued.
+test('a GPX with the server ahead of our record is replaced', () => {
+  assert.deepEqual(planUpload({ uploaded: 1000, pending: 200 }, 1150, false), { kind: 'send', offset: 0 });
+  assert.deepEqual(planUpload({ uploaded: 1000, pending: 200 }, 1000, false), { kind: 'send', offset: 1000 });
+  assert.deepEqual(planUpload({ uploaded: 1000, pending: 200 }, 1200, false), { kind: 'done', size: 1200 });
+});
+
 // The pod's copy shrank, so the pull restarted it from 0.
 test('server holds more than we do: replace it', () => {
   assert.deepEqual(planUpload({ uploaded: 0, pending: 50 }, 8000), { kind: 'send', offset: 0 });

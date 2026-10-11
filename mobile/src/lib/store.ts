@@ -13,6 +13,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { type BackendConfig, BackendError, listServer, putChunk } from './backend';
+import { GPX_TAIL } from './gpx-share';
 import { downloadRange } from './pod';
 import { isPodLog, type Known, type Pull } from './sync-plan';
 import { type InboxEntry, planUpload } from './upload-plan';
@@ -72,6 +73,12 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
     throw new Error(`${p.name}: planned from ${p.from}, but the inbox ends at ${e.uploaded + e.pending}`);
   }
 
+  // A GPX the pod is still writing ends in closing tags that it overwrites
+  // with the next batch (gpxCommit() in logger.cpp). Continuing after them
+  // would leave them in the middle of our copy, so continue over them.
+  let from = p.from;
+  if (p.name.endsWith('.gpx') && !p.restart && dest.exists && endsWithGpxTail(dest)) from -= GPX_TAIL.length;
+
   // A fresh name per pull, and the leftovers of earlier ones cleared: after
   // a Cancel the native transfer may still be finishing into its old file.
   if (!partsDir.exists) partsDir.create({ intermediates: true });
@@ -79,8 +86,8 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   const tmp = new File(partsDir, `${Date.now()}.part`);
   // A cancelled or failed download rejects here, before the inbox is
   // touched: the file stays as it was and the next sync plans it again.
-  const { whole } = await downloadRange(p.name, p.from, p.size, tmp, onProgress, signal);
-  const skip = whole ? p.from : 0;
+  const { whole } = await downloadRange(p.name, from, p.size, tmp, onProgress, signal);
+  const skip = whole ? from : 0;
   const got = tmp.size - skip;
 
   if (!dest.exists && skip === 0) {
@@ -88,9 +95,11 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   } else {
     if (!dest.exists) dest.create();
     const src = tmp.open(FileMode.ReadOnly);
-    const out = dest.open(FileMode.Append);
+    // Read-write at `from`, not append: over a GPX's old tail it overwrites.
+    const out = dest.open(FileMode.ReadWrite);
     try {
       src.offset = skip;
+      out.offset = from;
       out.writeBytes(src.readBytes(got));
     } finally {
       src.close();
@@ -99,9 +108,24 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
     tmp.delete();
   }
 
-  e.pending += got;
+  // The server's copy past `from` is stale too, if it got that far.
+  e.uploaded = Math.min(e.uploaded, from);
+  e.pending = from + got - e.uploaded;
   state[p.name] = e;
   saveInbox(state);
+}
+
+function endsWithGpxTail(f: File): boolean {
+  if (f.size < GPX_TAIL.length) return false;
+  const h = f.open(FileMode.ReadOnly);
+  try {
+    h.offset = f.size - GPX_TAIL.length;
+    const b = h.readBytes(GPX_TAIL.length);
+    for (let i = 0; i < b.length; i++) if (b[i] !== GPX_TAIL.charCodeAt(i)) return false;
+    return true;
+  } finally {
+    h.close();
+  }
 }
 
 /**
@@ -164,7 +188,7 @@ export async function uploadInbox(
   for (const [i, name] of names.entries()) {
     if (signal.aborted) break;
     const e = state[name];
-    const step = planUpload(e, server[name]);
+    const step = planUpload(e, server[name], !name.endsWith('.gpx'));
     if (step.kind === 'send') {
       const total = e.uploaded + e.pending - step.offset;
       const src = inboxFile(name).open(FileMode.ReadOnly);
