@@ -1,0 +1,1388 @@
+(kicad_sch
+	(version 20250114)
+	(generator "gen_schematic.py")
+	(generator_version "1.0")
+	(uuid "99c90b24-99a2-4432-96e2-ae5817bf6865")
+	(paper "A4")
+	(title_block
+		(title "i30 N gauge pod - carrier")
+		(comment 1 "Sockets: Waveshare AMOLED-1.75, SN65HVD230, GY-GPSV3, TPS5430")
+	)
+	(lib_symbols
+			(symbol "Connector_Generic:Conn_01x01"
+				(pin_names
+					(offset 1.016)
+					(hide yes)
+				)
+				(exclude_from_sim no)
+				(in_bom yes)
+				(on_board yes)
+				(in_pos_files yes)
+				(duplicate_pin_numbers_are_jumpers no)
+				(property "Reference" "J"
+					(at 0 2.54 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Value" "Conn_01x01"
+					(at 0 -2.54 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Footprint" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Datasheet" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Description" "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_keywords" "connector"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_fp_filters" "Connector*:*_1x??_*"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(symbol "Conn_01x01_1_1"
+					(rectangle
+						(start -1.27 1.27)
+						(end 1.27 -1.27)
+						(stroke
+							(width 0.254)
+							(type default)
+						)
+						(fill
+							(type background)
+						)
+					)
+					(rectangle
+						(start -1.27 0.127)
+						(end 0 -0.127)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(pin passive line
+						(at -5.08 0 0)
+						(length 3.81)
+						(name "Pin_1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+				)
+				(embedded_fonts no)
+			)
+			(symbol "Connector_Generic:Conn_01x04"
+				(pin_names
+					(offset 1.016)
+					(hide yes)
+				)
+				(exclude_from_sim no)
+				(in_bom yes)
+				(on_board yes)
+				(in_pos_files yes)
+				(duplicate_pin_numbers_are_jumpers no)
+				(property "Reference" "J"
+					(at 0 5.08 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Value" "Conn_01x04"
+					(at 0 -7.62 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Footprint" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Datasheet" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_keywords" "connector"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_fp_filters" "Connector*:*_1x??_*"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(symbol "Conn_01x04_1_1"
+					(rectangle
+						(start -1.27 3.81)
+						(end 1.27 -6.35)
+						(stroke
+							(width 0.254)
+							(type default)
+						)
+						(fill
+							(type background)
+						)
+					)
+					(rectangle
+						(start -1.27 2.667)
+						(end 0 2.413)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 0.127)
+						(end 0 -0.127)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -2.413)
+						(end 0 -2.667)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -4.953)
+						(end 0 -5.207)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(pin passive line
+						(at -5.08 2.54 0)
+						(length 3.81)
+						(name "Pin_1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 0 0)
+						(length 3.81)
+						(name "Pin_2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -2.54 0)
+						(length 3.81)
+						(name "Pin_3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -5.08 0)
+						(length 3.81)
+						(name "Pin_4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+				)
+				(embedded_fonts no)
+			)
+			(symbol "Connector_Generic:Conn_01x06"
+				(pin_names
+					(offset 1.016)
+					(hide yes)
+				)
+				(exclude_from_sim no)
+				(in_bom yes)
+				(on_board yes)
+				(in_pos_files yes)
+				(duplicate_pin_numbers_are_jumpers no)
+				(property "Reference" "J"
+					(at 0 7.62 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Value" "Conn_01x06"
+					(at 0 -10.16 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Footprint" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Datasheet" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Description" "Generic connector, single row, 01x06, script generated (kicad-library-utils/schlib/autogen/connector/)"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_keywords" "connector"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_fp_filters" "Connector*:*_1x??_*"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(symbol "Conn_01x06_1_1"
+					(rectangle
+						(start -1.27 6.35)
+						(end 1.27 -8.89)
+						(stroke
+							(width 0.254)
+							(type default)
+						)
+						(fill
+							(type background)
+						)
+					)
+					(rectangle
+						(start -1.27 5.207)
+						(end 0 4.953)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 2.667)
+						(end 0 2.413)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 0.127)
+						(end 0 -0.127)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -2.413)
+						(end 0 -2.667)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -4.953)
+						(end 0 -5.207)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -7.493)
+						(end 0 -7.747)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(pin passive line
+						(at -5.08 5.08 0)
+						(length 3.81)
+						(name "Pin_1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 2.54 0)
+						(length 3.81)
+						(name "Pin_2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 0 0)
+						(length 3.81)
+						(name "Pin_3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -2.54 0)
+						(length 3.81)
+						(name "Pin_4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -5.08 0)
+						(length 3.81)
+						(name "Pin_5"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "5"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -7.62 0)
+						(length 3.81)
+						(name "Pin_6"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "6"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+				)
+				(embedded_fonts no)
+			)
+			(symbol "Connector_Generic:Conn_01x08"
+				(pin_names
+					(offset 1.016)
+					(hide yes)
+				)
+				(exclude_from_sim no)
+				(in_bom yes)
+				(on_board yes)
+				(in_pos_files yes)
+				(duplicate_pin_numbers_are_jumpers no)
+				(property "Reference" "J"
+					(at 0 10.16 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Value" "Conn_01x08"
+					(at 0 -12.7 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Footprint" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Datasheet" ""
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "Description" "Generic connector, single row, 01x08, script generated (kicad-library-utils/schlib/autogen/connector/)"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_keywords" "connector"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(property "ki_fp_filters" "Connector*:*_1x??_*"
+					(at 0 0 0)
+					(show_name no)
+					(do_not_autoplace no)
+					(hide yes)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(symbol "Conn_01x08_1_1"
+					(rectangle
+						(start -1.27 8.89)
+						(end 1.27 -11.43)
+						(stroke
+							(width 0.254)
+							(type default)
+						)
+						(fill
+							(type background)
+						)
+					)
+					(rectangle
+						(start -1.27 7.747)
+						(end 0 7.493)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 5.207)
+						(end 0 4.953)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 2.667)
+						(end 0 2.413)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 0.127)
+						(end 0 -0.127)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -2.413)
+						(end 0 -2.667)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -4.953)
+						(end 0 -5.207)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -7.493)
+						(end 0 -7.747)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(rectangle
+						(start -1.27 -10.033)
+						(end 0 -10.287)
+						(stroke
+							(width 0.1524)
+							(type default)
+						)
+						(fill
+							(type none)
+						)
+					)
+					(pin passive line
+						(at -5.08 7.62 0)
+						(length 3.81)
+						(name "Pin_1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "1"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 5.08 0)
+						(length 3.81)
+						(name "Pin_2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "2"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 2.54 0)
+						(length 3.81)
+						(name "Pin_3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "3"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 0 0)
+						(length 3.81)
+						(name "Pin_4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "4"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -2.54 0)
+						(length 3.81)
+						(name "Pin_5"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "5"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -5.08 0)
+						(length 3.81)
+						(name "Pin_6"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "6"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -7.62 0)
+						(length 3.81)
+						(name "Pin_7"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "7"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+					(pin passive line
+						(at -5.08 -10.16 0)
+						(length 3.81)
+						(name "Pin_8"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+						(number "8"
+							(effects
+								(font
+									(size 1.27 1.27)
+								)
+							)
+						)
+					)
+				)
+				(embedded_fonts no)
+			)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x08")
+		(at 60.96 40.64 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "aef89273-7fa8-431a-9ea4-2f2de79f2d0f")
+		(property "Reference" "J1" (at 63.50 35.56 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "Display H2" (at 63.50 38.10 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical" (at 60.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 60.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Male header; the Waveshare board's female H2 plugs onto it. H2: 1 VBUS(5V) 2 GND 3 3V3 4 GPIO43(TX) 5 GPIO44(RX) 6 GPIO16 7 GPIO17 8 GPIO18. CAN TX on GPIO16 / RX on GPIO17 - swapped vs the hand-wired prototype to untangle routing: needs BOARD_CARRIER 1 in config.h." (at 60.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "76b680e3-1e8f-4cf4-b91e-5b2db4610f16"))
+		(pin "2" (uuid "6fa93c7f-4a0f-457a-bc05-8fc4661b27de"))
+		(pin "3" (uuid "eece7853-685e-4756-a322-f3514945788d"))
+		(pin "4" (uuid "be311e76-91bc-4391-9fe4-a0db0323d804"))
+		(pin "5" (uuid "ff958dc2-3434-450b-9266-a470da5e35a4"))
+		(pin "6" (uuid "4e16214d-62c1-4a1a-8d8a-6a679b3502d7"))
+		(pin "7" (uuid "bd2513de-7d0e-4962-9bf4-575f00b08ac4"))
+		(pin "8" (uuid "64987f84-6206-4a6d-a7de-aee908dd6d35"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "VBUS"
+		(at 55.88 33.02 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "2b5f0ef7-d1ce-4245-86bb-6c722e3c6e05")
+	)
+	(label "GND"
+		(at 55.88 35.56 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "3b4f7159-2107-4865-a4dd-1f93282058ee")
+	)
+	(label "V3V3"
+		(at 55.88 38.10 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "22eb9efa-9619-4b78-bc54-e5274dc99579")
+	)
+	(label "GPS_RXD"
+		(at 55.88 40.64 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "319f426e-69b7-4dca-87cf-b2a3181c2e0e")
+	)
+	(label "GPS_TXD"
+		(at 55.88 43.18 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "bc108966-b7f9-468b-9312-1de489ef39c0")
+	)
+	(label "CAN_TXD"
+		(at 55.88 45.72 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "8851de84-6f98-4844-bc4f-b15a2d8a2ed9")
+	)
+	(label "CAN_RXD"
+		(at 55.88 48.26 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "4b5bf8e7-e63a-49bd-bdba-d3587a808ae3")
+	)
+	(label "CAN_RS"
+		(at 55.88 50.80 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "40d056a0-b6f9-44f9-87e9-01a21a2e68df")
+	)
+	(text "Male header; the Waveshare board's female H2 plugs onto\nit. H2: 1 VBUS(5V) 2 GND 3 3V3 4 GPIO43(TX) 5 GPIO44(RX) 6\nGPIO16 7 GPIO17 8 GPIO18. CAN TX on GPIO16 / RX on GPIO17\n- swapped vs the hand-wired prototype to untangle routing:\nneeds BOARD_CARRIER 1 in config.h."
+		(exclude_from_sim no)
+		(at 38.10 66.04 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "b25a99a3-d977-41be-aa76-7234aef71e04")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x06")
+		(at 187.96 40.64 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "2241c331-3ebb-4d9a-a5f5-1e08b56394bd")
+		(property "Reference" "J2" (at 190.50 35.56 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "CAN SN65HVD230" (at 190.50 38.10 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical" (at 187.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 187.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Breakout pin order as printed: CANL CANH CRX CTX GND 3V3. Remove its R2 (120R)." (at 187.96 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "104151c0-398f-4f16-ba0b-32e79d50493b"))
+		(pin "2" (uuid "245998a5-1a84-42f1-b8dc-1bec8c6e0cdd"))
+		(pin "3" (uuid "c9a6fdee-b450-4157-895d-761b9b4f9cd7"))
+		(pin "4" (uuid "bed230d3-f76b-4fa4-ac80-d3ae4f9d686e"))
+		(pin "5" (uuid "e1ce157e-fbae-459a-8b1e-6050ed37922d"))
+		(pin "6" (uuid "aaf5d5f5-4881-4ebd-8079-f1ee6797d19e"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "CANL"
+		(at 182.88 35.56 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "c17adf40-9bb1-4a25-af9a-73e930b177a6")
+	)
+	(label "CANH"
+		(at 182.88 38.10 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "5b9a1a16-224a-492e-aeaf-fb5c9151a475")
+	)
+	(label "CAN_RXD"
+		(at 182.88 40.64 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "129e8eaa-4930-474b-9006-51282135f324")
+	)
+	(label "CAN_TXD"
+		(at 182.88 43.18 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "72dc552c-e9e6-445b-81da-832f28b875c8")
+	)
+	(label "GND"
+		(at 182.88 45.72 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "1ec4434f-94c7-490b-8269-bcdb35145ebd")
+	)
+	(label "V3V3"
+		(at 182.88 48.26 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "9721807d-84a3-42a3-bb35-76a1db999e2e")
+	)
+	(text "Breakout pin order as printed: CANL CANH CRX CTX GND 3V3.\nRemove its R2 (120R)."
+		(exclude_from_sim no)
+		(at 165.10 60.96 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "17ffa3d7-8d38-42de-99bd-ad7667fd3c6a")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 60.96 91.44 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a7d0665a-a4c7-44a9-8e6d-f6588747b02b")
+		(property "Reference" "J3" (at 63.50 86.36 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "GNSS GY-GPSV3" (at 63.50 88.90 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x04_P2.54mm_Vertical" (at 60.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 60.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Breakout pin order as printed: VCC RX TX GND. Module RX <- GPIO43, TX -> GPIO44." (at 60.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "dc6ee5e6-1128-4311-8a2f-50326f1ef48d"))
+		(pin "2" (uuid "42fc6121-b30c-4e0c-875a-2d0169341f1d"))
+		(pin "3" (uuid "75c82af4-9841-4e4b-b519-19e211cb1fb5"))
+		(pin "4" (uuid "e263aeca-bb59-418c-aab7-4217b7bd9a99"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "V3V3"
+		(at 55.88 88.90 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "ee8f40a5-7d59-4625-963c-726f44852016")
+	)
+	(label "GPS_RXD"
+		(at 55.88 91.44 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "91751b35-492f-4c1d-8020-d5054217f1b1")
+	)
+	(label "GPS_TXD"
+		(at 55.88 93.98 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "86886079-2a49-40e7-b8d9-0fbabf91f983")
+	)
+	(label "GND"
+		(at 55.88 96.52 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "cf0ee85a-4234-477b-a4b2-1ac1eb2a6f21")
+	)
+	(text "Breakout pin order as printed: VCC RX TX GND. Module RX <-\nGPIO43, TX -> GPIO44."
+		(exclude_from_sim no)
+		(at 38.10 106.68 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "6b39098c-ceea-4114-8147-0f8c191a3392")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 187.96 91.44 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "0973e4ee-2045-4fce-a3cd-5609797ee9ed")
+		(property "Reference" "J4" (at 190.50 86.36 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "Buck OUT" (at 190.50 88.90 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x04_P2.54mm_Vertical" (at 187.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 187.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Buck module output side, 4 pins: GND GND VO+ VO+ (doubled for grip and current). Its input side is not socketed: IN+ is wired from pad J7; EN left unconnected (floating = enabled). Set the buck to 5.0 V before fitting the display." (at 187.96 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "117bb46f-96b1-462a-8c64-b9249da8e8f5"))
+		(pin "2" (uuid "9adaf89c-33e4-4303-9cd8-b1c0bde70f72"))
+		(pin "3" (uuid "fa4b6d2f-2fed-4892-86cc-6c4fd068d203"))
+		(pin "4" (uuid "7a390822-1878-4301-9ea6-50a6eb45683e"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "GND"
+		(at 182.88 88.90 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "b1e72137-a240-47af-8759-c9e25f95de3e")
+	)
+	(label "GND"
+		(at 182.88 91.44 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "3ab0b7fe-4eae-40f1-aa39-4f26f39ffd06")
+	)
+	(label "VBUS"
+		(at 182.88 93.98 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "7c1ebe79-0bf5-4a18-831f-ac919439ca32")
+	)
+	(label "VBUS"
+		(at 182.88 96.52 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "b82ebed9-a205-4dba-a631-8bf4745eee6b")
+	)
+	(text "Buck module output side, 4 pins: GND GND VO+ VO+ (doubled\nfor grip and current). Its input side is not socketed: IN+\nis wired from pad J7; EN left unconnected (floating =\nenabled). Set the buck to 5.0 V before fitting the\ndisplay."
+		(exclude_from_sim no)
+		(at 165.10 106.68 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "74a4d51b-f3fb-4cf7-8dbf-c5f4187e7785")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 60.96 132.08 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8ea9866c-9b34-46e3-b17e-3805caf1d28d")
+		(property "Reference" "J5" (at 63.50 127.00 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "OBD cable" (at 63.50 129.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical" (at 60.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 60.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "JST pin 1 = OBD 16 (+12 V, via the 2 A inline fuse on the cable), 2 = OBD 4/5 GND, 3 = OBD 14 CAN-L, 4 = OBD 6 CAN-H (L before H so the pair does not cross on the board - crimp the cable to match)." (at 60.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "eb0f47ce-1e17-4208-b09f-b3760c8a6145"))
+		(pin "2" (uuid "3acb420a-58ec-4b15-8cdc-24e3f9648acf"))
+		(pin "3" (uuid "09bc6623-ab5b-45ca-9409-a7a0a038bbd5"))
+		(pin "4" (uuid "527cdaa4-b0dc-4718-be18-b4536e2efc8e"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "V12"
+		(at 55.88 129.54 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "747f79cc-d2e9-45c2-9cdf-8609cf555559")
+	)
+	(label "GND"
+		(at 55.88 132.08 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "78b0a6a0-e644-4dd8-8012-1a7cdf0298f2")
+	)
+	(label "CANL"
+		(at 55.88 134.62 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "36e13fce-f5a2-49c4-b328-23feacb96ade")
+	)
+	(label "CANH"
+		(at 55.88 137.16 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "9d7b84fc-a96d-49b8-8ebe-fd3d4e8f32fb")
+	)
+	(text "JST pin 1 = OBD 16 (+12 V, via the 2 A inline fuse on the\ncable), 2 = OBD 4/5 GND, 3 = OBD 14 CAN-L, 4 = OBD 6 CAN-H\n(L before H so the pair does not cross on the board -\ncrimp the cable to match)."
+		(exclude_from_sim no)
+		(at 38.10 147.32 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "d3126347-af0e-4a2d-a461-a885cb013c00")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x01")
+		(at 187.96 132.08 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "6e28118a-2ac6-433b-8076-0ee449778927")
+		(property "Reference" "J7" (at 190.50 127.00 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "Buck IN+ wire pad" (at 190.50 129.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm" (at 187.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 187.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Wire from here to the buck's IN+. Its IN- needs no wire: the module joins IN- and OUT-, and OUT- is on J4." (at 187.96 132.08 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "19eb6d08-6542-46ff-bde5-4263cd9ba66a"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "V12"
+		(at 182.88 132.08 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "ae4035e7-008e-42d4-a518-c54550f3ceb6")
+	)
+	(text "Wire from here to the buck's IN+. Its IN- needs no wire:\nthe module joins IN- and OUT-, and OUT- is on J4."
+		(exclude_from_sim no)
+		(at 165.10 139.70 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "16dede05-2ed3-45c1-b7ca-d1c2b44e55b1")
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x01")
+		(at 60.96 167.64 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1daf29d1-8244-43ee-b61e-80ac8f9ed030")
+		(property "Reference" "J6" (at 63.50 162.56 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "Rs wire pad" (at 63.50 165.10 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm" (at 60.96 167.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~" (at 60.96 167.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Short wire from here to SN65HVD230 chip pin 8 (Rs). No resistor: the breakout's R1 10k pull-down stays." (at 60.96 167.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "57f972f8-0fc3-4fc0-9c6e-c53c68871bdc"))
+		(instances
+			(project "carrier"
+				(path "/99c90b24-99a2-4432-96e2-ae5817bf6865"
+					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(label "CAN_RS"
+		(at 55.88 167.64 180)
+		(effects (font (size 1.27 1.27)) (justify right bottom))
+		(uuid "327b71d9-5397-41e6-9028-b70aa778258b")
+	)
+	(text "Short wire from here to SN65HVD230 chip pin 8 (Rs). No\nresistor: the breakout's R1 10k pull-down stays."
+		(exclude_from_sim no)
+		(at 38.10 175.26 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "8eb1ca72-ad59-46aa-9eec-344961fd94a8")
+	)
+	(text "Carrier PCB - sockets for the dev boards only. Generated by gen_schematic.py; edit the table there."
+		(exclude_from_sim no)
+		(at 20.32 20.32 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "22e0f53e-a8c1-4a6d-b961-876b662cddae")
+	)
+	(text "OBD 12 V -> inline 2 A fuse -> J5 -> pad J7 -> wire to buck IN+. Mind the GPS crossover: GPS_RXD = GPIO43 -> module RX."
+		(exclude_from_sim no)
+		(at 20.32 25.40 0)
+		(effects (font (size 1.27 1.27)) (justify left bottom))
+		(uuid "0df28bf5-f52b-4c82-a3db-656b2e5b53d6")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

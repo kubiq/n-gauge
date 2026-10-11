@@ -1,0 +1,33 @@
+// ============================================================================
+// webapi.h  —  WiFi AP + phone settings panel / JSON API.
+//   Up whenever the board is awake (WIFI_AP_ALWAYS), because the pod's buttons
+//   are not reachable once it is mounted, so the long-press toggle is no longer
+//   a usable way in. The old privacy/battery objection to an always-on AP is
+//   handled by stopping it as part of the sleep sequence instead: parked, the
+//   board sleeps and the AP goes with it.
+//
+//   GET  /              mobile settings page
+//   GET  /api/settings  current settings as JSON
+//   GET  /api/live      live telemetry as JSON (oil/boost/coolant/gps/tyres)
+//   POST /save          form post from the page; applies + persists
+//   GET  /files         read-only listing of the SD card
+//   GET  /dl?f=NAME     download a drive log or GPX track
+//
+//   Read-only by design: there is no delete endpoint. A drive log is often the
+//   only copy of a run that cannot easily be repeated, and the AP password is
+//   the only thing guarding this server.
+// ============================================================================
+#pragma once
+#include <stdbool.h>
+#include <stdint.h>
+
+void web_toggle();          // start the AP if down, stop it if up
+void web_start();           // bring it up (no-op if already up)
+void web_stop();            // bring it down; called before deep sleep
+bool web_is_up();
+// How many stations are associated. Used by power.cpp to hold off sleep while
+// someone is actually on the settings page, rather than merely because the AP
+// is up - which, now that it is always up, would mean never sleeping.
+uint8_t web_clients();
+const char *web_ip();       // AP IP as text, "" when down
+void web_task();            // call often while up; cheap no-op when down

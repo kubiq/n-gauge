@@ -1,0 +1,621 @@
+<title>i30 N OBD Gauge — Prototype Guide</title>
+<style>
+  :root {
+    --bg:        #0d1116;
+    --panel:     #151b22;
+    --panel-2:   #1b232c;
+    --line:      #26313c;
+    --ink:       #e7edf3;
+    --ink-soft:  #9fb0c0;
+    --ink-faint: #6c7f90;
+    --blue:      #17a9e6;   /* N performance blue — the accent */
+    --blue-deep: #0d7fb3;
+    --oil:       #e8a33d;   /* oil-temp amber — warnings & heat */
+    --good:      #4cc38a;
+    --bad:       #e5544b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 780px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#eef1f4; --panel:#ffffff; --panel-2:#f4f7f9; --line:#d8e0e7;
+      --ink:#141b22; --ink-soft:#4a5966; --ink-faint:#7c8b98;
+      --blue:#0d82bd; --blue-deep:#0a6698; --oil:#c47d1a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0d1116; --panel:#151b22; --panel-2:#1b232c; --line:#26313c;
+    --ink:#e7edf3; --ink-soft:#9fb0c0; --ink-faint:#6c7f90;
+    --blue:#17a9e6; --blue-deep:#0d7fb3; --oil:#e8a33d;
+  }
+  :root[data-theme="light"] {
+    --bg:#eef1f4; --panel:#ffffff; --panel-2:#f4f7f9; --line:#d8e0e7;
+    --ink:#141b22; --ink-soft:#4a5966; --ink-faint:#7c8b98;
+    --blue:#0d82bd; --blue-deep:#0a6698; --oil:#c47d1a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:0 20px 96px; }
+
+  /* ---- eyebrow / labels ---- */
+  .eyebrow {
+    font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--blue); font-weight:600;
+  }
+
+  /* ---- header ---- */
+  header {
+    border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(120% 140% at 85% -20%, color-mix(in srgb, var(--blue) 16%, transparent), transparent 60%),
+      var(--panel);
+  }
+  .head-inner { max-width:var(--maxw); margin:0 auto; padding:30px 20px 26px; }
+  h1 {
+    font-size:clamp(28px,5.5vw,42px); line-height:1.05; margin:.32em 0 .28em;
+    letter-spacing:-.02em; text-wrap:balance; font-weight:750;
+  }
+  h1 .accent { color:var(--blue); }
+  .sub { color:var(--ink-soft); font-size:16px; max-width:56ch; }
+  .meta-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+  .chip {
+    font-family:var(--mono); font-size:12px; letter-spacing:.02em;
+    padding:5px 11px; border-radius:999px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink-soft);
+    display:inline-flex; align-items:center; gap:7px;
+  }
+  .chip b { color:var(--ink); font-weight:600; }
+  .chip .dot { width:7px; height:7px; border-radius:50%; }
+
+  /* ---- gauges ---- */
+  .cluster {
+    display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:26px 0 8px;
+  }
+  @media (max-width:520px){ .cluster{ grid-template-columns:1fr; } }
+  .gauge {
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:18px 18px 14px; text-align:center;
+  }
+  .gauge svg { width:100%; max-width:230px; height:auto; }
+  .gauge .val { font-family:var(--mono); font-size:30px; font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .gauge .g-label { font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-faint); margin-top:2px; }
+
+  /* ---- sections ---- */
+  section { margin-top:46px; }
+  h2 {
+    font-size:23px; letter-spacing:-.01em; margin:0 0 6px; font-weight:700;
+    display:flex; align-items:baseline; gap:12px;
+  }
+  h2 .num {
+    font-family:var(--mono); font-size:13px; font-weight:600; color:var(--blue);
+    border:1px solid var(--line); border-radius:7px; padding:2px 8px;
+    background:var(--panel-2);
+  }
+  .lead { color:var(--ink-soft); margin:.2em 0 1.2em; }
+  h3 { font-size:16px; margin:1.6em 0 .5em; letter-spacing:-.005em; }
+  p { margin:.7em 0; }
+  a { color:var(--blue); }
+
+  /* ---- cards / callouts ---- */
+  .card {
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:18px 20px; margin:16px 0;
+  }
+  .callout {
+    border-left:3px solid var(--oil);
+    background:color-mix(in srgb, var(--oil) 9%, var(--panel));
+  }
+  .callout.blue { border-left-color:var(--blue); background:color-mix(in srgb, var(--blue) 9%, var(--panel)); }
+  .callout .k {
+    font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--oil); font-weight:600;
+  }
+  .callout.blue .k { color:var(--blue); }
+
+  /* ---- tables ---- */
+  .tbl-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:12px; margin:16px 0; }
+  table { border-collapse:collapse; width:100%; font-size:14.5px; }
+  th, td { text-align:left; padding:11px 14px; border-bottom:1px solid var(--line); }
+  thead th {
+    background:var(--panel-2); font-family:var(--mono); font-size:11px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); font-weight:600;
+  }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover td { background:var(--panel-2); }
+  td.pin, td code, .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  td .tag {
+    font-family:var(--mono); font-size:12px; padding:2px 7px; border-radius:6px;
+    background:color-mix(in srgb, var(--blue) 15%, transparent); color:var(--blue); font-weight:600;
+  }
+
+  /* ---- code / terminal ---- */
+  pre {
+    margin:14px 0; background:#0a0e12; color:#cfe3ef;
+    border:1px solid var(--line); border-radius:12px; padding:0;
+    overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.65;
+  }
+  :root[data-theme="light"] pre, :root:not([data-theme]) pre { }
+  @media (prefers-color-scheme: light){ :root:not([data-theme]) pre{ background:#0f151b; } }
+  pre .bar {
+    display:flex; gap:7px; padding:10px 14px; border-bottom:1px solid #1d2732; align-items:center;
+  }
+  pre .bar i { width:11px; height:11px; border-radius:50%; display:block; }
+  pre .bar span { font-family:var(--mono); font-size:11px; color:#7f93a3; margin-left:6px; letter-spacing:.05em; }
+  pre code { display:block; padding:14px; white-space:pre; }
+  code { font-family:var(--mono); }
+  p code, li code, td code {
+    background:var(--panel-2); border:1px solid var(--line); border-radius:5px;
+    padding:1px 6px; font-size:.9em;
+  }
+
+  ul, ol { padding-left:22px; margin:.7em 0; }
+  li { margin:.42em 0; }
+  ol.steps { counter-reset:step; list-style:none; padding-left:0; }
+  ol.steps > li {
+    position:relative; padding:2px 0 2px 44px; margin:.55em 0;
+  }
+  ol.steps > li::before {
+    counter-increment:step; content:counter(step);
+    position:absolute; left:0; top:0;
+    width:29px; height:29px; border-radius:8px;
+    background:var(--panel-2); border:1px solid var(--line);
+    color:var(--blue); font-family:var(--mono); font-weight:600; font-size:13px;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* ---- order list ---- */
+  .order-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+  @media (max-width:640px){ .order-grid{ grid-template-columns:1fr; gap:14px; } }
+  .order-h { font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:600; margin-bottom:6px; }
+  .order-ul { margin:0; padding-left:16px; }
+  .order-ul li { font-size:14px; color:var(--ink-soft); margin:.35em 0; }
+  .order-ul li b { color:var(--ink); font-weight:600; }
+  .muted { color:var(--ink-faint); font-size:.9em; }
+
+  /* ---- roadmap ---- */
+  .roadmap { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px; }
+  @media (max-width:640px){ .roadmap{ grid-template-columns:1fr; } }
+  .rm-col {
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; border-top:3px solid var(--line);
+  }
+  .rm-col.v1 { border-top-color:var(--oil); }
+  .rm-col.v2 { border-top-color:var(--blue); }
+  .rm-col.v3 { border-top-color:var(--ink-faint); }
+  .rm-head { font-size:14px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+  .rm-tag {
+    font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.05em;
+    padding:2px 8px; border-radius:6px; background:var(--panel-2); border:1px solid var(--line);
+  }
+  .v1 .rm-tag { color:var(--oil); } .v2 .rm-tag { color:var(--blue); } .v3 .rm-tag { color:var(--ink-faint); }
+  .rm-col ul { margin:.5em 0 0; padding-left:18px; }
+  .rm-col li { font-size:14px; color:var(--ink-soft); margin:.4em 0; }
+  .rm-col li b { color:var(--ink); font-weight:600; }
+
+  .divider { height:1px; background:var(--line); border:none; margin:0; }
+  footer { margin-top:56px; padding-top:24px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:13px; }
+  .tick { color:var(--good); font-weight:700; }
+</style>
+
+<header>
+  <div class="head-inner">
+    <div class="eyebrow">Hyundai i30 N · Build Log</div>
+    <h1>Driver-Vent <span class="accent">OBD Gauge</span> — Prototype Guide</h1>
+    <p class="sub">A round AMOLED reading <b>oil temperature</b> and <b>boost</b> live from the OBD-II port over CAN. This is the prototype phase — prove the values on a cheap ESP32 before buying the display.</p>
+    <div class="meta-row">
+      <span class="chip"><span class="dot" style="background:var(--oil)"></span> Primary: <b>Oil temp</b></span>
+      <span class="chip"><span class="dot" style="background:var(--blue)"></span> Secondary: <b>Boost</b></span>
+      <span class="chip">Bus: <b>CAN 500 kbit/s</b></span>
+      <span class="chip">MCU: <b>ESP32 → ESP32-S3</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="cluster">
+    <div class="gauge">
+      <svg viewBox="0 0 200 130" role="img" aria-label="Oil temperature gauge">
+        <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="var(--oil)" stroke-width="10" stroke-linecap="round" stroke-dasharray="183 400"/>
+        <line x1="100" y1="100" x2="131.8" y2="37.6" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="100" cy="100" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="3"/>
+      </svg>
+      <div class="val" style="color:var(--oil)">98<span style="font-size:16px">°C</span></div>
+      <div class="g-label">Oil Temp</div>
+    </div>
+    <div class="gauge">
+      <svg viewBox="0 0 200 130" role="img" aria-label="Boost gauge">
+        <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="var(--blue)" stroke-width="10" stroke-linecap="round" stroke-dasharray="226 400"/>
+        <line x1="100" y1="100" x2="156.6" y2="58.8" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="100" cy="100" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="3"/>
+      </svg>
+      <div class="val" style="color:var(--blue)">1.2<span style="font-size:16px"> bar</span></div>
+      <div class="g-label">Boost</div>
+    </div>
+  </div>
+
+  <!-- ORDER LIST -->
+  <section style="margin-top:34px">
+    <div class="card" style="border-color:var(--blue); background:color-mix(in srgb, var(--blue) 6%, var(--panel))">
+      <div class="eyebrow" style="margin-bottom:10px">Order list</div>
+      <div class="order-grid">
+        <div>
+          <div class="order-h" style="color:var(--good)">Order now · in stock</div>
+          <ul class="order-ul">
+            <li><span class="tick">✓</span> Classic <b>ESP32</b> dev board <span class="mono muted">(have)</span></li>
+            <li><span class="tick">✓</span> <b>SN65HVD230</b> transceiver, 2-pack <span class="mono muted">(ordered · remove 120 Ω)</span></li>
+            <li><span class="tick">✓</span> <b>OBD-II male pigtail</b> (flying leads)</li>
+            <li>USB power bank <span class="mono muted">(optional — laptop USB powers the ESP32)</span></li>
+          </ul>
+        </div>
+        <div>
+          <div class="order-h" style="color:var(--blue)">Final build</div>
+          <ul class="order-ul">
+            <li><span class="tick">✓</span> <b>Waveshare ESP32-S3 1.75" AMOLED</b> 466×466 — <b>Standard</b> <span class="mono muted">(~$50 · ordered)</span></li>
+            <li><span class="tick">✓</span> <b>12 V→5 V buck</b> <span class="mono muted">(ordered)</span> — <b>≥36 V input</b> (TPS5430-based); <b>not</b> MP1584 (27 V max). Not needed to prototype.</li>
+            <li><span class="tick">✓</span> <b>Inline blade-fuse holder</b> (pigtail) + <b>2 A</b> fuse for the OBD 12 V line <span class="mono muted">(ordered · not an add-a-fuse tap)</span></li>
+            <li>Filament: <b>PETG / ASA</b> <span class="mono muted">(not PLA)</span></li>
+          </ul>
+        </div>
+        <div>
+          <div class="order-h" style="color:var(--ink-faint)">Later · v2</div>
+          <ul class="order-ul">
+            <li><span class="tick">✓</span> <b>GNSS — track pick: u-blox NEO-M9N</b> <span class="mono muted">(~$25–40 · ordered)</span>: <b>25 Hz</b>, 4-constellation, ~1.5 m (≈1 m w/ EGNOS)</li>
+            <li class="muted">Budget: NEO-M8N (10 Hz). Pro: ZED-F9P (cm, needs RTK feed). Use an active antenna + set dynamic model "Automotive". Wire: VCC · GND · TX→GPIO18</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARTS -->
+  <section>
+    <h2><span class="num">01</span> Parts for the prototype</h2>
+    <p class="lead">Everything you need to read real values off the car before spending ~$50 on the round display.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Part</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Classic ESP32</b> dev board</td><td>Has the built-in TWAI/CAN controller</td></tr>
+          <tr><td><b>SN65HVD230</b> transceiver <span class="mono">(blue "VP230")</span></td><td>3.3 V logic. <b>Remove the 120 Ω terminator</b> — see check 1</td></tr>
+          <tr><td><b>OBD-II male pigtail</b> (flying leads)</td><td>Taps CAN-H / CAN-L / GND</td></tr>
+          <tr><td>USB power bank</td><td>Powers the ESP32 in the car, isolated</td></tr>
+          <tr><td>Multimeter</td><td>For the two checks below</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CHECKS -->
+  <section>
+    <h2><span class="num">02</span> Before wiring — two checks</h2>
+    <p class="lead">Two minutes with a multimeter now saves a confusing first session in the car.</p>
+
+    <div class="card callout">
+      <div class="k">Check 1 · Remove the 120 Ω terminator</div>
+      <p>The car's CAN bus is already terminated; an extra 120 Ω can corrupt it. Measure resistance across <b>CANH ↔ CANL</b> on the transceiver board alone:</p>
+      <ul>
+        <li><b>~120 Ω</b> → it has a terminator (marked <code>121</code>) → <b>desolder that resistor</b>.</li>
+        <li><b>Open / very high</b> → no terminator → leave it as is.</li>
+      </ul>
+      <p style="margin-bottom:0"><span class="mono muted">Both board variants work: AliExpress = header pins + CTX/CRX labels; Waveshare/Botland = screw terminal + CAN TX/CAN RX labels. Same SN65HVD230 chip, same wiring.</span></p>
+    </div>
+
+    <div class="card callout blue">
+      <div class="k">Check 2 · Find OBD pins 6 &amp; 14 — don't trust wire colors</div>
+      <p>Cheap pigtails use random colors. In <b>continuity / beep</b> mode, touch one probe to a flying wire and the other to each metal pin in the OBD plug. Pin numbers are molded in: 1–8 top row, 9–16 bottom. <b>Label the CAN-H and CAN-L wires</b> once found.</p>
+      <div class="tbl-scroll" style="margin-bottom:0">
+        <table>
+          <thead><tr><th>OBD-II pin</th><th>Signal</th><th>Goes to</th></tr></thead>
+          <tbody>
+            <tr><td class="pin"><span class="tag">6</span></td><td>CAN-H</td><td>transceiver <b>CANH</b></td></tr>
+            <tr><td class="pin"><span class="tag">14</span></td><td>CAN-L</td><td>transceiver <b>CANL</b></td></tr>
+            <tr><td class="pin"><span class="tag">4 / 5</span></td><td>Ground</td><td>ESP32 <b>GND</b></td></tr>
+            <tr><td class="pin"><span class="tag">16</span></td><td>+12 V <span class="mono">(optional, later)</span></td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- WIRING -->
+  <section>
+    <h2><span class="num">03</span> Wiring</h2>
+    <p class="lead">Bus speed 500 kbit/s · no extra terminator on our side · power the ESP32 from the power bank during testing.</p>
+    <pre><span class="bar"><i style="background:#e5544b"></i><i style="background:#e8a33d"></i><i style="background:#4cc38a"></i><span>wiring.txt</span></span><code>ESP32 GPIO5 (CAN TX) ──►  SN65HVD230 CTX
+ESP32 GPIO4 (CAN RX) ──►  SN65HVD230 CRX
+ESP32 3.3V           ──►  SN65HVD230 3V3
+ESP32 GND            ──►  SN65HVD230 GND
+SN65HVD230 CANH      ──►  OBD-II pin 6   (CAN-H)
+SN65HVD230 CANL      ──►  OBD-II pin 14  (CAN-L)
+ESP32 GND            ──►  OBD-II pin 4 or 5  (GND)</code></pre>
+  </section>
+
+  <!-- FLASH -->
+  <section>
+    <h2><span class="num">04</span> Flashing the sniffer</h2>
+    <p class="lead">Sketch: <code>firmware/can_sniffer/can_sniffer.ino</code></p>
+    <ol class="steps">
+      <li>Arduino IDE with the <b>ESP32 board package</b> (Boards Manager → "esp32" by Espressif).</li>
+      <li>Tools → Board → <b>ESP32 Dev Module</b> (or your specific board).</li>
+      <li>Select the correct <b>Port</b>.</li>
+      <li>Open the sketch → <b>Upload</b>.</li>
+      <li>Open <b>Serial Monitor</b> at <b>115200 baud</b>, line ending = <b>Newline</b>.</li>
+    </ol>
+    <p>If GPIO4/5 clash with your board, change <code>CAN_TX_GPIO</code> / <code>CAN_RX_GPIO</code> at the top of the sketch. Avoid strapping pins <span class="mono">0 / 2 / 12 / 15</span> and input-only <span class="mono">34–39</span>.</p>
+  </section>
+
+  <!-- TEST -->
+  <section>
+    <h2><span class="num">05</span> Test session in the car</h2>
+    <ol class="steps">
+      <li>Plug the pigtail into the OBD-II port (under the dash, driver side).</li>
+      <li>Power the ESP32 from your <b>laptop's USB</b> (the same cable shows the Serial Monitor).</li>
+      <li><b>Ignition ON</b> (engine off is fine for sniffing; run it for real oil/boost values).</li>
+      <li>Open Serial Monitor.</li>
+    </ol>
+
+    <h3>What you should see</h3>
+    <p>A stream of <code>[RX] xxx [8] ..</code> lines = CAN frames. <span class="tick">✓</span> This confirms your tap works. If nothing streams, jump to Troubleshooting.</p>
+
+    <h3>Built-in commands</h3>
+    <p>Type a command in the Serial Monitor and press Enter:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Command</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><code>s</code></td><td>Toggle the live frame dump on/off (turn OFF to read replies clearly)</td></tr>
+          <tr><td><code>oil</code></td><td>Request standard oil temp <span class="mono">(Mode 01 PID 5C)</span></td></tr>
+          <tr><td><code>boost</code></td><td>Request manifold pressure <span class="mono">(Mode 01 PID 0B)</span></td></tr>
+          <tr><td><code>01 0C</code></td><td>Request RPM — sanity-check the request path</td></tr>
+          <tr><td><code>22 XXXX</code></td><td>Enhanced request, 2-byte DID (the real i30 N oil-temp DID)</td></tr>
+          <tr><td><code>help</code></td><td>Reprint commands</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>If <code>oil</code> returns a sensible temperature — great, standard PID works. If it returns a <b>NEGATIVE response</b>, the i30 N doesn't expose 015C → use the enhanced Mode 22 DID below.</p>
+  </section>
+
+  <!-- ENHANCED -->
+  <section>
+    <h2><span class="num">06</span> The real oil temp — enhanced Mode 22</h2>
+    <p class="lead">The i30 N's true oil temp (and true boost) live in enhanced PIDs requested with Mode 22 to ECU header <span class="mono">7E0</span>. Don't guess the DID — use a community-validated list.</p>
+    <div class="card">
+      <ul>
+        <li><b>Car Scanner ELM OBD2</b> app → the "Hyundai i30 N" custom-PID profile.</li>
+        <li><b>Torque Pro</b> extended-PID CSVs shared on i30 N forums / Reddit.</li>
+      </ul>
+      <p style="margin-bottom:0">Each entry gives the request bytes (e.g. <code>22 XXXX</code>) and a scaling formula. In the Serial Monitor, send the DID; the sketch prints the raw response bytes. Apply the formula — commonly <code>A − 40</code> or <code>(A·256 + B)/scale</code> — to get °C.</p>
+    </div>
+    <div class="card callout blue" style="margin-top:16px">
+      <div class="k">Bring this back</div>
+      <p style="margin-bottom:0">Send me the raw bytes + the formula and we'll bake the oil-temp DID straight into the final firmware.</p>
+    </div>
+  </section>
+
+  <!-- TROUBLESHOOT -->
+  <section>
+    <h2><span class="num">07</span> Troubleshooting</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Symptom</th><th>Likely cause / fix</th></tr></thead>
+        <tbody>
+          <tr><td>No <code>[RX]</code> frames at all</td><td>CAN-H / CAN-L swapped → swap pins 6/14. Or ignition off. Or GND not connected.</td></tr>
+          <tr><td><code>twai_start failed</code> on boot</td><td>Wrong TX/RX GPIOs for your board, or pins already in use. Change them in the sketch.</td></tr>
+          <tr><td>Frames garbled / error bursts</td><td>Wrong bus speed (must be 500 kbit/s) or the 120 Ω terminator wasn't removed.</td></tr>
+          <tr><td>NEGATIVE <span class="mono">(7F)</span> responses</td><td>That PID/DID isn't supported → use the enhanced Mode 22 DID from the list.</td></tr>
+          <tr><td>A few frames, then silence</td><td>Bus went to sleep → turn ignition on / wake the car.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- POWER -->
+  <section>
+    <h2><span class="num">08</span> Power plan — Option B <span style="font-family:var(--mono);font-size:12px;color:var(--good);border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--panel-2)">chosen</span></h2>
+    <p class="lead">Powered from <b>OBD-II pin 16 (+12 V)</b> via a 12 V→5 V buck — the whole gauge stays a single OBD-port plug, no fuse-box wiring.</p>
+    <p>Pin 16 is <b>constant</b> battery power, so the firmware manages sleep to avoid parked drain:</p>
+    <ul>
+      <li>CAN bus watched → <b>no frames for ~30 s → AMOLED off + <code>esp_deep_sleep</code></b>.</li>
+      <li>Ignition on wakes the bus → ESP32 wakes and resumes the gauge.</li>
+      <li>The i30 N diagnostic CAN bus sleeps after ignition-off, so this triggers cleanly.</li>
+    </ul>
+    <div class="card callout" style="margin-top:16px">
+      <div class="k">⚠ Open TODO · measure quiescent draw</div>
+      <p style="margin-bottom:0">Once sleep is implemented, measure actual <b>parked current</b> on the 12 V feed — <b>including the buck's own quiescent draw</b> (cheap bucks pull several mA at no load). Target a few mA or less; if too high, use a low-Iq buck or a hard cutoff. Fallback: Option A — switched 12 V from a cabin fuse, which cuts power fully with the car.</p>
+    </div>
+  </section>
+
+  <!-- AFTER -->
+  <section>
+    <h2><span class="num">09</span> After the prototype succeeds</h2>
+    <ol class="steps">
+      <li>Confirm oil temp + boost read correctly and update fast enough.</li>
+      <li>Order the <b>Waveshare ESP32-S3 1.75" AMOLED Round Touch</b> (466×466, ~$50).</li>
+      <li>Move CAN to the S3 header: <b>GPIO17 = CAN TX, GPIO16 = CAN RX</b> (GPIO18 free).</li>
+      <li>Build the <b>LVGL</b> gauge UI — oil-temp + boost, touch to switch, brightness.</li>
+      <li>Add <b>sleep-on-bus-idle</b> power management, then <b>measure quiescent draw</b>.</li>
+      <li>3D-print the vent panel in <b>PETG / ASA</b> (not PLA — dash heat), keeping OEM louvers working.</li>
+      <li>Final power: <b>OBD pin 16 → 12 V→5 V buck → display 5 V pin</b>.</li>
+    </ol>
+  </section>
+
+  <!-- MOUNTING -->
+  <section>
+    <h2><span class="num">10</span> Mounting — vent cover + display pod</h2>
+    <p class="lead">Location: the driver-side <b>fixed side-window demister grille</b> on the dash top by the A-pillar (part <code>97383-G3000-TRY</code>). It blows up/out at the glass, so a pod mounted <b>in front, angled inboard at the driver</b>, sits out of the airflow path. Full demist kept, no trade-off.</p>
+    <ol class="steps">
+      <li>Pop off the OEM demister grille (clips) and study its mounting + the grille opening.</li>
+      <li><b>Measure with calipers or 3D-scan</b> the opening and the dash-top curvature.</li>
+      <li>Model a <b>replacement cover</b> that recreates the fixed grille slots (or reuses the OEM grille insert) — demist airflow to the side window untouched.</li>
+      <li>Add a <b>low-profile display pod</b> on the driver/inboard side, in front of the grille, angled at the eyes, with a recessed circular pocket + lip/gasket for the round AMOLED. Keep it clear of the outboard airflow.</li>
+      <li>Route the display FPC + wiring down behind the <b>A-pillar trim</b> / into the dash to the ESP32 and power.</li>
+      <li>Print in <b>ASA / PETG</b> (dash heat + UV); matte finish or wrap to match the dash.</li>
+    </ol>
+    <div class="card callout" style="margin-top:4px">
+      <div class="k">⚠ Near the windscreen — keep it low</div>
+      <p style="margin-bottom:0">This spot is at the windscreen base: too tall <b>blocks forward view</b> and <b>reflects in the glass</b>. Keep the pod low, angle the face slightly down, and use auto-dim (day/night) + an anti-glare film to kill windscreen reflection.</p>
+    </div>
+
+    <h3>OEM part number <span class="mono muted">(confirmed — PD / Elantra GT catalog)</span></h3>
+    <p>Target = the <b>fixed side-window demister grille</b>: <b>Nozzle Assy-Side Defroster, LH = <code>97383-G3000-TRY</code></b> (driver side). RH = <code>97393-G3000-TRY</code>.</p>
+    <ul>
+      <li>Single variant (<span class="mono">-TRY</span>, black) — <b>no colour-suffix ambiguity</b>.</li>
+      <li>Order one as a <b>donor to 3D-scan</b>; keep the fitted one intact.</li>
+      <li>Not this build: the adjustable louvered corner vent lower down = <code>97480-G3000-[color]</code>.</li>
+    </ul>
+
+    <h3>Custom pod — fully bespoke</h3>
+    <p>No usable OEM-vent STL exists, and off-the-shelf holders are RHD-only and sized for 52/60 mm gauges. So this is <b>modeled from scratch</b>, exactly for our ~46 mm display — which is the point: it's our part. (See <b>References</b> for a RHD holder worth eyeballing for the approach.)</p>
+    <ol class="steps">
+      <li>Remove the OEM demister grille; note how it clips in and the grille opening pattern.</li>
+      <li><b>Capture geometry</b> — phone 3D-scan of the removed grille + opening; fallback calipers + photos with a scale marker.</li>
+      <li>Design a <b>two-part piece</b>: a cover that <b>recreates the fixed grille slots</b> (keeps demist airflow), and a <b>pod</b> holding the ~46 mm AMOLED at driver angle with a bezel lip and rear cable exit.</li>
+      <li><b>Print test rings</b> of just the opening profile first to dial in fit before the full part.</li>
+      <li>Final print in <b>ASA / PETG</b>, matte or wrapped to match the dash.</li>
+    </ol>
+
+    <h3>3D scanning (phone → cloud)</h3>
+    <p>Using the <b>RealityScan phone app</b> (Epic cloud) — the Linux desktop build needs an NVIDIA ≥8 GB GPU we don't have, so cloud is the path. <b>Photos, not video</b> — ~40–60 stills, 70–80 % overlap, 3 heights all around, tap-to-focus.</p>
+
+    <div class="card callout">
+      <div class="k">⚠ Monotone black = blobby mesh → add features</div>
+      <p><b>Stipple the show face with a white paint marker</b> (POSCA): many small ~1–2 mm dots, <b>RANDOM spacing (never a grid)</b>, densely all over. White-on-black is ideal contrast; a grid confuses the matcher.</p>
+      <p style="margin-bottom:0">It's your car's part, so use a <b>water-based paint pen</b> → wipes off with <b>isopropyl alcohol</b> (test an edge first). Keep dots <b>off the mounting/clip faces</b>. Use soft diffuse light to avoid gloss hotspots. Avoid uniform white "scanning spray" — that's for laser scanners, not photogrammetry.</p>
+    </div>
+
+    <ul>
+      <li><b>Alignment/scale:</b> textured background + a couple of printed coded targets; set scale from two dots a known distance apart.</li>
+      <li><b>Flip the part</b> to capture the mounting/clip side.</li>
+      <li><b>Hybrid — don't scan the slots:</b> caliper the grille slot width/spacing/count + mounting dims and model them parametrically; use the scan only for the curved shell. Export <b>OBJ</b> (meshes ~0.2–0.5 mm noisy).</li>
+    </ul>
+
+    <h3>CAD on Linux</h3>
+    <p>Fusion 360 isn't native on Linux → model in <b>FreeCAD</b> (parametric, native — pod + snap-fit, mesh as reference) or <b>Blender</b> (mesh cleanup / organic surfaces).</p>
+  </section>
+
+  <!-- ROADMAP -->
+  <section>
+    <h2><span class="num">11</span> Feature roadmap</h2>
+    <p class="lead">What the gauge grows into. Oil temp, cold-engine warning, boost and the over-temp guard are the v1 core; connectivity and the GPS track come much later.</p>
+
+    <div class="card callout blue">
+      <div class="k">Hardware note · GPS — buy the Standard version</div>
+      <p style="margin-bottom:0">The GPS variant is out of stock, and you don't need it. Add a <b>GNSS module</b> later (see order list — <b>NEO-M9N</b> for track), read-only into <b>GPIO18</b> over UART. It sits in the <b>tube by the vent opening</b> near the windscreen → good sky view. CAN stays on GPIO16/17; buttons are onboard. Nothing about v1 changes.</p>
+    </div>
+
+    <div class="roadmap">
+      <div class="rm-col v1">
+        <div class="rm-head"><span class="rm-tag">v1</span> Core gauge · build first</div>
+        <ul>
+          <li><b>Oil temperature</b> <span class="mono">(Mode 22 DID)</span> — the main goal</li>
+          <li><b>Cold-engine warning</b> — "take it easy" until oil ~90 °C, then green "ready"</li>
+          <li><b>Boost</b> gauge</li>
+          <li><b>Audible over-temp guard</b> — speaker alarm on oil/coolant limit</li>
+          <li><b>G-force meter</b> from the IMU <span class="mono">(stretch)</span></li>
+          <li><b>Buttons</b> to switch screens without touching the display</li>
+        </ul>
+      </div>
+      <div class="rm-col v2">
+        <div class="rm-head"><span class="rm-tag">v2</span> Data &amp; connectivity · later</div>
+        <ul>
+          <li><b>Log OBD + GPS to TF card</b> as GPX / CSV per drive</li>
+          <li><b>Phone app over WiFi</b> to download session files</li>
+          <li><b>Google Maps track</b> — the drive as a route, colored by speed / boost / oil-temp</li>
+        </ul>
+      </div>
+      <div class="rm-col v3">
+        <div class="rm-head"><span class="rm-tag">v3</span> Nice-to-have</div>
+        <ul>
+          <li>DTC read &amp; clear</li>
+          <li>Shift light</li>
+          <li>OTA updates</li>
+          <li>Gauge themes · lap timer</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAFETY -->
+  <section>
+    <h2><span class="num">12</span> Safety notes</h2>
+    <div class="card callout">
+      <ul style="margin:0">
+        <li>Reading CAN is passive/low-risk — but never leave anything transmitting garbage while driving.</li>
+        <li>Don't power the display from OBD pin 16 (constant 12 V = battery drain) — use switched 12 V.</li>
+        <li>Be careful pulling dash trim near the airbag; disconnect the battery for deeper work.</li>
+        <li>Keep the screen glanceable and dimmable — driver-distraction rules.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- SOURCING -->
+  <section>
+    <h2><span class="num">13</span> Local sourcing (CZ / EU)</h2>
+    <p class="lead">Fast options — days, not weeks. The prototype parts are all sourceable now; only the round display is a long-lead item, and it isn't needed to prototype.</p>
+
+    <h3>Prototype parts — order now</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Part</th><th>Source</th><th>Price / stock</th></tr></thead>
+        <tbody>
+          <tr><td>SN65HVD230</td><td><a href="https://botland.store/can-bus-modules/6960-sn65hvd230-can-board-waveshare-3945-5904422300715.html">Botland · Waveshare 3945</a></td><td>€4.50 · <span class="tick">✓</span> 24 h dispatch</td></tr>
+          <tr><td>SN65HVD230 <span class="mono muted">(CZ alt)</span></td><td><a href="https://pajenicko.cz/prevodnik-sn65hvd230-can-bus">pajenicko</a></td><td>58 Kč · ✗ out</td></tr>
+          <tr><td>OBD-II plug <span class="mono muted">(solder-your-own)</span></td><td><a href="https://www.gme.cz/v/1496582/molex-51115-1601-konektor-obd-ii-16pin">GME · MOLEX 51115-1601</a></td><td>verify on page</td></tr>
+          <tr><td>OBD-II ready cable</td><td><a href="https://www.easydiag.cz/obd2-16-pin-male-female-60-cm-rozdvojka-konektor-obd-plne-zapojen">easydiag.cz</a></td><td>140 Kč · <span class="tick">✓</span> (min 2)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mono muted" style="font-size:13px">Not stocked: LaskaKit, Dratek, GME (bare TI chip only) — for the module.</p>
+
+    <h3>Later parts — no rush</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Part</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Round AMOLED display</td><td>Not local — Waveshare direct / AliExpress, or ask LaskaKit to special-order</td></tr>
+          <tr><td>Compact buck (Recom R-78 / Pololu)</td><td>TME.eu or GME</td></tr>
+          <tr><td>GNSS M9N + antenna</td><td>AliExpress / Botland</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Shop search links</h3>
+    <p>Swap the query at the end for any part:</p>
+    <ul>
+      <li><b>LaskaKit</b> — <a href="https://www.laskakit.cz/vyhledavani/?string=SN65HVD230">laskakit.cz/vyhledavani/?string=…</a></li>
+      <li><b>Dratek</b> — <a href="https://dratek.cz/hledani.php?heureka=SN65HVD230">dratek.cz/hledani.php?heureka=…</a></li>
+      <li><b>GME</b> — <a href="https://www.gme.cz/vyhledavani?query=SN65HVD230">gme.cz/vyhledavani?query=…</a></li>
+      <li><b>Botland</b> — <a href="https://botland.store/search?s=SN65HVD230">botland.store/search?s=…</a></li>
+      <li><b>TME</b> (buck/connectors) — <a href="https://www.tme.eu/en/katalog/?search=recom%20r-78">tme.eu/en/katalog/?search=…</a></li>
+    </ul>
+  </section>
+
+  <!-- REFERENCES -->
+  <section>
+    <h2><span class="num">14</span> References &amp; inspiration</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Link</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://boostedintl.com/product/hyundai-i30-i30n-demister-vent-gauge-holder/">Boosted Intl · Demister Vent Gauge Holder</a></td><td>RHD / 52–60 mm — not usable, but good reference for the airflow-retaining, driver-angled vent replacement</td></tr>
+          <tr><td><a href="https://partsouq.com/en/catalog/genuine/pick?c=Hyundai&amp;model=i30">PartSouq · i30 parts catalog</a></td><td>Verify the vent part number by VIN</td></tr>
+          <tr><td><a href="https://www.ebay.co.uk/itm/387308639005">OEM RH vent 97490-G4000</a></td><td>Part reference — mirror of our LH part</td></tr>
+          <tr><td>Car Scanner "i30 N" profile · Torque Pro CSVs</td><td>Community-validated enhanced oil-temp &amp; boost DIDs (Mode 22)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    i30 N OBD Gauge · prototype phase · pairs with <span class="mono">can_sniffer.ino</span> and <span class="mono">PROTOTYPE_GUIDE.md</span>
+  </footer>
+</div>

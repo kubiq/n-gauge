@@ -1,0 +1,13 @@
+# docker compose up -d --build
+# TOKEN comes from .env next to this file (copy .env.example).
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    environment:
+      TOKEN: ${TOKEN:?set TOKEN in .env}
+    ports:
+      - "8080:8080"
+    volumes:
+      # The logs, as plain files - readable straight off the host.
+      - ./logs:/data

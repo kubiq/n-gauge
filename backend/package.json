@@ -1,0 +1,15 @@
+{
+  "name": "n-gauge-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Log store for the pod's phone app",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}

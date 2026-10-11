@@ -1,0 +1,29 @@
+# Version record for this sketch - NOT an auto-applied profile.
+#
+# `default_profile:` is deliberately omitted: with it set, arduino-cli applies
+# the profile even on a plain `compile`, and profile builds see only the
+# libraries listed here - which breaks this sketch, because SensorLib is a
+# fork that is not in the registry.
+#
+# Build with:  ./scripts/build.sh gauge
+#
+# scripts/setup-libs.sh installs exactly these versions. Two dependencies
+# cannot be expressed in this file at all:
+#   1. SensorLib must be Waveshare's vendored fork, which is not in the
+#      library registry (the registry version has no CST9217 touch driver and
+#      its QMI8658 shim crashes).
+#   2. lv_conf.h must be visible to LVGL's own sources, i.e. symlinked to
+#      ~/Arduino/libraries/lv_conf.h.
+profiles:
+  default:
+    notes: |
+      FlashSize/PartitionScheme match the real 16 MB flash; PSRAM=opi is the
+      board's octal PSRAM; CDCOnBoot=cdc is REQUIRED or Serial silently goes
+      to the physical UART0 pins instead of the USB port.
+    fqbn: esp32:esp32:esp32s3:FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=opi,CDCOnBoot=cdc
+    platforms:
+      - platform: esp32:esp32 (3.3.8)
+    libraries:
+      - lvgl (9.2.2)
+      - GFX Library for Arduino (1.6.7)
+      - TinyGPSPlus (1.0.3)
