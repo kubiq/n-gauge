@@ -74,6 +74,14 @@ export async function saveSettings(body: string): Promise<string> {
   return (await postForm('/save', body)).text();
 }
 
+/**
+ * The public key the pod encrypts its logs to (64 hex digits), or 'off'.
+ * The pod closes its open logs and starts the next ones under the new key.
+ */
+export async function setPodLogKey(pubHex: string | 'off'): Promise<string> {
+  return saveSettings(`logPub=${encodeURIComponent(pubHex)}`);
+}
+
 /** Sets the pod's clock from the phone's. Always a UTC epoch - see handleClockSet(). */
 export async function setClock(): Promise<string> {
   return (await postForm('/api/clock', `epoch=${Math.floor(Date.now() / 1000)}`)).text();

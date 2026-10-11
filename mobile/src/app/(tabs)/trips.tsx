@@ -4,8 +4,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
+import { LogKeyError } from '@/lib/logtext';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
-import type { CsvSummary, TripFiles } from '@/lib/trips';
+import { type CsvSummary, isGpxName, type TripFiles } from '@/lib/trips';
 import { C, S } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
@@ -20,6 +21,8 @@ type Sums = Record<string, GpxStats | CsvSummary>;
 export default function TripsScreen() {
   const [trips, setTrips] = useState<TripFiles[]>([]);
   const [sums, setSums] = useState<Sums>({});
+  // Why a file could not be read - an encrypted log without the right key.
+  const [problems, setProblems] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const working = useRef(false);
 
@@ -31,13 +34,14 @@ export default function TripsScreen() {
       for (const t of list) {
         for (const name of [t.gpx, t.csv]) {
           if (!name) continue;
-          const s = name.endsWith('.gpx') ? cachedGpx(name) : cachedCsv(name);
+          const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
           if (s) have[name] = s;
           else todo.push(name);
         }
       }
       setTrips(list);
       setSums(have);
+      setProblems({});
       // Says plainly whether the cache is doing its job.
       setStatus(todo.length ? null : `${Object.keys(have).length} files, all from the cache`);
       if (working.current || !todo.length) return;
@@ -47,10 +51,11 @@ export default function TripsScreen() {
           setStatus(`Reading ${i + 1} of ${todo.length} (${Object.keys(have).length} cached): ${name}`);
           try {
             await summarise(name);
-            const s = name.endsWith('.gpx') ? cachedGpx(name) : cachedCsv(name);
+            const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
             if (s) setSums((prev) => ({ ...prev, [name]: s }));
           } catch (e) {
-            console.warn(name, e);
+            const msg = e instanceof LogKeyError ? e.message : `Could not read it: ${String(e)}`;
+            setProblems((prev) => ({ ...prev, [name]: msg }));
           }
         }
         setStatus(`Read ${todo.length} new, ${Object.keys(have).length} from the cache`);
@@ -73,6 +78,7 @@ export default function TripsScreen() {
             t={t}
             g={t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined}
             c={t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined}
+            problem={(t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined}
           />
         ))
       )}
@@ -80,10 +86,10 @@ export default function TripsScreen() {
   );
 }
 
-function TripRow({ t, g, c }: { t: TripFiles; g?: GpxStats; c?: CsvSummary }) {
+function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSummary; problem?: string }) {
   const start = g?.start ?? t.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
-  const pending = (t.gpx && !g) || (t.csv && !c);
+  const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
@@ -100,6 +106,7 @@ function TripRow({ t, g, c }: { t: TripFiles; g?: GpxStats; c?: CsvSummary }) {
       </View>
       {!t.gpx ? <Note>No GPS track - car data only.</Note> : null}
       {pending ? <Note>Reading…</Note> : null}
+      {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );
 }

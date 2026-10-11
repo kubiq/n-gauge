@@ -5,7 +5,16 @@ import { test } from 'node:test';
 
 import { x25519 } from '@noble/curves/ed25519.js';
 
-import { fingerprint, isEncrypted, openLog, sealSegment } from './logcrypt.ts';
+import {
+  bytesToText,
+  fingerprint,
+  fingerprintSpaced,
+  isEncrypted,
+  keyFromText,
+  keyToText,
+  openLog,
+  sealSegment,
+} from './logcrypt.ts';
 
 // Written by the firmware's own tests (tests/test_logcrypt.cpp) from the
 // pod's C code: this is the check that the phone reads what the pod writes.
@@ -48,6 +57,34 @@ test('the wrong key reads nothing', () => {
   // Not bit 0 of byte 0: X25519 clamps the low 3 bits, so that is the same key.
   other[10] ^= 1;
   assert.equal(openLog(file, other).plain.length, 0);
+});
+
+test('the key as text: round trip, bare hex accepted, junk refused', () => {
+  const t = keyToText(secret);
+  assert.ok(t.startsWith('ngauge-log-key-v1:'));
+  assert.deepEqual(keyFromText(`  ${t}\n`), secret);
+  assert.deepEqual(keyFromText(V.recipientSecret.toUpperCase()), secret);
+  assert.equal(keyFromText(t.slice(0, -1)), null);
+  assert.equal(keyFromText('ngauge-log-key-v1:' + 'g'.repeat(64)), null);
+  assert.equal(keyFromText(''), null);
+});
+
+test('fingerprint spaced like the pod shows it', () => {
+  assert.equal(fingerprintSpaced(pub).replace(/ /g, ''), V.fingerprint);
+  assert.match(fingerprintSpaced(pub), /^[0-9a-f]{4} [0-9a-f]{4} [0-9a-f]{4}$/);
+});
+
+test('bytesToText fallback decodes like TextDecoder', () => {
+  const s = 'utc,ms\r\nStart ¬ Finish 50.0568\n';
+  const enc = bytes(s);
+  const saved = globalThis.TextDecoder;
+  // @ts-expect-error - simulating a runtime without it
+  globalThis.TextDecoder = undefined;
+  try {
+    assert.equal(bytesToText(enc), s);
+  } finally {
+    globalThis.TextDecoder = saved;
+  }
 });
 
 test('tells encrypted files from plain ones', () => {

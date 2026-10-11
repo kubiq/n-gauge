@@ -5,8 +5,19 @@
 
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { readLogText } from './logtext';
 import { inboxFile, loadInbox } from './store';
-import { type CsvSummary, type GpxSummary, pairTrips, parseCsv, parseGpx, type TrackPoint, type TripFiles } from './trips';
+import {
+  type CsvSummary,
+  type GpxSummary,
+  isCsvName,
+  isGpxName,
+  pairTrips,
+  parseCsv,
+  parseGpx,
+  type TrackPoint,
+  type TripFiles,
+} from './trips';
 
 const dir = new Directory(Paths.document, 'trips');
 
@@ -47,16 +58,17 @@ export function cachedCsv(name: string): CsvSummary | null {
 /** Works out and caches what is missing or stale for one file. */
 export async function summarise(name: string): Promise<void> {
   if (!dir.exists) dir.create({ intermediates: true });
-  const src = inboxFile(name);
-  const size = src.size;
-  if (name.endsWith('.gpx')) {
+  const size = inboxFile(name).size;
+  // Encrypted or plain alike (readLogText); the cache holds only the results,
+  // so an encrypted log is decrypted once, like a plain one is parsed once.
+  if (isGpxName(name)) {
     if (cachedGpx(name)) return;
-    const { track, ...stats } = parseGpx(await src.text());
+    const { track, ...stats } = parseGpx(await readLogText(name));
     write(new File(dir, `${name}.track.json`), size, track);
     write(new File(dir, `${name}.json`), size, stats);
-  } else if (name.endsWith('.csv')) {
+  } else if (isCsvName(name)) {
     if (cachedCsv(name)) return;
-    write(new File(dir, `${name}.json`), size, parseCsv(await src.text()));
+    write(new File(dir, `${name}.json`), size, parseCsv(await readLogText(name)));
   }
 }
 

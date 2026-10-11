@@ -155,10 +155,17 @@ export function parseCsv(text: string): CsvSummary {
  * as long as both are set to the same zone.
  */
 export function stampOf(name: string): number | null {
-  const m = /_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:_\d+)?\.(?:gpx|csv)$/.exec(name);
+  const m = /_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:_\d+)?\.(?:gpx|csv)(?:\.nge)?$/.exec(name);
   if (!m) return null;
   return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
 }
+
+// ---- names -------------------------------------------------------------------
+// An encrypted log is its plain name plus ".nge" (logcrypt.h).
+export const isEncryptedName = (n: string) => n.endsWith('.nge');
+export const plainName = (n: string) => (isEncryptedName(n) ? n.slice(0, -4) : n);
+export const isGpxName = (n: string) => /^trip_.+\.gpx(?:\.nge)?$/.test(n);
+export const isCsvName = (n: string) => /^drive_.+\.csv(?:\.nge)?$/.test(n);
 
 export type TripFiles = { key: string; gpx?: string; csv?: string; start: number | null };
 
@@ -172,8 +179,8 @@ const PAIR_WINDOW_MS = 20 * 60 * 1000;
  * Undated (numbered) files cannot be paired and come last.
  */
 export function pairTrips(names: string[]): TripFiles[] {
-  const gpx = names.filter((n) => /^trip_.+\.gpx$/.test(n));
-  const csv = names.filter((n) => /^drive_.+\.csv$/.test(n));
+  const gpx = names.filter(isGpxName);
+  const csv = names.filter(isCsvName);
   const usedCsv = new Set<string>();
   const out: TripFiles[] = [];
   for (const g of gpx) {

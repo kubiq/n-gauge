@@ -28,7 +28,8 @@ export type Pull = {
 // What the pod itself writes (logger.cpp, laps.cpp, power.cpp's sleep log).
 // Anything else on the card - a firmware .bin copied there, notes - is the
 // owner's, not a log, and is not synced.
-const POD_LOG = /^(drive_.+\.csv|trip_.+\.gpx|track_.+\.vbo|sleeplog\.txt)$/;
+// Encrypted logs carry ".nge" after their own extension (logcrypt.h).
+const POD_LOG = /^(?:(?:drive_.+\.csv|trip_.+\.gpx|track_.+\.vbo)(?:\.nge)?|sleeplog\.txt)$/;
 
 export function isPodLog(name: string): boolean {
   return POD_LOG.test(name);

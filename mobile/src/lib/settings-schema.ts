@@ -64,6 +64,8 @@ export type PodSettings = Record<string, number | boolean> & {
   tzOffset: number;
   tzDst: boolean;
   tz: string;
+  /** Fingerprint of the key the pod encrypts its logs to; "" = plain logs. Older firmware: absent. */
+  logKey?: string;
 };
 
 /**

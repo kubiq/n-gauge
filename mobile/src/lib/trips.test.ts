@@ -106,6 +106,15 @@ test('stamps from dated names are local time, null for numbered ones', () => {
   assert.equal(stampOf('drive_0279.csv'), null);
 });
 
+test('encrypted names pair and date like plain ones', () => {
+  assert.equal(stampOf('trip_2026-10-11_23-09.gpx.nge'), new Date(2026, 9, 11, 23, 9).getTime());
+  const trips = pairTrips(['trip_2026-10-11_23-09.gpx.nge', 'drive_2026-10-11_23-08.csv.nge', 'sleeplog.txt']);
+  assert.deepEqual(
+    trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
+    [['trip_2026-10-11_23-09.gpx.nge', 'drive_2026-10-11_23-08.csv.nge']],
+  );
+});
+
 test('pairing: nearest csv within the window, leftovers on their own, newest first', () => {
   const trips = pairTrips([
     'trip_2026-10-11_12-45.gpx',

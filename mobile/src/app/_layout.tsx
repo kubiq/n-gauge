@@ -19,6 +19,7 @@ export default function RootLayout() {
           <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the pod’s QR' }} />
           <Stack.Screen name="server" options={{ presentation: 'modal', title: 'Upload server' }} />
           <Stack.Screen name="trip/[key]" options={{ title: 'Drive' }} />
+          <Stack.Screen name="log-key" options={{ title: 'Log encryption' }} />
         </Stack>
       </PodProvider>
     </ThemeProvider>

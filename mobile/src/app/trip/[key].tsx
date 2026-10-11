@@ -6,6 +6,7 @@ import { TrackMap } from '@/components/track-map';
 import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
+import { LogKeyError } from '@/lib/logtext';
 import { shareGpx } from '@/lib/share';
 import type { CsvSummary, TrackPoint } from '@/lib/trips';
 
@@ -18,19 +19,31 @@ export default function TripScreen() {
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     if (!t) return;
     let live = true;
     (async () => {
-      // Opened before the list got to it: work it out here.
-      if (t.gpx) await summarise(t.gpx);
-      if (t.csv) await summarise(t.csv);
-      const tr = t.gpx ? await trackOf(t.gpx) : null;
+      // Opened before the list got to it: work it out here. Each file on its
+      // own, so a track that will not open still leaves the car data shown.
+      const issues: string[] = [];
+      const attempt = async (name?: string) => {
+        if (!name) return;
+        try {
+          await summarise(name);
+        } catch (e) {
+          issues.push(e instanceof LogKeyError ? e.message : `${name}: ${String(e)}`);
+        }
+      };
+      await attempt(t.gpx);
+      await attempt(t.csv);
+      const tr = t.gpx && cachedGpx(t.gpx) ? await trackOf(t.gpx) : null;
       if (live) {
         setG(t.gpx ? cachedGpx(t.gpx) : null);
         setC(t.csv ? cachedCsv(t.csv) : null);
         setTrack(tr);
+        setProblem(issues.length ? [...new Set(issues)].join('\n') : null);
         setReady(true);
       }
     })();
@@ -54,6 +67,7 @@ export default function TripScreen() {
     <Screen underHeader>
       <Stack.Screen options={{ title: start ? when(start) : t.key }} />
       {!ready ? <Note>Reading the logs…</Note> : null}
+      {problem ? <Note tone="bad">{problem}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} /> : null}
 
       {g ? (

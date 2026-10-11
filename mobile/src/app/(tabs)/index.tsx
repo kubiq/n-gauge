@@ -6,6 +6,7 @@ import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { getLive, type PodLive, setClock, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
+import { LogKeyCard } from '@/components/log-key-card';
 import { UploadCard } from '@/components/upload-card';
 import { UPLOAD_ENABLED } from '@/features';
 
@@ -88,6 +89,8 @@ export default function PodScreen() {
           </>
         )}
       </Card>
+
+      <LogKeyCard />
 
       {pod.state === 'connected' ? (
         <>

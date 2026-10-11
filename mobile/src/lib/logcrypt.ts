@@ -138,5 +138,58 @@ function block(type: number, body: Uint8Array): Uint8Array {
 
 /** First 6 bytes of BLAKE2b-256(pub), hex - shown on the pod and in the app to compare. */
 export function fingerprint(pub: Uint8Array): string {
-  return Array.from(blake2b(pub, { dkLen: 32 }).subarray(0, 6), (b) => b.toString(16).padStart(2, '0')).join('');
+  return toHex(blake2b(pub, { dkLen: 32 }).subarray(0, 6));
+}
+
+/** "7d12 5bce 8295", as the pod's Device page shows it. */
+export function fingerprintSpaced(pub: Uint8Array): string {
+  return fingerprint(pub).replace(/(.{4})(?=.)/g, '$1 ');
+}
+
+export function toHex(b: Uint8Array): string {
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+export function publicKeyOf(secret: Uint8Array): Uint8Array {
+  return x25519.getPublicKey(secret);
+}
+
+// ---- the key as text, for KeePass -------------------------------------------
+// One line, so it pastes cleanly into a password manager's field. The prefix
+// says what it is and which format it reads; the importer also takes the bare
+// 64 hex digits, in case the prefix got lost on the way.
+export const KEY_TEXT_PREFIX = 'ngauge-log-key-v1:';
+
+export function keyToText(secret: Uint8Array): string {
+  return KEY_TEXT_PREFIX + toHex(secret);
+}
+
+/** The secret from exported text, or null if it is not one. */
+export function keyFromText(text: string): Uint8Array | null {
+  let t = text.trim();
+  if (t.toLowerCase().startsWith(KEY_TEXT_PREFIX)) t = t.slice(KEY_TEXT_PREFIX.length);
+  if (!/^[0-9a-fA-F]{64}$/.test(t)) return null;
+  return Uint8Array.from(t.match(/../g)!.map((h) => parseInt(h, 16)));
+}
+
+/**
+ * Bytes to text. TextDecoder where the runtime has it; otherwise a plain
+ * UTF-8 decoder - the logs are ASCII but for one '¬' in the .vbo header.
+ */
+export function bytesToText(b: Uint8Array): string {
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder().decode(b);
+  const out: string[] = [];
+  let chunk = '';
+  for (let i = 0; i < b.length; ) {
+    let c = b[i++];
+    if (c >= 0xc0 && c < 0xe0 && i < b.length) c = ((c & 0x1f) << 6) | (b[i++] & 0x3f);
+    else if (c >= 0xe0 && c < 0xf0 && i + 1 < b.length) c = ((c & 0x0f) << 12) | ((b[i++] & 0x3f) << 6) | (b[i++] & 0x3f);
+    chunk += String.fromCharCode(c);
+    if (chunk.length >= 8192) {
+      out.push(chunk);
+      chunk = '';
+    }
+  }
+  out.push(chunk);
+  return out.join('');
 }
