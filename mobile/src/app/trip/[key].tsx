@@ -7,8 +7,8 @@ import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
-import { shareGpx } from '@/lib/share';
-import type { CsvSummary, TrackPoint } from '@/lib/trips';
+import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
+import { type CsvSummary, isEncryptedName, type TrackPoint } from '@/lib/trips';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -18,7 +18,18 @@ export default function TripScreen() {
   // In state, not read from the cache during render - see trips.tsx.
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const run = async (what: string, fn: () => Promise<void>) => {
+    setBusy(what);
+    try {
+      await fn();
+    } catch (e) {
+      Alert.alert('Files', String((e as Error).message));
+    } finally {
+      setBusy(null);
+    }
+  };
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,23 +106,31 @@ export default function TripScreen() {
       <Card title="Files">
         {t.gpx ? <Row label="Track" value={t.gpx} tone="dim" /> : null}
         {t.csv ? <Row label="Car data" value={t.csv} tone="dim" /> : null}
+        {isEncryptedName(t.gpx ?? t.csv ?? '') ? (
+          <Note>Encrypted on the phone; shared and saved decrypted.</Note>
+        ) : null}
         {t.gpx ? (
+          <Button title="Share the track (GPX)" kind="plain" busy={busy === 'gpx'} onPress={() => run('gpx', () => shareLog(t.gpx!))} />
+        ) : null}
+        {t.csv ? (
           <Button
-            title="Share the track (GPX)"
+            title="Share the car data (CSV)"
             kind="plain"
-            busy={sharing}
-            onPress={async () => {
-              setSharing(true);
-              try {
-                await shareGpx(t.gpx!);
-              } catch (e) {
-                Alert.alert('Share', String((e as Error).message));
-              } finally {
-                setSharing(false);
-              }
-            }}
+            busy={busy === 'csv'}
+            onPress={() => run('csv', () => shareLog(t.csv!))}
           />
         ) : null}
+        <Button
+          title="Save to a folder"
+          kind="plain"
+          busy={busy === 'save'}
+          onPress={() =>
+            run('save', async () => {
+              const r = await saveLogsToFolder([t.gpx, t.csv].filter((n): n is string => !!n));
+              Alert.alert('Saved', savedText(r));
+            })
+          }
+        />
       </Card>
     </Screen>
   );

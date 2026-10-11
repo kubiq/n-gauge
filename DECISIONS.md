@@ -360,7 +360,8 @@ side effect of the design.
   `</trkseg></trk></gpx>` at the end by writing it and seeking back over it
   at the next batch (`gpxWriteTail()` / `gpxCommit()`) - a rewrite in place,
   which an encrypted file cannot take. Encrypted, the tail is not written;
-  the app's parser does not need it, and the PC tool appends it.
+  the app's parser does not need it, and the app adds it to every GPX it
+  shares or saves (`cleanGpx()`).
 - **Plaintext on purpose:** `sleeplog.txt` (no position, and it is the file
   read when debugging power on the bench), file names (they give drive
   dates and times, not places), and every file written before a key is set.
@@ -368,11 +369,15 @@ side effect of the design.
 - **The private key is exported once to KeePass.** Losing it loses every
   encrypted log, so the app offers export (and import, for a new phone), with
   a short fingerprint to compare against the pod's settings page.
-- **Costs accepted:** the PC needs a decrypt tool (and the key) for the card
-  in a reader or shared over USB - CSV analysis on the PC is how the oil byte
-  was found, so the tool is part of the job, not an extra; `logger_dump_tail()`
-  and the pod's `/files` page show ciphertext; the backend stores ciphertext
-  (which is a plus).
+- **The phone is where logs become readable again - no PC tool.** The key is
+  on the phone and the app is the centre of the workflow (the owner's call,
+  2026-10-11), so the app hands logs on decrypted: "Share" a drive's GPX or
+  CSV to another app, or "Save to a folder" / "Save all to a folder" (plain
+  names, files already there skipped). CSV analysis on the PC - how the oil
+  byte was found - now starts from those copies.
+- **Costs accepted:** the card in a reader or shared over USB holds only
+  ciphertext; `logger_dump_tail()` and the pod's `/files` page show
+  ciphertext; the backend stores ciphertext (which is a plus).
 
 ---
 

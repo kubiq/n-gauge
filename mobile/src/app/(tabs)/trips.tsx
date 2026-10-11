@@ -1,10 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, Note, Screen, styles as ui } from '@/components/ui';
+import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
+import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isGpxName, type TripFiles } from '@/lib/trips';
 import { C, S } from '@/theme';
@@ -24,6 +25,7 @@ export default function TripsScreen() {
   // Why a file could not be read - an encrypted log without the right key.
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const working = useRef(false);
 
   useFocusEffect(
@@ -64,9 +66,29 @@ export default function TripsScreen() {
     }, []),
   );
 
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      const names = trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n);
+      const r = await saveLogsToFolder(names, setStatus);
+      setStatus(null);
+      Alert.alert('Saved', savedText(r));
+    } catch (e) {
+      setStatus(null);
+      Alert.alert('Save', String((e as Error).message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Screen>
       {status ? <Note>{status}</Note> : null}
+      {trips.length ? (
+        // Decrypted, under plain names - the way logs reach the PC now that
+        // they are encrypted on the card. Already-saved files are skipped.
+        <Button title="Save all to a folder" kind="plain" busy={saving} onPress={saveAll} />
+      ) : null}
       {trips.length === 0 ? (
         <Card>
           <Note>No drives on the phone yet. Connect to the pod and pull them on the Sync tab.</Note>
