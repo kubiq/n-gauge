@@ -683,8 +683,21 @@ static void range_garbage_means_whole_file() {
   CHECK(calc_parse_range("bytes=1-2x", 1000, &a, &b) == 0);
 }
 
+static void hex_parses_exactly_or_not_at_all() {
+  uint8_t b[4] = {9, 9, 9, 9};
+  CHECK(calc_parse_hex("00ff7Ac3", b, 4) && b[0] == 0x00 && b[1] == 0xff && b[2] == 0x7a && b[3] == 0xc3);
+  uint8_t keep[4] = {9, 9, 9, 9};
+  CHECK(!calc_parse_hex("00ff7Ac", keep, 4));     // one short
+  CHECK(!calc_parse_hex("00ff7Ac3a", keep, 4));   // one long
+  CHECK(!calc_parse_hex("00ff7Ag3", keep, 4));    // not hex
+  CHECK(!calc_parse_hex(" 0ff7Ac3", keep, 4));
+  CHECK(!calc_parse_hex(nullptr, keep, 4));
+  CHECK(keep[0] == 9 && keep[3] == 9);             // untouched on failure
+}
+
 int main() {
   printf("test_calc\n");
+  TEST(hex_parses_exactly_or_not_at_all);
   TEST(range_reads_the_three_forms);
   TEST(range_end_past_the_file_is_clamped);
   TEST(range_past_the_end_is_416);

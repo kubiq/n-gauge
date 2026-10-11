@@ -355,6 +355,15 @@ void loop() {
     Serial.printf("[..] bench: set clock to %ld -> %s\n", e,
                   rtc_set_from_epoch(e) ? "ok" : "rejected");
   }
+  // 'k<64 hex>' / 'koff' sets the log encryption key as the phone app does,
+  // under the same lock - for checking the encrypted logs on the desk.
+  if (dbgCmd == 'k') {
+    String hex = Serial.readStringUntil('\n');
+    hex.trim();
+    LoggerSdLock lock;
+    Serial.printf("[..] bench: log key %s -> %s\n", hex.c_str(),
+                  settings_set_log_key(hex.c_str()) ? "ok" : "rejected");
+  }
 #endif
 
   // No gps_task() here: the GNSS runs on its own task on core 0, spawned by

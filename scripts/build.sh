@@ -71,6 +71,11 @@ BOOTAPP="$(find "$HOME/.arduino15/packages/esp32" -name boot_app0.bin | head -1)
 # Either way finish with a WATCHDOG reset: the TinyUSB restart leaves a
 # "boot to download mode" flag in RTC memory that the usual RTS reset does
 # not clear - on the bench the pod stayed in the bootloader until replugged.
+# Resolved first, so a stable /dev/serial/by-id/... path works too: its own
+# name is not a tty in /sys (the bootloader request was silently skipped),
+# and it vanishes once the ROM bootloader enumerates under another name -
+# the /dev/ttyACM* it points at is what stays.
+PORT="$(readlink -f "$PORT")"
 DEV="$(basename "$PORT")"
 PRODUCT="$(cat "/sys/class/tty/$DEV/device/../product" 2>/dev/null || true)"
 BEFORE="default-reset"

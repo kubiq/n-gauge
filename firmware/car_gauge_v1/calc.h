@@ -424,6 +424,27 @@ static inline double calc_sun_elevation_deg(double unixUtc, double latDeg, doubl
   return asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(ha)) / rad;
 }
 
+// Exactly 2*n hex digits (either case) into n bytes - the log encryption key
+// arrives from the phone as 64 of them. False, and out untouched, for any
+// other length or a non-hex character: a key that is almost right must not
+// quietly become a different key.
+static inline bool calc_parse_hex(const char *s, uint8_t *out, size_t n) {
+  if (!s || strlen(s) != 2 * n) return false;
+  uint8_t tmp[64];
+  if (n > sizeof(tmp)) return false;
+  for (size_t i = 0; i < 2 * n; i++) {
+    const char c = s[i];
+    const int v = (c >= '0' && c <= '9') ? c - '0'
+                : (c >= 'a' && c <= 'f') ? c - 'a' + 10
+                : (c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
+    if (v < 0) return false;
+    if (i % 2 == 0) tmp[i / 2] = (uint8_t)(v << 4);
+    else            tmp[i / 2] |= (uint8_t)v;
+  }
+  memcpy(out, tmp, n);
+  return true;
+}
+
 // An HTTP Range header ("bytes=a-b", "bytes=a-", "bytes=-n") against a file of
 // `size` bytes, for /dl: the phone app resumes a download that dropped
 // mid-file, or fetches only the tail of a log that has grown since the last

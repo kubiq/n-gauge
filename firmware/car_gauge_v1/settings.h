@@ -42,7 +42,19 @@ struct Settings {
   char    apSsid[33];     // 1-32 chars. Empty would make softAP fail.
   char    apPass[33];     // WPA2: 8-32 chars. Shorter would make softAP fail
                           // and lock you out, so it is validated on write.
+  // The phone's public key the logs are encrypted to (logcrypt.h, DECISIONS
+  // "Logs are to be encrypted to a public key"). Public: nothing here can
+  // decrypt. No key, no encryption - logKey false means plaintext logs.
+  bool    logKey;
+  uint8_t logPub[32];
 };
+
+// The log encryption key, as the phone sends it: 64 hex digits, or "off" to
+// stop encrypting. False (nothing changed) for anything else.
+bool settings_set_log_key(const char *hex);
+// Changes whenever the key does (not persisted): the logger closes its files
+// on a change, so the next ones use the new key.
+extern volatile uint32_t settings_log_key_gen;
 
 // Returns false (and changes nothing) if pass is not a valid WPA2 length.
 bool settings_set_ap_pass(const char *pass);

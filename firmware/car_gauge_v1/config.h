@@ -604,7 +604,8 @@
 // notification rim as if nothing were faulted, 'c' pretends a CAN frame
 // arrived, 't<epoch>' sets the clock, 'f' injects readings that then go
 // stale, 'd' prints the tail of the drive log, 'v<kmh>' fakes the speed the
-// AP-while-driving logic sees (v0 = no fix, v-1 = real GNSS again).
+// AP-while-driving logic sees (v0 = no fix, v-1 = real GNSS again),
+// 'k<64 hex>' / 'koff' sets the log encryption key.
 #define FRAME_STATS 0
 
 // ---- Drive logging (onboard microSD) ---------------------------------------

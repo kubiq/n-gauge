@@ -7,7 +7,9 @@
 #include "settings.h"   // tripGapMin: the trip-reset gap is user-editable
 #include "webapi.h"     // web_is_up(), for the apUp column
 #include "laps.h"       // the track session the .vbo log follows
+#include "logcrypt.h"   // the encrypted log format
 #include <Arduino.h>
+#include <esp_random.h>
 #include "FS.h"
 #include "SD_MMC.h"
 #include <time.h>
@@ -77,6 +79,104 @@ static uint32_t gpxLastMs = 0;
 static uint32_t gpxTailPos = 0;
 
 static const char GPX_TAIL[] = "</trkseg></trk></gpx>\n";
+
+// ---- encryption --------------------------------------------------------------
+// With a key set (settings.logKey), the CSV, the GPX and the .vbo are written
+// as logcrypt.h records - see there, and DECISIONS.md "Logs are to be
+// encrypted to a public key". Each file goes through a Sink: plaintext as
+// before with no key, otherwise a segment header when the file is opened and
+// one sealed record per batch the writer already makes. The sleep log stays
+// plain on purpose.
+//
+// The throwaway secret per segment needs real randomness. The S3's RNG is
+// only guaranteed true-random while the radio runs (WiFi or BT), and the AP
+// is up from boot but drops while driving (AP_DRIVE_OFF) - just when a GPX
+// may open at the first fix. So RNG output is stirred into a pool on every
+// pass with the AP up, and each secret is BLAKE2b(pool, fresh RNG output); the
+// pool is then ratcheted, so the secret cannot be recomputed from it later.
+static uint8_t  entropy[32];
+static uint32_t entropyStirs = 0;
+
+static void entropyStir() {
+  if (!web_is_up()) return;
+  uint8_t m[32 + 16];
+  memcpy(m, entropy, 32);
+  esp_fill_random(m + 32, 16);
+  crypto_blake2b(entropy, sizeof(entropy), m, sizeof(m));
+  crypto_wipe(m, sizeof(m));
+  entropyStirs++;
+}
+
+static void ephSecret(uint8_t out[32]) {
+  uint8_t m[32 + 32 + 4];
+  memcpy(m, entropy, 32);
+  esp_fill_random(m + 32, 32);
+  memcpy(m + 64, &entropyStirs, 4);
+  crypto_blake2b(out, 32, m, sizeof(m));
+  m[0] ^= 0x01;                                    // a different input for the ratchet
+  crypto_blake2b(entropy, sizeof(entropy), m, sizeof(m));
+  crypto_wipe(m, sizeof(m));
+  if (entropyStirs == 0)
+    Serial.println(F("[..] log key from the RNG with the radio off - the AP was never up this boot"));
+}
+
+struct Sink {
+  LogcryptSeg seg;
+  bool        enc = false;
+};
+static Sink csvSink, gpxSink, vboSink;
+// One sealed record at a time, for every writer: they all run on the logger
+// task or under the SD lock. Sized for the largest batch, the GPX's.
+static uint8_t sealOut[12288 + LOGCRYPT_OVERHEAD];
+
+// Opening a file, or reopening one: a new segment with a fresh key.
+static void sinkBegin(File &f, Sink &s) {
+  s.enc = settings.logKey;
+  if (!s.enc) return;
+  uint8_t eph[32], head[LOGCRYPT_HEADER_LEN];
+  ephSecret(eph);
+  logcrypt_begin(&s.seg, settings.logPub, eph, head);   // wipes eph
+  f.write(head, sizeof(head));
+}
+
+static void sinkWrite(File &f, Sink &s, const uint8_t *p, size_t n) {
+  if (!s.enc) { f.write(p, n); return; }
+  while (n) {
+    const size_t k = n < sizeof(sealOut) - LOGCRYPT_OVERHEAD ? n : sizeof(sealOut) - LOGCRYPT_OVERHEAD;
+    f.write(sealOut, logcrypt_seal(&s.seg, p, k, sealOut));
+    p += k;
+    n -= k;
+  }
+}
+
+static void sinkEnd(Sink &s) {
+  if (s.enc) logcrypt_end(&s.seg);
+  s.enc = false;
+}
+
+// The CSV is staged here and goes to the card on each flush (every
+// LOG_FLUSH_INTERVAL_MS) - so that, encrypted, one flush is one record rather
+// than one record per row. ~2 KB of rows per 2 s; a full buffer is written
+// early.
+static char   csvBuf[4096];
+static size_t csvLen = 0;
+
+static void csvWriteStaged() {
+  if (csvLen) sinkWrite(logFile, csvSink, (const uint8_t *)csvBuf, csvLen);
+  csvLen = 0;
+}
+
+static void csvCommit() {
+  csvWriteStaged();
+  logFile.flush();
+}
+
+static void csvPut(const char *p, size_t n) {
+  if (csvLen + n > sizeof(csvBuf)) csvWriteStaged();
+  if (n > sizeof(csvBuf)) n = sizeof(csvBuf);
+  memcpy(csvBuf + csvLen, p, n);
+  csvLen += n;
+}
 
 // ---- idle throttle --------------------------------------------------------
 static uint32_t lastMovingMs = 0;
@@ -155,17 +255,13 @@ static uint32_t gpxLastWriteMs = 0;
 
 static void gpxCommit() {
   if (!gpxActive || gpxBufLen == 0) return;
-  gpxFile.write((const uint8_t *)gpxBuf, gpxBufLen);
+  sinkWrite(gpxFile, gpxSink, (const uint8_t *)gpxBuf, gpxBufLen);
   gpxBufLen = 0;
+  // Encrypted, no closing tags: a sealed record cannot be overwritten in
+  // place, and the readers add them (the app's cleanGpx, the PC tool).
+  if (gpxSink.enc) { gpxFile.flush(); return; }
   // Closing tags then rewind, so the copy on the card is always valid XML -
   // the power dies with the ignition, so there may never be a clean shutdown.
-  gpxTailPos = gpxFile.position();
-  gpxFile.print(GPX_TAIL);
-  gpxFile.seek(gpxTailPos);
-  gpxFile.flush();
-}
-
-static void gpxWriteTail() {
   gpxTailPos = gpxFile.position();
   gpxFile.print(GPX_TAIL);
   gpxFile.seek(gpxTailPos);
@@ -201,7 +297,11 @@ static int highestIndex(const char *prefix, const char *ext) {
     const char *d = s + pl;
     const char *e = d;
     while (*e >= '0' && *e <= '9') e++;
-    if (e == d || strcmp(e, ext) != 0) continue;
+    // Encrypted or not (ext + LOGCRYPT_SUFFIX): one sequence of numbers.
+    const size_t el = strlen(ext);
+    const bool match = strcmp(e, ext) == 0 ||
+                       (strncmp(e, ext, el) == 0 && strcmp(e + el, LOGCRYPT_SUFFIX) == 0);
+    if (e == d || !match) continue;
     const int n = atoi(d);
     if (n > maxN) maxN = n;
   }
@@ -218,11 +318,20 @@ RTC_DATA_ATTR static int nextTripN  = 0;
 // First free number at or after *cache, walking the directory once if the
 // cache is empty. The exists() check stays, but now it normally runs once: it
 // is what keeps this correct if the card was swapped while the pod slept.
-static int nextFreeIndex(int *cache, const char *fmt, const char *prefix,
+// The extension a new log gets: the plain one, plus LOGCRYPT_SUFFIX when a
+// key is set (the same test sinkBegin() makes, under the same lock).
+static const char *logExt(char *out, size_t n, const char *base) {
+  snprintf(out, n, "%s%s", base, settings.logKey ? LOGCRYPT_SUFFIX : "");
+  return out;
+}
+
+// /<prefix><4 digits><ext>; numbered by `base`, the plain extension, so an
+// encrypted and a plain file never share a number.
+static int nextFreeIndex(int *cache, const char *prefix, const char *base,
                          const char *ext, char *out, size_t outLen) {
-  if (*cache <= 0) *cache = highestIndex(prefix, ext) + 1;
+  if (*cache <= 0) *cache = highestIndex(prefix, base) + 1;
   for (int n = *cache; n <= 9999; n++) {
-    snprintf(out, outLen, fmt, n);
+    snprintf(out, outLen, "/%s%04d%s", prefix, n, ext);
     if (SD_MMC.exists(out)) continue;
     *cache = n + 1;
     return n;
@@ -257,8 +366,10 @@ static bool datedPath(const char *prefix, const char *ext, time_t t,
 }
 
 static void gpxOpen() {
-  const bool named = datedPath("trip_", ".gpx", time(nullptr), gpxPath, sizeof(gpxPath)) ||
-                     nextFreeIndex(&nextTripN, "/trip_%04d.gpx", "trip_", ".gpx",
+  char ext[12];
+  logExt(ext, sizeof(ext), ".gpx");
+  const bool named = datedPath("trip_", ext, time(nullptr), gpxPath, sizeof(gpxPath)) ||
+                     nextFreeIndex(&nextTripN, "trip_", ".gpx", ext,
                                    gpxPath, sizeof(gpxPath)) > 0;
   if (named && (gpxFile = SD_MMC.open(gpxPath, FILE_WRITE))) {
 
@@ -271,16 +382,21 @@ static void gpxOpen() {
     }
     // The gpxtpx namespace must be declared here or the per-point speed
     // extension is unreadable - viewers skip extensions in unknown namespaces.
-    gpxFile.print(F("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                    "<gpx version=\"1.1\" creator=\"i30N-gauge\" "
-                    "xmlns=\"http://www.topografix.com/GPX/1/1\" "
-                    "xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/"
-                    "TrackPointExtension/v1\">\n<trk><name>"));
-    gpxFile.print(stamp[0] ? stamp : "trip");
-    gpxFile.print(F("</name><trkseg>\n"));
+    // Into the batch buffer (empty at open) and out through gpxCommit(), so
+    // it is sealed like the points when encrypting, and followed by the tail
+    // when not.
+    sinkBegin(gpxFile, gpxSink);
+    const int w = snprintf(gpxBuf, sizeof(gpxBuf),
+                           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                           "<gpx version=\"1.1\" creator=\"i30N-gauge\" "
+                           "xmlns=\"http://www.topografix.com/GPX/1/1\" "
+                           "xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/"
+                           "TrackPointExtension/v1\">\n<trk><name>%s</name><trkseg>\n",
+                           stamp[0] ? stamp : "trip");
+    gpxBufLen = w > 0 ? (uint16_t)w : 0;
     gpxActive = true;
-    gpxWriteTail();
-    Serial.printf("[OK] trip track %s\n", gpxPath);
+    gpxCommit();
+    Serial.printf("[OK] trip track %s%s\n", gpxPath, gpxSink.enc ? " (encrypted)" : "");
     return;
   }
   // Give up permanently, exactly as driveOpen() does. Without this, every
@@ -437,7 +553,12 @@ static void gpxTask() {
     const int wrote = snprintf(gpxBuf + gpxBufLen, room > 0 ? room : 0,
                                "</trkseg><trkseg>\n");
     if (wrote > 0 && wrote < room) gpxBufLen += (uint16_t)wrote;
-    else { gpxCommit(); gpxFile.print(F("</trkseg><trkseg>\n")); }
+    else {
+      // Full: drain, then the break goes first into the empty buffer - not
+      // straight to the file, which would bypass the encryption.
+      gpxCommit();
+      gpxBufLen = (uint16_t)strlcpy(gpxBuf, "</trkseg><trkseg>\n", sizeof(gpxBuf));
+    }
   }
 
   char stamp[32] = "";
@@ -561,26 +682,31 @@ bool logger_card_shared() { return sharedWithPc; }
 // few rows, and the card reached 245 of them.
 static bool driveOpen() {
   if (!cardOk) return false;
-  pathDated = datedPath("drive_", ".csv", time(nullptr), path, sizeof(path));
+  char ext[12];
+  logExt(ext, sizeof(ext), ".csv");
+  pathDated = datedPath("drive_", ext, time(nullptr), path, sizeof(path));
   driveOpenMs = millis();
   const bool named = pathDated ||
-                     nextFreeIndex(&nextDriveN, "/drive_%04d.csv", "drive_", ".csv",
+                     nextFreeIndex(&nextDriveN, "drive_", ".csv", ext,
                                    path, sizeof(path)) > 0;
   if (!named || !(logFile = SD_MMC.open(path, FILE_WRITE))) {
     Serial.println(F("[ERR] could not open a drive log file"));
     cardOk = false;            // don't retry every loop once it's hopeless
     return false;
   }
-  logFile.println(F("utc,ms,oilC,oilRaw,coolantC,boostBar,"
-                    "gpsFix,sats,speedKmh,lat,lon,gx,gy,gz,"
-                    "isoOk,isoAborts,rxOverflows,busOff,busOffs,"
-                    "t0bar,t1bar,t2bar,t3bar,t0c,t1c,t2c,t3c,tpmsRaw,"
-                    "oilRawPayload,apUp,obdKmh,coolantPid05C,"
-                    "absLoadPct,baroKpa,pedalRaw,rpm,timingDeg,iatC,gear,"
-                    "logMaxMs,loopMaxMs"));
-  logFile.flush();
+  static const char HEADER[] = "utc,ms,oilC,oilRaw,coolantC,boostBar,"
+                               "gpsFix,sats,speedKmh,lat,lon,gx,gy,gz,"
+                               "isoOk,isoAborts,rxOverflows,busOff,busOffs,"
+                               "t0bar,t1bar,t2bar,t3bar,t0c,t1c,t2c,t3c,tpmsRaw,"
+                               "oilRawPayload,apUp,obdKmh,coolantPid05C,"
+                               "absLoadPct,baroKpa,pedalRaw,rpm,timingDeg,iatC,gear,"
+                               "logMaxMs,loopMaxMs\r\n";
+  sinkBegin(logFile, csvSink);
+  csvLen = 0;
+  csvPut(HEADER, sizeof(HEADER) - 1);
+  csvCommit();
   active = true;
-  Serial.printf("[OK] drive log %s\n", path);
+  Serial.printf("[OK] drive log %s%s\n", path, csvSink.enc ? " (encrypted)" : "");
   return true;
 }
 
@@ -597,9 +723,13 @@ static void driveRenameDated() {
   pathDated = true;
   const time_t start = time(nullptr) - (time_t)((millis() - driveOpenMs) / 1000);
   char dated[sizeof(path)];
-  if (!datedPath("drive_", ".csv", start, dated, sizeof(dated))) return;
-  logFile.flush();
+  // The extension the open file already has - not logExt(): a key change
+  // closes every file before it applies, so the two agree, but the name must
+  // follow the contents whatever happens.
+  if (!datedPath("drive_", csvSink.enc ? ".csv" LOGCRYPT_SUFFIX : ".csv", start, dated, sizeof(dated))) return;
+  csvCommit();
   logFile.close();
+  sinkEnd(csvSink);
   const bool renamed = SD_MMC.rename(path, dated);
   if (renamed) strlcpy(path, dated, sizeof(path));
   logFile = SD_MMC.open(path, FILE_APPEND);
@@ -609,6 +739,7 @@ static void driveRenameDated() {
     cardOk = false;            // same give-up rule as driveOpen()
     return;
   }
+  sinkBegin(logFile, csvSink);  // reopened: a new segment, a fresh key
   if (renamed) Serial.printf("[OK] drive log renamed to %s\n", path);
   else         Serial.printf("[ERR] drive log rename failed, keeping %s\n", path);
 }
@@ -660,14 +791,35 @@ static int currentGear() {
 }
 
 static void vboCommit() {
-  if (vboLen) { vboFile.write((const uint8_t *)vboBuf, vboLen); vboLen = 0; }
+  if (vboLen) { sinkWrite(vboFile, vboSink, (const uint8_t *)vboBuf, vboLen); vboLen = 0; }
   vboFile.flush();
+}
+
+// The header goes through the batch buffer too, so it is sealed when
+// encrypting; a buffer that fills is committed first.
+static void vboPut(const char *s) {
+  const size_t n = strlen(s);
+  if (vboLen + n > sizeof(vboBuf)) vboCommit();
+  if (n > sizeof(vboBuf)) return;
+  memcpy(vboBuf + vboLen, s, n);
+  vboLen += (uint16_t)n;
+}
+
+static void vboPutf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void vboPutf(const char *fmt, ...) {
+  char line[160];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(line, sizeof(line), fmt, ap);
+  va_end(ap);
+  vboPut(line);
 }
 
 static void vboClose() {
   if (!vboActive) return;
   vboCommit();
   vboFile.close();
+  sinkEnd(vboSink);
   vboActive = false;
   Serial.printf("[OK] track log %s closed\n", vboPath);
 }
@@ -676,8 +828,10 @@ static void vboOpen() {
   int32_t gLat, gLon;
   float dx, dy;
   if (!laps_gate(&gLat, &gLon, &dx, &dy)) return;
-  const bool named = datedPath("track_", ".vbo", time(nullptr), vboPath, sizeof(vboPath)) ||
-                     nextFreeIndex(&nextTrackN, "/track_%04d.vbo", "track_", ".vbo",
+  char ext[12];
+  logExt(ext, sizeof(ext), ".vbo");
+  const bool named = datedPath("track_", ext, time(nullptr), vboPath, sizeof(vboPath)) ||
+                     nextFreeIndex(&nextTrackN, "track_", ".vbo", ext,
                                    vboPath, sizeof(vboPath)) > 0;
   if (!named || !(vboFile = SD_MMC.open(vboPath, FILE_WRITE))) {
     Serial.println(F("[ERR] could not open a track log - VBO disabled for this session"));
@@ -691,25 +845,27 @@ static void vboOpen() {
     gmtime_r(&t, &tm);
     strftime(created, sizeof(created), "%d/%m/%Y at %H:%M:%S", &tm);
   }
-  vboFile.printf("File created on %s\r\n\r\n", created);
-  vboFile.print(F("[header]\r\nsatellites\r\ntime\r\nlatitude\r\nlongitude\r\n"
-                  "velocity kmh\r\nheading\r\nheight\r\n"
-                  "Boost Pressure\r\nOil Temperature\r\nCoolant Temperature\r\n"
-                  "Throttle Pedal\r\nEngine Torque Estimate\r\n"
-                  "Lateral G IMU\r\nLongitudinal G IMU\r\nEngine RPM\r\n"
-                  "Ignition Timing\r\nIntake Air Temperature\r\nBrake IMU\r\nLap Number\r\n"
-                  "Tyre Pressure FL\r\nTyre Pressure FR\r\nTyre Pressure RL\r\nTyre Pressure RR\r\n"
-                  "Tyre Temperature FL\r\nTyre Temperature FR\r\n"
-                  "Tyre Temperature RL\r\nTyre Temperature RR\r\nGear\r\n\r\n"
-                  "[channel units]\r\nbar\r\nC\r\nC\r\n%\r\nNm\r\ng\r\ng\r\nrpm\r\n"
-                  // A blank unit line would end the section, so the two
-                  // unitless channels get a word instead.
-                  "deg\r\nC\r\nflag\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n\r\n"
-                  // No brackets in comments: they hang Circuit Tools.
-                  "[comments]\r\ni30 N gauge pod, ESP32-S3 with u-blox M9N\r\n"
-                  "Log Rate (Hz) : 25.00\r\n"
-                  "Torque is estimated from absolute load, not measured\r\n"
-                  "Longitudinal G IMU is positive when accelerating\r\n\r\n"));
+  sinkBegin(vboFile, vboSink);
+  vboLen = 0;
+  vboPutf("File created on %s\r\n\r\n", created);
+  vboPut("[header]\r\nsatellites\r\ntime\r\nlatitude\r\nlongitude\r\n"
+         "velocity kmh\r\nheading\r\nheight\r\n"
+         "Boost Pressure\r\nOil Temperature\r\nCoolant Temperature\r\n"
+         "Throttle Pedal\r\nEngine Torque Estimate\r\n"
+         "Lateral G IMU\r\nLongitudinal G IMU\r\nEngine RPM\r\n"
+         "Ignition Timing\r\nIntake Air Temperature\r\nBrake IMU\r\nLap Number\r\n"
+         "Tyre Pressure FL\r\nTyre Pressure FR\r\nTyre Pressure RL\r\nTyre Pressure RR\r\n"
+         "Tyre Temperature FL\r\nTyre Temperature FR\r\n"
+         "Tyre Temperature RL\r\nTyre Temperature RR\r\nGear\r\n\r\n"
+         "[channel units]\r\nbar\r\nC\r\nC\r\n%\r\nNm\r\ng\r\ng\r\nrpm\r\n"
+         // A blank unit line would end the section, so the two
+         // unitless channels get a word instead.
+         "deg\r\nC\r\nflag\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n\r\n"
+         // No brackets in comments: they hang Circuit Tools.
+         "[comments]\r\ni30 N gauge pod, ESP32-S3 with u-blox M9N\r\n"
+         "Log Rate (Hz) : 25.00\r\n"
+         "Torque is estimated from absolute load, not measured\r\n"
+         "Longitudinal G IMU is positive when accelerating\r\n\r\n");
   // The pod's own start/finish gate, so the analyser splits laps at the same
   // line: TRACK_GATE_HALF_M either side of its centre, across the direction
   // of travel. Longitude first here - the reverse of the data columns.
@@ -721,21 +877,20 @@ static void vboOpen() {
   calc_vbo_minutes(aLatS, sizeof(aLatS), aLat, false);
   calc_vbo_minutes(bLonS, sizeof(bLonS), bLon, true);
   calc_vbo_minutes(bLatS, sizeof(bLatS), bLat, false);
-  vboFile.printf("[laptiming]\r\nStart        %s %s %s %s \xC2\xAC  Start / Finish\r\n\r\n",
-                 aLonS, aLatS, bLonS, bLatS);
-  vboFile.print(F("[column names]\r\nsats time lat long velocity heading height "
-                  "Boost_Pressure Oil_Temperature Coolant_Temperature Throttle_Pedal "
-                  "Engine_Torque_Estimate Lateral_G_IMU Longitudinal_G_IMU Engine_RPM "
-                  "Ignition_Timing Intake_Air_Temperature Brake_IMU Lap_Number "
-                  "Tyre_Pressure_FL Tyre_Pressure_FR Tyre_Pressure_RL Tyre_Pressure_RR "
-                  "Tyre_Temperature_FL Tyre_Temperature_FR "
-                  "Tyre_Temperature_RL Tyre_Temperature_RR Gear\r\n\r\n"
-                  "[data]\r\n"));
-  vboFile.flush();
+  vboPutf("[laptiming]\r\nStart        %s %s %s %s \xC2\xAC  Start / Finish\r\n\r\n",
+          aLonS, aLatS, bLonS, bLatS);
+  vboPut("[column names]\r\nsats time lat long velocity heading height "
+         "Boost_Pressure Oil_Temperature Coolant_Temperature Throttle_Pedal "
+         "Engine_Torque_Estimate Lateral_G_IMU Longitudinal_G_IMU Engine_RPM "
+         "Ignition_Timing Intake_Air_Temperature Brake_IMU Lap_Number "
+         "Tyre_Pressure_FL Tyre_Pressure_FR Tyre_Pressure_RL Tyre_Pressure_RR "
+         "Tyre_Temperature_FL Tyre_Temperature_FR "
+         "Tyre_Temperature_RL Tyre_Temperature_RR Gear\r\n\r\n"
+         "[data]\r\n");
+  vboCommit();
   vboActive = true;
-  vboLen = 0;
   vboLastWriteMs = millis();
-  Serial.printf("[OK] track log %s\n", vboPath);
+  Serial.printf("[OK] track log %s%s\n", vboPath, vboSink.enc ? " (encrypted)" : "");
 }
 
 static void vboTask() {
@@ -874,6 +1029,15 @@ static void loggerTask() {
     lastLevel = settings.logLevel;
     closeAll();
   }
+  // Same for the encryption key: set, changed or removed, the open files
+  // end and the next ones start under the new key.
+  static uint32_t lastKeyGen = settings_log_key_gen;
+  if (settings_log_key_gen != lastKeyGen) {
+    lastKeyGen = settings_log_key_gen;
+    Serial.printf("[..] log encryption %s\n", settings.logKey ? "key set" : "off");
+    closeAll();
+  }
+  entropyStir();
 
   gpxTask();                 // its own cadence, independent of the CSV
   if (cardOk && settings.logLevel >= LOG_TRIPS)
@@ -1028,11 +1192,11 @@ static void loggerTask() {
   if (row.n > sizeof(row.b) - 3) row.n = sizeof(row.b) - 3;
   row.b[row.n++] = '\r';
   row.b[row.n++] = '\n';
-  logFile.write((const uint8_t *)row.b, row.n);
+  csvPut(row.b, row.n);
 
   if (now - lastFlushMs >= LOG_FLUSH_INTERVAL_MS) {
     lastFlushMs = now;
-    logFile.flush();   // bounds data loss when the ignition cuts power
+    csvCommit();   // bounds data loss when the ignition cuts power
   }
 }
 
@@ -1082,17 +1246,21 @@ static void closeAll() {
   vboClose();                    // a session resumes into a new file after sleep
   if (gpxActive) {
     gpxCommit();                 // don't lose the batch still in RAM
-    // Advance past the tail we keep rewinding over, so the closing tags are
-    // the real end of the file, then close.
-    gpxFile.seek(gpxTailPos);
-    gpxFile.print(GPX_TAIL);
+    if (!gpxSink.enc) {
+      // Advance past the tail we keep rewinding over, so the closing tags
+      // are the real end of the file, then close.
+      gpxFile.seek(gpxTailPos);
+      gpxFile.print(GPX_TAIL);
+    }
     gpxFile.flush();
     gpxFile.close();
+    sinkEnd(gpxSink);
     gpxActive = false;
   }
   if (!active) return;
-  logFile.flush();
+  csvCommit();
   logFile.close();
+  sinkEnd(csvSink);
   active = false;
 }
 
@@ -1102,7 +1270,11 @@ void logger_dump_tail(size_t bytes) {
     Serial.printf("[..] no drive log open (card %s)\n", cardOk ? "mounted" : "NOT mounted");
     return;
   }
-  logFile.flush();
+  csvCommit();
+  if (csvSink.enc) {
+    Serial.printf("[..] %s is encrypted - only the phone can read it\n", path);
+    return;
+  }
   File f = SD_MMC.open(path, FILE_READ);
   if (!f) { Serial.printf("[ERR] cannot read %s\n", path); return; }
   const size_t sz = f.size();

@@ -181,6 +181,10 @@ void settings_load() {
   // axis. Reading a new key makes those stale entries fail closed into a
   // fresh auto-zero instead of being trusted.
   settings.gmCal    = prefs.getBool("gmCal3", false);
+  // A 32-byte blob or nothing: anything else stored there is not a key.
+  settings.logKey = prefs.isKey("logPub") &&
+                    prefs.getBytes("logPub", settings.logPub, sizeof(settings.logPub)) == sizeof(settings.logPub);
+  if (!settings.logKey) memset(settings.logPub, 0, sizeof(settings.logPub));
   prefs.end();
   settings_fixup();
 
@@ -218,7 +222,29 @@ void settings_save() {
   prefs.putFloat("gmOffY", settings.gmOffY);
   prefs.putFloat("gmOffZ", settings.gmOffZ);
   prefs.putBool("gmCal3",  settings.gmCal);
+  if (settings.logKey) prefs.putBytes("logPub", settings.logPub, sizeof(settings.logPub));
+  else                 prefs.remove("logPub");
   prefs.end();
+}
+
+volatile uint32_t settings_log_key_gen = 0;
+
+bool settings_set_log_key(const char *hex) {
+  if (!hex) return false;
+  if (strcmp(hex, "off") == 0) {
+    if (!settings.logKey) return true;
+    settings.logKey = false;
+    memset(settings.logPub, 0, sizeof(settings.logPub));
+  } else {
+    uint8_t pub[32];
+    if (!calc_parse_hex(hex, pub, sizeof(pub))) return false;
+    if (settings.logKey && memcmp(pub, settings.logPub, sizeof(pub)) == 0) return true;
+    memcpy(settings.logPub, pub, sizeof(pub));
+    settings.logKey = true;
+  }
+  settings_save();
+  settings_log_key_gen++;
+  return true;
 }
 
 void settings_set_gmeter_zero(float x, float y, float z) {

@@ -9,6 +9,7 @@
 #include "logger.h"         // logger_card_shared(): the card is on the PC
 #include "ota.h"
 #include "calc.h"           // calc_parse_range(), for /dl
+#include "logcrypt.h"       // logcrypt_fingerprint(), for /api/settings
 #include <sys/stat.h>       // stat(), for file sizes without opening them
 #include <WiFi.h>
 #include <WebServer.h>
@@ -91,12 +92,17 @@ static void handleSettingsJson() {
     else if (d.type == SET_F32) n += snprintf(b + n, sizeof(b) - n, "\"%s\":%.2f,", d.json, v);
     else                        n += snprintf(b + n, sizeof(b) - n, "\"%s\":%ld,", d.json, lroundf(v));
   }
-  // ...then the rest.
+  // ...then the rest. logKey is the fingerprint of the public key the logs
+  // are encrypted to, "" when they are not - for the app to check it is
+  // its own key (logcrypt_fingerprint; the key itself is public anyway).
+  char fp[13] = "";
+  if (settings.logKey) logcrypt_fingerprint(fp, settings.logPub);
   if (n < sizeof(b))
     n += snprintf(b + n, sizeof(b) - n,
-                  "\"night\":%s,\"apSsid\":\"%s\",\"tzOffset\":%d,\"tzDst\":%s,\"tz\":\"%s\"}",
+                  "\"night\":%s,\"apSsid\":\"%s\",\"tzOffset\":%d,\"tzDst\":%s,\"tz\":\"%s\","
+                  "\"logKey\":\"%s\"}",
                   brightness_is_night() ? "true" : "false", jsonEscape(settings.apSsid),
-                  (int)settings.tzOffset, settings.tzDst ? "true" : "false", settings.tz);
+                  (int)settings.tzOffset, settings.tzDst ? "true" : "false", settings.tz, fp);
   if (n >= sizeof(b)) { server.send(500, "text/plain", "settings JSON too long"); return; }
   server.send(200, "application/json", b);
 }
@@ -281,9 +287,18 @@ static void handleSave() {
                            server.hasArg("tzDst"));
   }
 
+  // The log encryption key, from the phone app: 64 hex digits, or "off".
+  // Under the SD lock, so the logger never opens a file on a half-copied
+  // key; it closes its files on the change and starts the next ones under it.
+  String msg = "Saved.";
+  if (server.hasArg("logPub")) {
+    LoggerSdLock lock;
+    if (!settings_set_log_key(server.arg("logPub").c_str()))
+      msg = "Settings saved, but the log key was rejected (64 hex digits, or off).";
+  }
+
   // WiFi identity last: changing either restarts the AP and drops this
   // connection, so everything else must already be saved by then.
-  String msg = "Saved.";
   bool apChanged = false;
   if (server.hasArg("apSsid") && server.arg("apSsid").length() > 0) {
     if (settings_set_ap_ssid(server.arg("apSsid").c_str())) apChanged = true;
@@ -335,6 +350,7 @@ static bool safeName(const String &n) {
 }
 
 static const char *mimeFor(const String &n) {
+  if (n.endsWith(LOGCRYPT_SUFFIX)) return "application/octet-stream";   // ciphertext
   if (n.endsWith(".csv")) return "text/csv";
   if (n.endsWith(".gpx")) return "application/gpx+xml";
   return "text/plain";
@@ -794,6 +810,15 @@ static void handleCarPage() {
 }
 
 // Device: the pod's own WiFi, its firmware, and the card.
+static const char *logKeyText() {
+  static char t[80];
+  if (!settings.logKey) return "off - set it up in the phone app.";
+  char fp[13];
+  logcrypt_fingerprint(fp, settings.logPub);
+  snprintf(t, sizeof(t), "<b>on</b>, key %.4s %.4s %.4s", fp, fp + 4, fp + 8);
+  return t;
+}
+
 static void handleDevicePage() {
   sendPage(PAGE_DEVICE, "/device",
     "<form id='f'>"
@@ -828,11 +853,15 @@ static void handleDevicePage() {
     "</fieldset></form>"
     "<p class='sub'><a href='/files'>drive logs &amp; GPX tracks</a> &middot; "
     "<a href='/api/live'>live data JSON</a></p>"
+    // Read-only here: the key is the phone app's, and only it can read the
+    // logs - compare this fingerprint with the one the app shows.
+    "<p class='sub'>Log encryption: %s</p>"
     "<script>%s</script>",
     htmlEscape(settings.apSsid),
     ota_build(), ota_hash(),
     ota_rolled_back() ? " <b>An update was rolled back</b> - this is the previous firmware." : "",
     ipText.c_str(),                  // the hint under the Firmware form
+    logKeyText(),
     SAVE_JS);
 }
 

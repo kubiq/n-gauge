@@ -51,6 +51,12 @@
 // length. The pod's batches are a few KB (the GPX buffer is 12 KB).
 #define LOGCRYPT_MAX_RECORD   (256u * 1024u)
 
+// An encrypted file's name is the plain name plus this: drive_<stamp>.csv.nge,
+// trip_<stamp>.gpx.nge, track_<stamp>.vbo.nge. Readers decide by the name,
+// and decrypting gives back the plain name; nobody opens ciphertext in a
+// spreadsheet thinking the log is corrupt.
+#define LOGCRYPT_SUFFIX       ".nge"
+
 static const uint8_t LOGCRYPT_MAGIC[4] = {'N', 'G', 'E', '1'};
 static const char    LOGCRYPT_INFO[]   = "n-gauge log v1";
 
