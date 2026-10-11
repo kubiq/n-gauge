@@ -19,6 +19,15 @@ drive_*.csv
 trip_*.gpx
 sleeplog.txt
 
+# Everything else dropped into data/ (pictures, scratch files) stays local
+# too - the repo is public. Tracked files are not affected; add a new one
+# with `git add -f`, deliberately.
+data/*
+
+# Pod STL exports: the published parts are tracked; new exports and
+# work-in-progress stay local until added with `git add -f`.
+mechanical/pod/*.stl
+
 # CAD iterations: 43 .blend and 14 .stl at the repo root, ~200 MB of
 # work-in-progress exports. The finished part gets committed deliberately -
 # use `git add -f vent_final.stl` (or whatever you name it) when it's ready.
