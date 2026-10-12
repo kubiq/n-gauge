@@ -1,8 +1,9 @@
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { router, useFocusEffect, useNavigation } from 'expo-router';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
+import { OverflowMenu } from '@/components/overflow-menu';
+import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { saveLogsToFolder, savedText } from '@/lib/share';
@@ -81,14 +82,24 @@ export default function TripsScreen() {
     }
   };
 
+  // ⋮ in the header. "Save all to a folder": decrypted, under plain names -
+  // the way logs reach the PC now that they are encrypted on the card;
+  // already-saved files are skipped. Disabled while a save runs.
+  const navigation = useNavigation();
+  const hasTrips = trips.length > 0;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <OverflowMenu
+          items={hasTrips ? [{ label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving }] : []}
+        />
+      ),
+    });
+  }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <Screen>
+    <Screen tabBar>
       {status ? <Note>{status}</Note> : null}
-      {trips.length ? (
-        // Decrypted, under plain names - the way logs reach the PC now that
-        // they are encrypted on the card. Already-saved files are skipped.
-        <Button title="Save all to a folder" kind="plain" busy={saving} onPress={saveAll} />
-      ) : null}
       {trips.length === 0 ? (
         <Card>
           <Note>No drives on the phone yet. Connect to the pod and pull them on the Sync tab.</Note>

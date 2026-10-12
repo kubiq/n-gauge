@@ -9,11 +9,12 @@ export default function TabsLayout() {
   const connected = usePod().state === 'connected';
   const path = usePathname();
 
-  // Sync and Settings only work on the pod's network, so off it they are
-  // not offered, and a dropped connection (the pod went to sleep, out of
-  // range) on one of them lands back on Pod, where Connect is. Pod and Trips
-  // are always there - Trips needs the opposite: internet, for the map.
-  const podOnly = path === '/sync' || path === '/settings';
+  // Sync only works on the pod's network, so off it, it is not offered, and
+  // a dropped connection (the pod went to sleep, out of range) on it lands
+  // back on Pod, where Connect is. Pod, Trips and Settings are always there:
+  // Trips needs the opposite - internet, for the map - and Settings holds
+  // this phone's settings as well as the pod's.
+  const podOnly = path === '/sync';
   useEffect(() => {
     if (!connected && podOnly) router.navigate('/');
   }, [connected, podOnly]);
@@ -21,7 +22,13 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        // A header on every tab: the title, and a ⋮ menu (OverflowMenu) for
+        // the rarer actions, set by each screen.
+        headerShown: true,
+        headerStyle: { backgroundColor: C.bg },
+        headerTintColor: C.text,
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '600' },
         tabBarActiveTintColor: C.accent,
         tabBarInactiveTintColor: C.dim,
         tabBarStyle: { backgroundColor: C.card, borderTopColor: C.border },
@@ -30,8 +37,8 @@ export default function TabsLayout() {
       }}>
       <Tabs.Screen name="index" options={{ title: 'Pod' }} />
       <Tabs.Screen name="sync" options={{ title: 'Sync', href: connected ? undefined : null }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings', href: connected ? undefined : null }} />
       <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
+      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
     </Tabs>
   );
 }

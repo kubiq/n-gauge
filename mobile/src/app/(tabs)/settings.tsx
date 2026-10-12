@@ -2,6 +2,7 @@ import { File } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { LogKeyCard } from '@/components/log-key-card';
 import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
@@ -90,18 +91,18 @@ export default function SettingsScreen() {
     ]);
   };
 
-  if (!connected) {
-    return (
-      <Screen>
-        <Note>Connect to the pod first (Pod tab).</Note>
-      </Screen>
-    );
-  }
-
   return (
-    <Screen>
-      {err ? <Note tone="bad">{err}</Note> : null}
-      {orig
+    <Screen tabBar>
+      {/* This phone's side, always here: the key is the phone's and is needed
+          off the pod's WiFi too. While connected it also shows the pod's state. */}
+      <LogKeyCard />
+      {!connected ? (
+        <Card title="Pod">
+          <Note>Connect to the pod (Pod tab) to change its settings or update its firmware.</Note>
+        </Card>
+      ) : null}
+      {connected && err ? <Note tone="bad">{err}</Note> : null}
+      {connected && orig
         ? GROUPS.map((g) => (
             <Card key={g} title={g}>
               {SETTINGS.filter((d) => d.group === g).map((d) => (
@@ -116,17 +117,23 @@ export default function SettingsScreen() {
             </Card>
           ))
         : null}
-      {problems.length ? <Note tone="bad">{problems.join('\n')}</Note> : null}
-      <Button
-        title={nChanged ? `Save ${nChanged} change${nChanged === 1 ? '' : 's'}` : 'No changes'}
-        disabled={!nChanged || problems.length > 0}
-        busy={busy === 'save'}
-        onPress={save}
-      />
-      <Card title="Firmware">
-        <Note>Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the pod rolls back by itself.</Note>
-        <Button title="Update firmware" kind="plain" busy={busy === 'fw'} onPress={firmware} />
-      </Card>
+      {connected ? (
+        <>
+          {problems.length ? <Note tone="bad">{problems.join('\n')}</Note> : null}
+          <Button
+            title={nChanged ? `Save ${nChanged} change${nChanged === 1 ? '' : 's'}` : 'No changes'}
+            disabled={!nChanged || problems.length > 0}
+            busy={busy === 'save'}
+            onPress={save}
+          />
+          <Card title="Firmware">
+            <Note>
+              Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the pod rolls back by itself.
+            </Note>
+            <Button title="Update firmware" kind="plain" busy={busy === 'fw'} onPress={firmware} />
+          </Card>
+        </>
+      ) : null}
     </Screen>
   );
 }

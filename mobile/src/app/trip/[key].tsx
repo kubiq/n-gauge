@@ -2,8 +2,9 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { OverflowMenu } from '@/components/overflow-menu';
 import { TrackMap } from '@/components/track-map';
-import { Button, Card, Note, Row, Screen } from '@/components/ui';
+import { Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
@@ -65,7 +66,7 @@ export default function TripScreen() {
 
   if (!t) {
     return (
-      <Screen underHeader>
+      <Screen>
         <Note tone="bad">That drive is no longer on the phone.</Note>
       </Screen>
     );
@@ -75,9 +76,31 @@ export default function TripScreen() {
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
 
   return (
-    <Screen underHeader>
-      <Stack.Screen options={{ title: start ? when(start) : t.key }} />
+    <Screen>
+      <Stack.Screen
+        options={{
+          title: start ? when(start) : t.key,
+          // ⋮: handing the drive on, decrypted (share.ts).
+          headerRight: () => (
+            <OverflowMenu
+              items={[
+                ...(t.gpx ? [{ label: 'Share the track (GPX)', onPress: () => run('gpx', () => shareLog(t.gpx!)) }] : []),
+                ...(t.csv ? [{ label: 'Share the car data (CSV)', onPress: () => run('csv', () => shareLog(t.csv!)) }] : []),
+                {
+                  label: 'Save to a folder',
+                  onPress: () =>
+                    run('save', async () => {
+                      const r = await saveLogsToFolder([t.gpx, t.csv].filter((n): n is string => !!n));
+                      Alert.alert('Saved', savedText(r));
+                    }),
+                },
+              ].map((it) => ({ ...it, disabled: busy !== null }))}
+            />
+          ),
+        }}
+      />
       {!ready ? <Note>Reading the logs…</Note> : null}
+      {busy ? <Note>{busy === 'save' ? 'Saving…' : 'Preparing the file…'}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} /> : null}
 
@@ -107,30 +130,8 @@ export default function TripScreen() {
         {t.gpx ? <Row label="Track" value={t.gpx} tone="dim" /> : null}
         {t.csv ? <Row label="Car data" value={t.csv} tone="dim" /> : null}
         {isEncryptedName(t.gpx ?? t.csv ?? '') ? (
-          <Note>Encrypted on the phone; shared and saved decrypted.</Note>
+          <Note>Encrypted on the phone; shared and saved decrypted (⋮ above).</Note>
         ) : null}
-        {t.gpx ? (
-          <Button title="Share the track (GPX)" kind="plain" busy={busy === 'gpx'} onPress={() => run('gpx', () => shareLog(t.gpx!))} />
-        ) : null}
-        {t.csv ? (
-          <Button
-            title="Share the car data (CSV)"
-            kind="plain"
-            busy={busy === 'csv'}
-            onPress={() => run('csv', () => shareLog(t.csv!))}
-          />
-        ) : null}
-        <Button
-          title="Save to a folder"
-          kind="plain"
-          busy={busy === 'save'}
-          onPress={() =>
-            run('save', async () => {
-              const r = await saveLogsToFolder([t.gpx, t.csv].filter((n): n is string => !!n));
-              Alert.alert('Saved', savedText(r));
-            })
-          }
-        />
       </Card>
     </Screen>
   );

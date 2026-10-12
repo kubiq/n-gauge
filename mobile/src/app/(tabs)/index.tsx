@@ -1,12 +1,12 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useNavigation } from 'expo-router';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { OverflowMenu } from '@/components/overflow-menu';
 import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { getLive, type PodLive, setClock, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
-import { LogKeyCard } from '@/components/log-key-card';
 import { UploadCard } from '@/components/upload-card';
 import { UPLOAD_ENABLED } from '@/features';
 
@@ -49,6 +49,18 @@ export default function PodScreen() {
     else if (r.kind === 'unavailable') router.push('/scan');
   };
 
+  // ⋮ in the header: the rare things. Scanning another pod replaces the
+  // stored one, so it is not a button on the screen any more.
+  const navigation = useNavigation();
+  const hasCreds = !!pod.creds;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <OverflowMenu items={hasCreds ? [{ label: 'Scan a different pod', onPress: scan }] : []} />
+      ),
+    });
+  }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const run = async (what: string, fn: () => Promise<string>) => {
     setBusy(what);
     try {
@@ -61,7 +73,7 @@ export default function PodScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar>
       <Card title="Connection">
         {!pod.ready ? null : pod.creds ? (
           <>
@@ -77,7 +89,6 @@ export default function PodScreen() {
               <Button title="Connect to pod" busy={pod.state === 'connecting'} onPress={pod.connect} />
             )}
             {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
-            <Button title="Scan a different pod" kind="plain" onPress={scan} />
           </>
         ) : (
           <>
@@ -89,8 +100,6 @@ export default function PodScreen() {
           </>
         )}
       </Card>
-
-      <LogKeyCard />
 
       {pod.state === 'connected' ? (
         <>

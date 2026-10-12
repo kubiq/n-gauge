@@ -5,17 +5,18 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { C, S } from '@/theme';
 
 /**
- * `underHeader`: a stack screen with a header (trip, server, scan), which
- * already clears the status bar - and has no tab bar below it, so it keeps
- * clear of Android's navigation buttons itself: the app draws edge to edge.
- * The space is scroll padding, not a margin, so content still scrolls behind
- * the transparent bar but its end stops above it.
+ * Every screen sits under a header, which already clears the status bar.
+ * `tabBar`: a tab screen, whose tab bar clears Android's navigation buttons.
+ * Without one (a drive, the server, the scanner, log encryption) the screen
+ * keeps clear of them itself - the app draws edge to edge. That space is
+ * scroll padding, not a margin, so content still scrolls behind the
+ * transparent bar but its end stops above it.
  */
-export function Screen({ children, underHeader }: { children: ReactNode; underHeader?: boolean }) {
+export function Screen({ children, tabBar }: { children: ReactNode; tabBar?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={styles.screen} edges={underHeader ? [] : ['top']}>
-      <ScrollView contentContainerStyle={[styles.scroll, underHeader && { paddingBottom: S.md + insets.bottom }]}>
+    <SafeAreaView style={styles.screen} edges={[]}>
+      <ScrollView contentContainerStyle={[styles.scroll, !tabBar && { paddingBottom: S.md + insets.bottom }]}>
         {children}
       </ScrollView>
     </SafeAreaView>

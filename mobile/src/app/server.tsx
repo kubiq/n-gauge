@@ -46,7 +46,7 @@ export default function ServerScreen() {
   };
 
   return (
-    <Screen underHeader>
+    <Screen>
       <Card title="Server">
         <Text style={ui.rowLabel}>Address</Text>
         <TextInput

@@ -24,7 +24,7 @@ export default function Scan() {
   if (!perm) return null;
   if (!perm.granted) {
     return (
-      <Screen underHeader>
+      <Screen>
         <Note>The camera reads the QR code on the pod’s WiFi screen. Nothing else is recorded.</Note>
         <Button title="Allow camera" onPress={requestPerm} />
       </Screen>

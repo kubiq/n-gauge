@@ -92,7 +92,7 @@ export default function SyncScreen() {
   };
 
   return (
-    <Screen>
+    <Screen tabBar>
       <Card title="On the phone">
         {UPLOAD_ENABLED ? (
           <>

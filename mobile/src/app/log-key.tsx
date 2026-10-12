@@ -94,7 +94,7 @@ export default function LogKeyScreen() {
   if (key === undefined) return null;
 
   return (
-    <Screen underHeader>
+    <Screen>
       <Card title="This phone’s key">
         {key ? (
           <>
