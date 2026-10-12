@@ -45,10 +45,18 @@ static int32_t onRead(uint32_t lba, uint32_t offset, void *buffer, uint32_t bufs
   return bufsize;
 }
 
+// The drive is READ-ONLY (2026-10-12). Even with nothing copied, the PC
+// writes: the FAT "in use" flag at mount and unmount, access dates of every
+// file a file manager previews. Those writes made unmounting slow ("still
+// writing" on 10-11), never all landed (every mount logged "not properly
+// unmounted"), and an eject mid-way ended in a reset loop: the PC's next
+// read went unanswered and it reset the pod every ~9 s for 5 minutes. Read-
+// only, the PC mounts it ro and writes nothing. Deleting logs is the app's
+// and the /files page's job. USBMSC::begin() insists on a write callback;
+// TinyUSB refuses writes to a write-protected LUN before reaching it.
 static int32_t onWrite(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
-  if (state != USBDISK_SHARED || offset != 0 || bufsize % 512) return -1;
-  if (disk_write(SdmmcDrive::pdrv(), buffer, lba, bufsize / 512) != RES_OK) return -1;
-  return bufsize;
+  (void)lba; (void)offset; (void)buffer; (void)bufsize;
+  return -1;
 }
 
 // "Eject" in a file manager arrives as a stop with load_eject set.
@@ -65,6 +73,7 @@ void usbdisk_init() {
   msc.onRead(onRead);
   msc.onWrite(onWrite);
   msc.onStartStop(onStartStop);
+  msc.isWritable(false);            // see onWrite()
   msc.mediaPresent(false);          // empty until "Share card" is tapped
 }
 
@@ -99,8 +108,8 @@ void usbdisk_task() {
   if (!ejected && usbdisk_host_connected()) return;
   msc.mediaPresent(false);
   state = USBDISK_IDLE;
-  // Remount, not just carry on: the PC may have written to the FAT, and the
-  // firmware's FATFS still holds the old view of it.
+  // Remount, not just carry on: logger_suspend() closed every file. (The PC
+  // cannot have written - the drive is read-only.)
   logger_resume();
   Serial.printf("[OK] SD card back from the PC (%s)\n", ejected ? "ejected" : "cable removed");
 }

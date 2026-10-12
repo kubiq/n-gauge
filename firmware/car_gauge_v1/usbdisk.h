@@ -7,8 +7,9 @@
 // the card is closed, and the PC sees the card. When the PC ejects it (or the
 // cable goes), the card is remounted and logging resumes in a new file.
 //
-// Never two writers: while the PC has the card the firmware does not touch it
-// at all - a FAT written from two sides is a corrupted FAT.
+// The PC gets it READ-ONLY (see onWrite() in usbdisk.cpp for why). The
+// firmware still keeps off the card while it is shared: the PC caches what it
+// read, and a FAT changing underneath that cache reads as garbage.
 // ============================================================================
 #pragma once
 #include <stdbool.h>
