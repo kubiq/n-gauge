@@ -57,8 +57,8 @@ void ui_update_tpms(const bool have[WHEEL_COUNT], const float bar[WHEEL_COUNT],
 // fixes that passed every GPX gate, so a tunnel spike cannot add distance.
 void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
                    float tripKm);
-// Lap timer screen. Takes the state from laps_info(); its SET and STOP buttons
-// call laps_set_line() / laps_stop() directly.
+// Lap timer screen. Takes the state from laps_info(); its START and STOP
+// buttons call laps_start() / laps_stop() directly.
 struct LapInfo;
 void ui_update_track(const LapInfo *info);
 // Light the tail lights of the tyre screen's car. Safe to call every loop.

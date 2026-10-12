@@ -2,10 +2,13 @@
 // laps.h  —  GNSS lap timer: a start/finish gate, crossing detection, and the
 //            lap times it produces.
 //
-// Usage on a track day: stop ON the start/finish line, tap SET, drive. The
-// gate's direction is learned as the car pulls away, lap 1 is timed from that
-// moment, and every forward crossing closes a lap. (Out-lap only after a wake
-// mid-session: then the timer waits for the next crossing.)
+// Usage on a track day: tap START anywhere before going out - the pit, the
+// paddock - and drive. Nothing to tap while driving: the pod finds the
+// start/finish line by itself when the car first closes a loop (loopfind.h),
+// times lap 1 from when the car first passed that point, and from then on
+// every forward crossing closes a lap. The drive out of the pit is never part
+// of a lap. (After a wake mid-session the gate is kept and the timer waits for
+// the next crossing - the out-lap.)
 //
 // Timing comes from the GNSS fixes' own UTC timestamps, with the crossing
 // instant interpolated between the two fixes either side of the line - at
@@ -19,10 +22,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// In this order: the logger's .vbo opens from LAP_OUT_LAP up (a gate exists).
 enum LapState : uint8_t {
-  LAP_IDLE,        // no line set
-  LAP_WAIT_DIR,    // line set; waiting to learn the direction as the car leaves
-  LAP_OUT_LAP,     // direction known; waiting for a crossing (after a wake)
+  LAP_IDLE,        // no session
+  LAP_SEARCH,      // session started; driving until the loop closes and the line is found
+  LAP_OUT_LAP,     // line known; waiting for a crossing (after a wake)
   LAP_TIMING,      // a lap is being timed
 };
 
@@ -32,13 +36,15 @@ struct LapInfo {
   uint32_t lastMs;      // most recent completed lap, 0 = none yet
   uint32_t bestMs;      // best completed lap this session, 0 = none yet
   uint16_t laps;        // completed laps this session
+  float    searchM;     // driven since START while searching (LAP_SEARCH)
+  bool     gaveUp;      // the last search ended without finding a loop
 };
 
 void laps_task();                 // in loop(): consumes each new GNSS fix once
-bool laps_set_line();             // false if there is no usable fix to set it at
+void laps_start();                // START: begin a session, look for the line
 void laps_stop();                 // end the session; clears line and laps
 void laps_info(LapInfo *out);
 // The start/finish gate, for writing it into a track log: its centre and the
 // unit direction of travel across it (x east, y north). False until the line
-// is set AND its direction has been learned.
+// has been found.
 bool laps_gate(int32_t *lat1e7, int32_t *lon1e7, float *dirX, float *dirY);

@@ -896,7 +896,7 @@ static void vboOpen() {
 static void vboTask() {
   LapInfo li;
   laps_info(&li);
-  if (li.state < LAP_OUT_LAP) {         // no session, or the gate not armed yet
+  if (li.state < LAP_OUT_LAP) {         // no session, or the line not found yet
     vboClose();
     if (li.state == LAP_IDLE) vboFailed = false;   // a new session may try again
     return;

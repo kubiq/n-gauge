@@ -142,15 +142,15 @@ static void trkFlash(const char *m) {
   trkMsgUntil = lv_tick_get() + TRACK_CONFIRM_MS;
 }
 
-// SET and STOP on the track screen. The button's identity arrives as the
+// START and STOP on the track screen. The button's identity arrives as the
 // event's user data (TRK_CONFIRM_SET / TRK_CONFIRM_STOP). Only one of the two
 // is visible at a time - see ui_update_track().
 //
-// SET is only shown with no session running, so it acts at once: there is
-// nothing to lose. STOP needs a second tap within TRACK_CONFIRM_MS, because the
-// screen is in the driver's reach and one brushed tap mid-session would
-// otherwise wipe every lap. Moving the line is STOP then SET, deliberately two
-// steps rather than a button that stays live during a session.
+// START is only shown with no session running, so it acts at once: there is
+// nothing to lose. It is tapped parked - the pit, the paddock - and the line
+// is then found while driving (laps.h). STOP needs a second tap within
+// TRACK_CONFIRM_MS, because the screen is in the driver's reach and one
+// brushed tap mid-session would otherwise wipe every lap.
 static void track_btn_cb(lv_event_t *e) {
   if (touch_was_swipe()) return;         // a swipe that started on the button
   power_note_activity();
@@ -160,7 +160,7 @@ static void track_btn_cb(lv_event_t *e) {
 
   if (which == TRK_CONFIRM_SET) {
     trkMsg = NULL;
-    if (!laps_set_line()) trkFlash("no GPS fix - cannot set the line");
+    laps_start();
     return;
   }
 
@@ -637,7 +637,7 @@ void ui_init() {
   lv_obj_set_style_text_color(trkBest, COL_GOOD, 0);
   trkStatus  = make_name(scr[VIEW_TRACK], "", 62);
   // Both in the same centred slot; ui_update_track() shows one at a time.
-  trkSetBtn  = make_button(scr[VIEW_TRACK], "SET",  COL_GOOD, 0, 118, TRK_CONFIRM_SET);
+  trkSetBtn  = make_button(scr[VIEW_TRACK], "START", COL_GOOD, 0, 118, TRK_CONFIRM_SET);
   trkStopBtn = make_button(scr[VIEW_TRACK], "STOP", COL_BAD,  0, 118, TRK_CONFIRM_STOP);
   lv_obj_add_flag(trkStopBtn, LV_OBJ_FLAG_HIDDEN);
 
@@ -1555,8 +1555,8 @@ void ui_update_track(const LapInfo *li) {
     trkConfirm = TRK_CONFIRM_NONE;
   }
 
-  // The flag shows the session: grey none, blue arming / out-lap, green
-  // timing. Only on a state change.
+  // The flag shows the session: grey none, blue finding the line / out-lap,
+  // green timing. Only on a state change.
   static int lastState = -1;
   if ((int)li->state != lastState) {
     lastState = (int)li->state;
@@ -1597,10 +1597,10 @@ void ui_update_track(const LapInfo *li) {
     lv_label_set_text(trkBest, b);
   }
 
-  // SET with no session, STOP with one. Same slot, one visible at a time.
+  // START with no session, STOP with one. Same slot, one visible at a time.
   //
   // Sharing the slot is safe against a double tap: the second tap of a quick
-  // double on SET lands on STOP, which only ARMS its confirm - it cannot end
+  // double on START lands on STOP, which only ARMS its confirm - it cannot end
   // the session that the first tap just started.
   static int lastRunning = -1;
   const int running = (li->state != LAP_IDLE) ? 1 : 0;
@@ -1621,8 +1621,17 @@ void ui_update_track(const LapInfo *li) {
     snprintf(s, sizeof(s), "%s", trkMsg);
   } else {
     switch (li->state) {
-      case LAP_IDLE:     snprintf(s, sizeof(s), "stop on the line, tap SET"); break;
-      case LAP_WAIT_DIR: snprintf(s, sizeof(s), "line set - drive off"); break;
+      case LAP_IDLE:
+        snprintf(s, sizeof(s), li->gaveUp ? "no lap found - tap START again"
+                                          : "tap START, then drive");
+        break;
+      // Whole hundreds of metres: the label changes every 4 s at 90 km/h,
+      // not on every fix.
+      case LAP_SEARCH:
+        if (li->searchM > 0.0f) snprintf(s, sizeof(s), "finding the line - %.1f km",
+                                         (int)(li->searchM / 100.0f) / 10.0f);
+        else                    snprintf(s, sizeof(s), "finding the line - waiting for GPS");
+        break;
       case LAP_OUT_LAP:  snprintf(s, sizeof(s), "out lap - timing starts at the line"); break;
       case LAP_TIMING:   snprintf(s, sizeof(s), "lap %u", (unsigned)li->laps + 1); break;
     }

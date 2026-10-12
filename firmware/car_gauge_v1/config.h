@@ -855,19 +855,11 @@
 #define TRIP_GAP_MIN       30
 
 // ---- Lap timing ------------------------------------------------------------
-// The start/finish gate is set by stopping ON the line and tapping SET. Its
-// direction is unknown at that moment - GNSS course is meaningless at a
-// standstill - so it is taken from where the car goes next: once it is
-// TRACK_ARM_DIST_M from the set point and doing at least TRACK_ARM_KMH, the
-// bearing from the point to the car IS the direction of travel.
-// Lap 1 is timed from the moment the car pulls away - the last fix slower
-// than TRACK_DEPART_KMH after SET - so the first loop counts (2026-10-09);
-// there is no out-lap. Only after a wake mid-session does the timer wait
-// for the next crossing, the path since the last fix being unknown.
-#define TRACK_ARM_DIST_M       20.0f
-#define TRACK_ARM_KMH          15.0f
-#define TRACK_DEPART_KMH       5.0f
-// How far either side of the set point a crossing still counts. Wide enough
+// The start/finish gate is found by loop closure after START (loopfind.h has
+// its own tuning). Only after a wake mid-session does the timer wait for the
+// next crossing, the path since the last fix being unknown.
+//
+// How far either side of the gate's centre a crossing still counts. Wide enough
 // for any line across a racetrack's start/finish straight, narrow enough that
 // another part of the circuit crossing the line's extension does not.
 #define TRACK_GATE_HALF_M      25.0f
