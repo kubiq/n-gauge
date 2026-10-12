@@ -1,5 +1,7 @@
 # N Gauge
 
+<img src="docs/photos/pod-on.jpg" alt="The pod on the dash, showing oil and coolant on a cold engine" width="100%">
+
 A round AMOLED gauge that lives in the driver-side air vent of a **Hyundai
 i30 N**, reading the car live over the OBD-II port: **oil temperature** - the
 number the car's own dashboard hides behind a menu - plus coolant, boost, tyre
@@ -9,6 +11,14 @@ card, and a phone app pulls the logs off it and shows each drive on a map.
 Everything here was built for one car and is in daily use in it. It is a
 hobby project, published in case the findings, the code or the approach help
 someone with the same car or the same board.
+
+<p>
+<img src="docs/photos/driver-view.jpg" alt="The driver's view: the pod above the left vent, beside the cluster" width="49%">
+<img src="docs/photos/pod-off.jpg" alt="The pod switched off - a printed housing on the vent" width="49%">
+</p>
+
+*From the driver's seat, beside the car's own cluster; and switched off - the
+3D-printed housing replaces the left air vent's surround.*
 
 <p>
 <img src="mobile/docs/screenshots/03-trips.png" width="200">
