@@ -60,6 +60,20 @@ export type PodLive = {
   rtc: { present: boolean; valid: boolean; seeded: boolean; driftSec: number };
   /** The running build - firmware from 2026-10-13 on; older answers lack it. */
   fw?: { build: string; hash: string };
+  /** The gauge's own resources (bytes; SD in KB). Firmware from 2026-10-13 on. */
+  sys?: {
+    heap: number;
+    heapMin: number;
+    heapTotal: number;
+    psram: number;
+    psramTotal: number;
+    sdUsedKb: number;
+    sdTotalKb: number;
+    app: number;
+    appMax: number;
+    tempC: number;
+    reset: string;
+  };
   uptimeMs: number;
 };
 

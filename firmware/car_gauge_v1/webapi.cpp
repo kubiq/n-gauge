@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include "esp_heap_caps.h"
+#include "esp_ota_ops.h"    // the running partition's size, for /api/live
+#include "esp_system.h"     // esp_reset_reason()
 #include "esp_task_wdt.h"   // fed during long downloads; see handleDownload
 #include <math.h>
 #include "FS.h"
@@ -108,6 +110,42 @@ static void handleSettingsJson() {
   server.send(200, "application/json", b);
 }
 
+// ---- the gauge's own resources, for the app's System card --------------------
+
+// Why the gauge last started, in a word.
+static const char *resetText() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "power on";
+    case ESP_RST_DEEPSLEEP: return "wake";
+    case ESP_RST_SW:        return "restart";      // OTA, settings, deliberate
+    case ESP_RST_PANIC:     return "crash";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:       return "watchdog";
+    case ESP_RST_BROWNOUT:  return "supply dip";
+    default:                return "other";
+  }
+}
+
+// SD space in KB, cached: usedBytes() can walk the whole FAT when the
+// free-cluster hint is stale, so not on every 2 s poll - once a minute at
+// most, and under the logger's lock. 0/0 with no card, or while the PC has it.
+static void sdSpaceKb(uint32_t *usedKb, uint32_t *totalKb) {
+  static uint32_t used = 0, total = 0, atMs = 0;
+  static bool have = false;
+  if (!logger_card_ok() || logger_card_shared()) { *usedKb = *totalKb = 0; return; }
+  if (!have || millis() - atMs >= 60000) {
+    LoggerSdLock lock;
+    total = (uint32_t)(SD_MMC.totalBytes() / 1024);
+    used  = (uint32_t)(SD_MMC.usedBytes() / 1024);
+    esp_task_wdt_reset();
+    atMs = millis();
+    have = true;
+  }
+  *usedKb = used;
+  *totalKb = total;
+}
+
 static void handleLiveJson() {
   char utc[24] = "not set", local[24] = "not set";
   // clock_valid(), not gps.timeSet: the clock can equally have come from the
@@ -120,8 +158,12 @@ static void handleLiveJson() {
     localtime_r(&now, &tm);            // honours settings.tz via tzset()
     strftime(local, sizeof(local), "%Y-%m-%d %H:%M:%S", &tm);
   }
+  uint32_t sdUsed, sdTotal;
+  sdSpaceKb(&sdUsed, &sdTotal);
+  const esp_partition_t *app = esp_ota_get_running_partition();
+  const uint32_t appMax = app ? app->size : 0;
   char b[1300];
-  snprintf(b, sizeof(b),
+  const int len = snprintf(b, sizeof(b),
            "{\"can\":{\"linkUp\":%s,\"haveOil\":%s,\"oilTempC\":%d,"
            "\"haveCoolant\":%s,\"coolantC\":%d,\"haveBoost\":%s,\"boostBar\":%.2f},"
            // Bus health. These counters are the whole reason this endpoint is
@@ -146,6 +188,12 @@ static void handleLiveJson() {
            // Which build is running, for the app's Settings: the build time
            // and the first bytes of the image's ELF hash (as the Device page).
            "\"fw\":{\"build\":\"%s\",\"hash\":\"%s\"},"
+           // Resources: internal RAM now and at its lowest since boot (WiFi
+           // fails without it), PSRAM, SD in KB, the firmware against its
+           // partition, the chip's temperature, why it last started.
+           "\"sys\":{\"heap\":%u,\"heapMin\":%u,\"heapTotal\":%u,\"psram\":%u,\"psramTotal\":%u,"
+           "\"sdUsedKb\":%lu,\"sdTotalKb\":%lu,\"app\":%lu,\"appMax\":%lu,"
+           "\"tempC\":%.1f,\"reset\":\"%s\"},"
            "\"uptimeMs\":%lu}",
            obd.linkUp ? "true" : "false",
            // Fresh, not "arrived once" - same answer the screen gives.
@@ -164,7 +212,16 @@ static void handleLiveJson() {
            rtc.present ? "true" : "false", rtc.timeValid ? "true" : "false",
            rtc.seeded ? "true" : "false", rtc.driftSec,
            ota_build(), ota_hash(),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+           (unsigned)heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
+           (unsigned long)sdUsed, (unsigned long)sdTotal,
+           (unsigned long)ESP.getSketchSize(), (unsigned long)appMax,
+           temperatureRead(), resetText(),
            (unsigned long)millis());
+  if (len < 0 || len >= (int)sizeof(b)) { server.send(500, "text/plain", "live JSON too long"); return; }
   server.send(200, "application/json", b);
 }
 

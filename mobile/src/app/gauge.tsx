@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { OverflowMenu } from '@/components/overflow-menu';
+import { SystemCard } from '@/components/system-card';
 import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { UploadCard } from '@/components/upload-card';
 import { UPLOAD_ENABLED } from '@/features';
@@ -160,6 +161,7 @@ export default function GaugeScreen() {
             {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
             {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
           </Card>
+          {live?.sys ? <SystemCard sys={live.sys} uptimeMs={live.uptimeMs} /> : null}
           <Card title="Actions">
             <Button
               title="Set the gauge’s clock from this phone"
@@ -216,7 +218,6 @@ function LiveRows({ l }: { l: PodLive }) {
         tone={yes(l.gps.linkUp && l.gps.haveFix)}
       />
       <Row label="Clock" value={l.clock.valid ? l.clock.local : 'not set'} tone={yes(l.clock.valid)} />
-      <Row label="Up" value={`${Math.round(l.uptimeMs / 60000)} min`} tone="dim" />
     </>
   );
 }
