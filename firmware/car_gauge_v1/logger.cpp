@@ -666,16 +666,16 @@ void logger_suspend() {
   sharedWithPc = true;
 }
 
-// The card is back: remount from scratch, since the PC may have changed the
-// FAT under FATFS's cached view. Logging resumes in a new file on its own.
+// The card is back. No remount: the PC had it read-only (usbdisk.cpp), so
+// FATFS's cached view still holds - and unmounting while a last read from the
+// PC might still be in disk_read() is a race not worth having. Logging
+// resumes in a new file on its own.
 void logger_resume() {
   LoggerSdLock lock;
   sharedWithPc = false;
-  SD_MMC.end();
-  SD_MMC.setPins(SD_CLK, SD_CMD, SD_D0);
-  cardOk = SD_MMC.begin("/sdcard", /*1-bit*/true);
+  cardOk = true;
   gpxOpenFailed = false;
-  Serial.println(cardOk ? F("[OK] SD card remounted") : F("[ERR] SD card did not remount"));
+  Serial.println(F("[OK] SD card back"));
 }
 
 bool logger_card_shared() { return sharedWithPc; }
