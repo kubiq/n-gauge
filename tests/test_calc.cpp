@@ -468,6 +468,28 @@ static void view_order_never_overflows() {
   CHECK(strchr(out, '6') != nullptr);   // WiFi kept even when cut short
 }
 
+// ---- the card listing's order (/files) ------------------------------------------
+
+static void card_order_is_newest_first_and_grouped() {
+  const char *names[] = {
+    "sleeplog.txt", "drive_0279_aaaaaa.csv", "trip_2026-10-11_15-03_47036a.gpx",
+    "drive_2026-10-12_21-21_2df269.csv.nge", "firmware.bin", "trip_2026-10-12_21-19_2df269.gpx.nge",
+    "track_2026-10-11_15-20_a5d04b.vbo", "drive_2026-10-11_15-03_47036a.csv",
+  };
+  const int n = sizeof(names) / sizeof(names[0]);
+  qsort(names, n, sizeof(names[0]),
+        [](const void *x, const void *y) {
+          return calc_card_order(*(const char *const *)x, *(const char *const *)y);
+        });
+  const char *expect[] = {
+    "drive_2026-10-12_21-21_2df269.csv.nge", "trip_2026-10-12_21-19_2df269.gpx.nge",
+    "track_2026-10-11_15-20_a5d04b.vbo", "trip_2026-10-11_15-03_47036a.gpx",
+    "drive_2026-10-11_15-03_47036a.csv", "drive_0279_aaaaaa.csv",
+    "firmware.bin", "sleeplog.txt",
+  };
+  for (int i = 0; i < n; i++) CHECK(strcmp(names[i], expect[i]) == 0);
+}
+
 // ---- drive detection (drops the WiFi AP while driving) -----------------------
 
 // Feed a constant input for `ms`, in 100 ms steps, as the loop would.
@@ -701,6 +723,7 @@ int main() {
   TEST(gmeter_degenerate_calibration_falls_back);
   TEST(gmeter_screen_axis_straight_down_does_not_divide_by_zero);
   TEST(gmeter_shipped_mapping_is_the_bench_verified_one);
+  TEST(card_order_is_newest_first_and_grouped);
   TEST(view_order_keeps_a_good_order);
   TEST(view_order_hides_left_out_screens);
   TEST(view_order_always_has_wifi);

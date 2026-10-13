@@ -378,29 +378,49 @@ static const char *mimeFor(const String &n) {
 // (getNextFileName, no open); only the page's files are then looked at for
 // their size. Directory order is creation order on this flat FAT root, so
 // the end of it is the newest. Caller holds the SD lock.
+// Every name on the card, sorted newest first (calc_card_order), then the
+// page's slice. Sorted, not taken in directory order: FAT reuses freed
+// slots, so after deletions the newest log sat mid-list. The names go into
+// one PSRAM table for the sort - a card of logs can be thousands of names,
+// and internal RAM is what WiFi runs on.
+static constexpr size_t CARD_NAME_MAX = 48;   // safeName() admits up to 40
+
+static int byCardOrder(const void *a, const void *b) {
+  return calc_card_order((const char *)a, (const char *)b);
+}
+
 static int listCardPage(int page, int perPage, String *names, int *nShown) {
-  int nFiles = 0;
   *nShown = 0;
+  int nFiles = 0;
+  char *table = nullptr;
   for (int pass = 0; pass < 2; pass++) {
     File root = SD_MMC.open("/");
     if (!root) break;
-    // Pass 0 counts; pass 1 keeps the slice [first, first + perPage).
-    const int first = nFiles - (page + 1) * perPage;
     int i = 0;
     bool isDir = false;
     for (String n = root.getNextFileName(&isDir); n.length(); n = root.getNextFileName(&isDir)) {
       if (isDir) continue;
-      if (pass == 1 && i >= first && i < first + perPage)
-        names[(*nShown)++] = n.startsWith("/") ? n.substring(1) : n;
+      // Pass 0 counts; pass 1 fills the table (as many as were counted).
+      if (pass == 1 && i < nFiles)
+        strlcpy(table + i * CARD_NAME_MAX, n.c_str() + (n[0] == '/'), CARD_NAME_MAX);
       i++;
       if ((i & 31) == 0) esp_task_wdt_reset();   // bounded by the file count
     }
     root.close();
-    nFiles = i;
+    if (pass == 0) {
+      nFiles = i;
+      if (nFiles == 0) return 0;
+      table = (char *)heap_caps_malloc(nFiles * CARD_NAME_MAX, MALLOC_CAP_SPIRAM);
+      if (!table) return 0;
+    } else if (i < nFiles) {
+      nFiles = i;                            // a file went between the passes
+    }
   }
-  for (int a = 0, b = *nShown - 1; a < b; a++, b--) {   // newest first
-    String t = names[a]; names[a] = names[b]; names[b] = t;
-  }
+  if (!table) return 0;
+  qsort(table, nFiles, CARD_NAME_MAX, byCardOrder);
+  for (int i = page * perPage; i < nFiles && *nShown < perPage; i++)
+    names[(*nShown)++] = table + i * CARD_NAME_MAX;
+  heap_caps_free(table);
   return nFiles;
 }
 

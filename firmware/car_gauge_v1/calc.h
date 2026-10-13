@@ -474,3 +474,28 @@ static inline void calc_view_order(const char *in, const char *valid, char requi
   if (!haveRequired) out[o++] = required;
   out[o] = '\0';
 }
+
+// The card listing's order, newest first (the /files page): a log by what
+// follows its type - "drive_2026-10-12_21-21_2df269.csv" by
+// "2026-10-12_21-21_2df269.csv" - so a drive's CSV, GPX and VBO sit together
+// and the latest drive is on top; numbered (undated) logs come after the
+// dated ones; anything else (sleeplog.txt, firmware.bin) last, by name.
+// FAT directory order is not age order: a new file takes a freed slot.
+// qsort-style: < 0 when a lists before b.
+static inline int calc_card_order(const char *a, const char *b) {
+  static const char *const kinds[] = { "drive_", "trip_", "track_" };
+  const char *ka = nullptr, *kb = nullptr;
+  for (const char *k : kinds) {
+    const size_t n = strlen(k);
+    if (!ka && strncmp(a, k, n) == 0) ka = a + n;
+    if (!kb && strncmp(b, k, n) == 0) kb = b + n;
+  }
+  // Descending: the newer first. A session's files differ only in the
+  // extension, so they stay together (.vbo, .gpx, .csv).
+  if (ka && kb) {
+    const int c = strcmp(kb, ka);
+    return c ? c : strcmp(a, b);
+  }
+  if (ka || kb) return ka ? -1 : 1;             // logs before everything else
+  return strcmp(a, b);
+}
