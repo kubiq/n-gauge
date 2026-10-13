@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { LogKeyCard } from '@/components/log-key-card';
+import { LogsFolderCard } from '@/components/logs-folder-card';
 import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
@@ -105,6 +106,7 @@ export default function SettingsScreen() {
       {/* This phone's side, always here: the key is the phone's and is needed
           off the gauge's WiFi too. While connected it also shows the gauge's state. */}
       <LogKeyCard />
+      <LogsFolderCard />
       {!connected ? (
         <Card title="Gauge">
           <Note>Connect to the gauge (tap it at the top) to change its settings or update its firmware.</Note>

@@ -47,6 +47,20 @@ export function saveLastSync(t: number): void {
   lastSyncFile.write(String(t));
 }
 
+// Where "Save to a folder" writes: the URI Android's folder picker returned.
+// The picker took a persistable permission on it, so it stays usable across
+// restarts - until the folder is deleted or the permission revoked.
+const logsFolderFile = new File(Paths.document, 'logs-folder.txt');
+
+export function loadLogsFolder(): string | null {
+  return logsFolderFile.exists ? logsFolderFile.textSync() || null : null;
+}
+
+export function saveLogsFolder(uri: string | null): void {
+  if (uri) logsFolderFile.write(uri);
+  else if (logsFolderFile.exists) logsFolderFile.delete();
+}
+
 function ensureDir() {
   if (!inboxDir.exists) inboxDir.create({ intermediates: true });
 }
