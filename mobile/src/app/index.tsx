@@ -2,6 +2,7 @@ import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Screen, styles as ui } from '@/components/ui';
@@ -9,7 +10,7 @@ import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
-import { type CsvSummary, isGpxName, type TripFiles } from '@/lib/trips';
+import { type CsvSummary, isEncryptedName, isGpxName, type TripFiles } from '@/lib/trips';
 import { C, S } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
@@ -140,12 +141,16 @@ function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSumm
   const start = g?.start ?? t.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
   const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
+  const encrypted = [t.gpx, t.csv].some((n) => n && isEncryptedName(n));
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
       style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
       <View style={styles.head}>
-        <Text style={styles.title}>{start ? when(start) : t.key}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{start ? when(start) : t.key}</Text>
+          {encrypted ? <LockIcon bad={!!problem} /> : null}
+        </View>
         {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
       </View>
       <View style={styles.facts}>
@@ -171,7 +176,8 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
   title: { color: C.text, fontSize: 16, fontWeight: '600' },
   big: { color: C.accent, fontSize: 18, fontWeight: '700' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
