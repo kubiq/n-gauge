@@ -83,10 +83,14 @@ export default function GaugeScreen() {
     });
   }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The gauge's answer under the buttons - a quiet line, not an alert to tap
+  // away. Errors still alert.
+  const [done, setDone] = useState<string | null>(null);
   const run = async (what: string, fn: () => Promise<string>) => {
     setBusy(what);
+    setDone(null);
     try {
-      Alert.alert(what, await fn());
+      setDone(`${what}: ${await fn()}`);
     } catch (e) {
       Alert.alert(what, String((e as Error).message));
     } finally {
@@ -130,7 +134,7 @@ export default function GaugeScreen() {
           <>
             <Row label="On the gauge" value={`${sync.podFiles.length} files`} />
             <Row
-              label="New or grown"
+              label="To download"
               value={sync.plan.length ? `${sync.plan.length} files, ${mb(pullBytes(sync.plan))}` : 'up to date'}
               tone={sync.plan.length ? undefined : 'good'}
             />
@@ -161,7 +165,7 @@ export default function GaugeScreen() {
             {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
             {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
           </Card>
-          {live?.sys ? <SystemCard sys={live.sys} uptimeMs={live.uptimeMs} /> : null}
+          {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
           <Card title="Actions">
             <Button
               title="Set the gauge’s clock from this phone"
@@ -180,6 +184,7 @@ export default function GaugeScreen() {
                 ])
               }
             />
+            {done ? <Note tone="good">{done}</Note> : null}
           </Card>
         </>
       ) : UPLOAD_ENABLED && pod.state === 'idle' ? (
@@ -198,11 +203,12 @@ function carTalking(l: PodLive): boolean {
 }
 
 function canText(l: PodLive): string {
-  if (!l.can.linkUp) return 'CAN driver failed';
-  if (l.iso.busOff) return 'bus off';
-  return carTalking(l) ? 'answering' : 'no answer';
+  if (!l.can.linkUp) return 'not connected';
+  if (l.iso.busOff) return 'bus error';
+  return carTalking(l) ? 'answering' : 'not answering';
 }
 
+// In a driver's words; the request counters are in the System card.
 function LiveRows({ l }: { l: PodLive }) {
   const yes = (b: boolean): 'good' | 'bad' => (b ? 'good' : 'bad');
   return (
@@ -211,10 +217,9 @@ function LiveRows({ l }: { l: PodLive }) {
       <Row label="Oil" value={l.can.haveOil ? `${l.can.oilTempC} °C` : '—'} />
       <Row label="Coolant" value={l.can.haveCoolant ? `${l.can.coolantC} °C` : '—'} />
       <Row label="Boost" value={l.can.haveBoost ? `${l.can.boostBar.toFixed(2)} bar` : '—'} />
-      <Row label="ISO-TP ok / aborts" value={`${l.iso.ok} / ${l.iso.aborts}`} tone={l.iso.aborts ? 'bad' : undefined} />
       <Row
         label="GPS"
-        value={!l.gps.linkUp ? 'no module' : l.gps.haveFix ? `fix, ${l.gps.sats} sats, hdop ${l.gps.hdop}` : `no fix, ${l.gps.sats} sats`}
+        value={!l.gps.linkUp ? 'no module' : l.gps.haveFix ? `fix, ${l.gps.sats} satellites` : `no fix yet (${l.gps.sats} satellites)`}
         tone={yes(l.gps.linkUp && l.gps.haveFix)}
       />
       <Row label="Clock" value={l.clock.valid ? l.clock.local : 'not set'} tone={yes(l.clock.valid)} />

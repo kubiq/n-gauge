@@ -10,7 +10,7 @@ import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
-import { type CsvSummary, isEncryptedName, isGpxName, type TripFiles } from '@/lib/trips';
+import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
 import { C, S } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
@@ -60,12 +60,13 @@ export default function TripsScreen() {
         if (todo.length) again.current = true;
         return;
       }
-      setStatus(todo.length ? null : `${Object.keys(have).length} files, all from the cache`);
+      setStatus(null);
       if (!todo.length) return;
       working.current = true;
       (async () => {
         for (const [i, name] of todo.entries()) {
-          setStatus(`Reading ${i + 1} of ${todo.length} (${Object.keys(have).length} cached): ${name}`);
+          // Only while there is something to wait for; nothing once done.
+          setStatus(`Reading new drives… ${i + 1} of ${todo.length}`);
           try {
             await summarise(name);
             const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
@@ -75,7 +76,7 @@ export default function TripsScreen() {
             setProblems((prev) => ({ ...prev, [name]: msg }));
           }
         }
-        setStatus(`Read ${todo.length} new, ${Object.keys(have).length} from the cache`);
+        setStatus(null);
         working.current = false;
         if (again.current) {
           again.current = false;
@@ -115,6 +116,17 @@ export default function TripsScreen() {
     });
   }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Rows with their summaries; restart fragments and blips hidden (isStub),
+  // with a line saying how many - nothing just disappears.
+  const rows = trips.map((t) => ({
+    t,
+    g: t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined,
+    c: t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined,
+    problem: (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined,
+  }));
+  const shown = rows.filter((r) => r.problem || !isStub(r.g, r.c));
+  const hidden = rows.length - shown.length;
+
   return (
     <Screen>
       {status ? <Note>{status}</Note> : null}
@@ -123,16 +135,13 @@ export default function TripsScreen() {
           <Note>No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.</Note>
         </Card>
       ) : (
-        trips.map((t) => (
-          <TripRow
-            key={t.key}
-            t={t}
-            g={t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined}
-            c={t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined}
-            problem={(t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined}
-          />
-        ))
+        shown.map((r) => <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} />)
       )}
+      {hidden ? (
+        <Note>
+          {hidden} very short {hidden === 1 ? 'drive' : 'drives'} (under 200 m) not listed.
+        </Note>
+      ) : null}
     </Screen>
   );
 }

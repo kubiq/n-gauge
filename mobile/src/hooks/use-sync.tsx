@@ -72,11 +72,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const listAndPlan = async (): Promise<{ files: PodFile[]; plan: Pull[] }> => {
     setPhase('checking');
-    const t0 = Date.now();
+    setStatus(null);
     const files = await listFiles();
     const p = planPull(files, knownBytes(loadInbox()));
-    // Shown because listing holds the pod's main loop - worth knowing as the card fills.
-    setStatus(`Listed in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
     setPodFiles(files);
     setPlan(p);
     return { files, plan: p };

@@ -2,7 +2,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-import { OverflowMenu } from '@/components/overflow-menu';
+import { HeaderActions } from '@/components/pod-chip';
 import { TrackMap } from '@/components/track-map';
 import { Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
@@ -80,9 +80,10 @@ export default function TripScreen() {
       <Stack.Screen
         options={{
           title: start ? when(start) : t.key,
-          // ⋮: handing the drive on, decrypted (share.ts).
+          // The gauge, and ⋮: handing the drive on, decrypted (share.ts).
           headerRight: () => (
-            <OverflowMenu
+            <HeaderActions
+              compact
               items={[
                 ...(t.gpx ? [{ label: 'Share the track (GPX)', onPress: () => run('gpx', () => shareLog(t.gpx!)) }] : []),
                 ...(t.csv ? [{ label: 'Share the car data (CSV)', onPress: () => run('csv', () => shareLog(t.csv!)) }] : []),
@@ -109,7 +110,7 @@ export default function TripScreen() {
           <Row label="Distance" value={km(g.distanceM)} />
           {secs !== null ? <Row label="Time" value={duration(secs)} /> : null}
           <Row label="Moving" value={duration(g.movingS)} />
-          <Row label="Top speed" value={`${Math.round(g.maxKmh)} km/h`} />
+          <Row label="Top speed (GPS)" value={`${Math.round(g.maxKmh)} km/h`} />
           {g.movingS > 0 ? <Row label="Average moving" value={`${Math.round((g.distanceM / g.movingS) * 3.6)} km/h`} /> : null}
         </Card>
       ) : null}
@@ -122,17 +123,18 @@ export default function TripScreen() {
           {c.lastOilC != null ? <Row label="Oil at the end" value={`${Math.round(c.lastOilC)} °C`} /> : null}
           {c.maxCoolantC != null ? <Row label="Peak coolant" value={`${Math.round(c.maxCoolantC)} °C`} /> : null}
           {c.maxRpm != null ? <Row label="Peak rpm" value={String(Math.round(c.maxRpm))} /> : null}
-          {c.maxObdKmh != null ? <Row label="Top speed (car)" value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
+          {/* The car's own figure reads a little different from GPS - both are shown, each named. */}
+          {c.maxObdKmh != null ? <Row label="Top speed (speedometer)" value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
         </Card>
       ) : null}
 
-      <Card title="Files">
-        {t.gpx ? <Row label="Track" value={t.gpx} tone="dim" /> : null}
-        {t.csv ? <Row label="Car data" value={t.csv} tone="dim" /> : null}
-        {isEncryptedName(t.gpx ?? t.csv ?? '') ? (
-          <Note>Encrypted on the phone; shared and saved decrypted (⋮ above).</Note>
-        ) : null}
-      </Card>
+      {/* One plain line instead of file names: what a driver needs is that the
+          logs are protected and how to get them out. */}
+      <Note>
+        {isEncryptedName(t.gpx ?? t.csv ?? '')
+          ? 'Encrypted by the gauge. ⋮ shares or saves it decrypted.'
+          : '⋮ shares the track or the car data, or saves both to a folder.'}
+      </Note>
     </Screen>
   );
 }

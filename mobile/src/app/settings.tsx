@@ -55,18 +55,27 @@ export default function SettingsScreen() {
     }
     if (orig && v !== orig[d.json]) changes[d.json] = v;
   }
-  const nChanged = Object.keys(changes).length;
+  // The screen order, edited in its card and saved with everything else.
+  const [views, setViews] = useState<string | null>(null);
+  const viewsChanged = views !== null && !!orig?.views && views !== orig.views;
+  const nChanged = Object.keys(changes).length + (viewsChanged ? 1 : 0);
+
+  // The gauge's answer to the last save, shown under the button: a quiet
+  // line for "Saved.", not an alert to tap away. Errors still alert.
+  const [saved, setSaved] = useState<string | null>(null);
 
   // The pod serves one request at a time, and a download holds it for up to
   // two minutes: a running sync is stopped first, and picked up again after.
   const sync = useSync();
 
-  // `what` names the button that shows busy; `body` is the /save form.
-  const save = async (what: string, body: string) => {
-    setBusy(what);
+  const save = async () => {
+    setBusy('save');
+    setSaved(null);
     try {
       await sync.cancel();
-      Alert.alert('Settings', await saveSettings(body));
+      const body = [saveForm(changes), viewsChanged ? `views=${views}` : ''].filter(Boolean).join('&');
+      setSaved(await saveSettings(body));
+      setViews(null);
       await load();
     } catch (e) {
       Alert.alert('Settings', String((e as Error).message));
@@ -133,23 +142,19 @@ export default function SettingsScreen() {
         : null}
       {connected ? (
         <>
+          {orig?.views ? (
+            // Keyed by the gauge's value, so a reload after saving - or another
+            // gauge - starts the card afresh.
+            <ScreenOrderCard key={orig.views} views={orig.views} onChange={setViews} />
+          ) : null}
           {problems.length ? <Note tone="bad">{problems.join('\n')}</Note> : null}
           <Button
             title={nChanged ? `Save ${nChanged} change${nChanged === 1 ? '' : 's'}` : 'No changes'}
             disabled={!nChanged || problems.length > 0}
             busy={busy === 'save'}
-            onPress={() => save('save', saveForm(changes))}
+            onPress={save}
           />
-          {orig?.views ? (
-            // Keyed by the gauge's value, so a reload after saving - or another
-            // gauge - starts the card afresh.
-            <ScreenOrderCard
-              key={orig.views}
-              views={orig.views}
-              busy={busy === 'views'}
-              onSave={(v) => save('views', `views=${v}`)}
-            />
-          ) : null}
+          {saved && !nChanged ? <Note tone={saved.startsWith('Saved') ? 'good' : 'bad'}>{saved}</Note> : null}
           <Card title="Firmware">
             <Note>
               Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.

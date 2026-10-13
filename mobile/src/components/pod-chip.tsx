@@ -25,7 +25,9 @@ function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>
   return { title: 'Connected', detail: synced, ring: C.good, busy: false };
 }
 
-export function PodChip() {
+// `compact`: the ring alone, for a header whose title needs the room (a
+// drive's date); the words stay in the accessibility label.
+export function PodChip({ compact = false }: { compact?: boolean }) {
   const pod = usePod();
   const { title, detail, ring, busy, bad } = status(pod, useSync());
 
@@ -46,25 +48,27 @@ export function PodChip() {
       <View style={styles.face}>
         {busy ? <ActivityIndicator size="small" color={C.accent} /> : <View style={[styles.ring, { borderColor: ring }]} />}
       </View>
-      <View>
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {detail ? (
-          <Text style={[styles.detail, bad && { color: C.bad }]} numberOfLines={1}>
-            {detail}
+      {compact ? null : (
+        <View>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
           </Text>
-        ) : null}
-      </View>
+          {detail ? (
+            <Text style={[styles.detail, bad && { color: C.bad }]} numberOfLines={1}>
+              {detail}
+            </Text>
+          ) : null}
+        </View>
+      )}
     </Pressable>
   );
 }
 
 /** A header's right side: the gauge, then the ⋮ menu if there is one. */
-export function HeaderActions({ items = [] }: { items?: MenuItem[] }) {
+export function HeaderActions({ items = [], compact = false }: { items?: MenuItem[]; compact?: boolean }) {
   return (
     <View style={styles.actions}>
-      <PodChip />
+      <PodChip compact={compact} />
       <OverflowMenu items={items} />
     </View>
   );

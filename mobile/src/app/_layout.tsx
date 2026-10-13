@@ -27,7 +27,9 @@ export default function RootLayout() {
             <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the gauge’s QR' }} />
             <Stack.Screen name="server" options={{ presentation: 'modal', title: 'Upload server' }} />
             <Stack.Screen name="trip/[key]" options={{ title: 'Drive' }} />
-            <Stack.Screen name="log-key" options={{ title: 'Log encryption' }} />
+            {/* The gauge in the header wherever a screen may ask to connect;
+                not on the Gauge screen itself, nor on the modals. */}
+            <Stack.Screen name="log-key" options={{ title: 'Log encryption', headerRight: () => <HeaderActions compact /> }} />
           </Stack>
         </SyncProvider>
       </PodProvider>

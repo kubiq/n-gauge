@@ -15,7 +15,7 @@ const gb = (kbytes: number) => `${(kbytes / 1048576).toFixed(1)} GB`;
 // (AP_MIN_INTERNAL_HEAP) and WiFi then holds ~46 KB of it, so with the app
 // connected ~45-55 KB free is normal (seen 2026-10-13: 53 KB, lowest 44 KB).
 // Red under 20 KB at its lowest: tight enough that an allocation may fail.
-export function SystemCard({ sys, uptimeMs }: { sys: Sys; uptimeMs: number }) {
+export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso']; uptimeMs: number }) {
   const ramLow = sys.heapMin < 20 * 1024;
   return (
     <Card title="System">
@@ -37,6 +37,8 @@ export function SystemCard({ sys, uptimeMs }: { sys: Sys; uptimeMs: number }) {
         <Row label="SD card" value="not available" tone="dim" />
       )}
       <Bar label="Firmware" value={`${mb(sys.app)} of ${mb(sys.appMax)}`} used={sys.app / sys.appMax} bad={sys.app / sys.appMax > 0.9} />
+      {/* The diagnostic requests to the car (ISO-TP): answered / given up. */}
+      <Row label="Car requests ok / failed" value={`${iso.ok} / ${iso.aborts}`} tone={iso.aborts ? 'bad' : 'dim'} />
       <Row label="Chip temperature" value={`${Math.round(sys.tempC)} °C`} tone={sys.tempC > 80 ? 'bad' : undefined} />
       <Row label="Started by" value={sys.reset} tone={/crash|watchdog|dip/.test(sys.reset) ? 'bad' : 'dim'} />
       <Row label="Up" value={`${Math.round(uptimeMs / 60000)} min`} tone="dim" />

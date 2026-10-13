@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, pairTrips, parseCsv, parseGpx, sessionOf, stampOf } from './trips.ts';
+import { distM, isStub, pairTrips, parseCsv, parseGpx, sessionOf, stampOf } from './trips.ts';
 
 // One line exactly as logger.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -104,6 +104,16 @@ test('stamps from dated names are local time, null for numbered ones', () => {
   assert.equal(stampOf('trip_2026-10-11_12-45_3fa81c.gpx'), new Date(2026, 9, 11, 12, 45).getTime());
   assert.equal(stampOf('drive_2026-09-25_14-32_9_3fa81c.csv.nge'), new Date(2026, 8, 25, 14, 32).getTime());
   assert.equal(stampOf('drive_0279_3fa81c.csv'), null);
+});
+
+test('stub drives: a restart fragment hides, real drives and unread ones stay', () => {
+  const t0 = 1_000_000;
+  assert.equal(isStub({ distanceM: 30, start: t0, end: t0 + 60_000 }), true);         // 21:18, 1 min, 0.0 km
+  assert.equal(isStub({ distanceM: 12_000, start: t0, end: t0 + 840_000 }), false);   // a drive
+  assert.equal(isStub({ distanceM: 50, start: t0, end: t0 + 600_000 }), false);       // 10 min parked: kept
+  assert.equal(isStub(undefined, { durationS: 30 }), true);                           // car data, 30 s
+  assert.equal(isStub(undefined, { durationS: 70 }), false);
+  assert.equal(isStub(), false);                                                       // not read yet
 });
 
 test('the session is the six characters before the extension', () => {

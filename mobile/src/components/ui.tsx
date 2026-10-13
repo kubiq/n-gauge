@@ -53,28 +53,33 @@ export function Button({
   disabled?: boolean;
   kind?: 'primary' | 'plain' | 'danger';
 }) {
-  const off = disabled || busy;
+  // Disabled (and not busy) looks it: no colour at all, dim text - a faded
+  // orange "No changes" still read as a button to press. Busy keeps its
+  // colour, with the spinner.
+  const inert = disabled && !busy;
+  const filled = kind === 'primary' && !inert;
   return (
     <Pressable
       onPress={onPress}
-      disabled={off}
+      disabled={disabled || busy}
       style={({ pressed }) => [
         styles.button,
-        kind === 'primary' && styles.buttonPrimary,
-        kind === 'danger' && styles.buttonDanger,
-        (pressed || off) && { opacity: 0.6 },
+        filled && styles.buttonPrimary,
+        kind === 'danger' && !inert && styles.buttonDanger,
+        pressed && { opacity: 0.6 },
       ]}>
       {busy ? (
-        <ActivityIndicator color={kind === 'primary' ? C.bg : C.text} />
+        <ActivityIndicator color={filled ? C.bg : C.text} />
       ) : (
-        <Text style={[styles.buttonText, kind === 'primary' && { color: C.bg }]}>{title}</Text>
+        <Text style={[styles.buttonText, filled && { color: C.bg }, inert && { color: C.dim }]}>{title}</Text>
       )}
     </Pressable>
   );
 }
 
-export function Note({ children, tone }: { children: ReactNode; tone?: 'bad' }) {
-  return <Text style={[styles.note, tone === 'bad' && { color: C.bad }]}>{children}</Text>;
+/** Small text under a control. `good` for a quiet "done" instead of an alert. */
+export function Note({ children, tone }: { children: ReactNode; tone?: 'bad' | 'good' }) {
+  return <Text style={[styles.note, tone === 'bad' && { color: C.bad }, tone === 'good' && { color: C.good }]}>{children}</Text>;
 }
 
 export const styles = StyleSheet.create({
@@ -83,8 +88,10 @@ export const styles = StyleSheet.create({
   card: { backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 12, padding: S.md, gap: S.sm },
   cardTitle: { color: C.accent, fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm, minHeight: 28 },
-  rowLabel: { color: C.dim, fontSize: 15, flexShrink: 1 },
-  rowValue: { color: C.text, fontSize: 15, fontVariant: ['tabular-nums'] },
+  // The label keeps its width; a long value wraps on the right instead. The
+  // other way round, a file name squeezed "Track" into "Tra / ck".
+  rowLabel: { color: C.dim, fontSize: 15, flexShrink: 0 },
+  rowValue: { color: C.text, fontSize: 15, fontVariant: ['tabular-nums'], flexShrink: 1, textAlign: 'right' },
   button: {
     borderColor: C.border,
     borderWidth: 1,

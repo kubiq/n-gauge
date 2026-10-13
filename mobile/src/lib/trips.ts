@@ -174,6 +174,20 @@ export const sessionOf = (n: string) => /_([0-9a-f]{6})\.(?:gpx|csv|vbo)(?:\.nge
 export type TripFiles = { key: string; gpx?: string; csv?: string; start: number | null };
 
 /**
+ * Not a drive worth a row: a restart fragment or the engine on for a moment
+ * (2026-10-12: "21:18, 0.0 km, 1 min, top 2 km/h"). With a track: under
+ * 200 m and 3 minutes. Car data only: under a minute. Without a summary yet,
+ * never - a drive must not vanish while it is still being read.
+ */
+export function isStub(g?: { distanceM: number; start: number | null; end: number | null }, c?: { durationS: number | null }): boolean {
+  if (g) {
+    const secs = g.start && g.end ? (g.end - g.start) / 1000 : Infinity;
+    return g.distanceM < 200 && secs < 180;
+  }
+  return c?.durationS != null && c.durationS < 60;
+}
+
+/**
  * One entry per drive, newest first: each GPX with the CSV of its session,
  * and every CSV left over on its own. A session can hold more than one of
  * each (a card share or a key change starts new files): they pair in order.
