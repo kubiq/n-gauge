@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { Note } from '@/components/ui';
@@ -81,13 +81,33 @@ else {
         'circle-color': ['match', ['get', 'end'], 0, '#22c55e', '#ef4444'] } });
     loaded = true;
     say('ok');
+    // The first moment the tiles are drawn too: the spinner goes then.
+    map.once('idle', () => say('drawn'));
   });
 }
 </script></body></html>`;
 }
 
+/** The map's box with a spinner: while the track is read, before TrackMap. */
+export function MapLoading() {
+  return (
+    <View style={styles.box}>
+      <Spinner />
+    </View>
+  );
+}
+
+function Spinner() {
+  return (
+    <View style={styles.spinner} pointerEvents="none">
+      <ActivityIndicator size="large" color={C.accent} />
+    </View>
+  );
+}
+
 export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, number, number, number] }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [drawn, setDrawn] = useState(false);
   const source = useMemo(() => ({ html: html(track, bbox), baseUrl: 'https://n-gauge.local/' }), [track, bbox]);
   return (
     <View style={{ gap: 8 }}>
@@ -98,7 +118,8 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
           style={{ backgroundColor: C.bg }}
           onMessage={(e) => {
             const m = e.nativeEvent.data;
-            if (m === 'ok') setProblem(null);
+            if (m === 'drawn') setDrawn(true);
+            else if (m === 'ok') setProblem(null);
             // The real reason, plus the usual one: it is easy to forget that
             // a connection to the pod takes the app's internet with it.
             else setProblem(`The map did not load (${m.replace(/^error:/, '')}). It needs internet - not while connected to the gauge.`);
@@ -107,6 +128,7 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
             setProblem(`The map did not load (${e.nativeEvent.description}). It needs internet - not while connected to the gauge.`)
           }
         />
+        {!drawn && !problem ? <Spinner /> : null}
       </View>
       {problem ? <Note tone="bad">{problem}</Note> : null}
       <View style={styles.legend}>
@@ -131,7 +153,8 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
 }
 
 const styles = StyleSheet.create({
-  box: { height: 380, borderRadius: 12, overflow: 'hidden', borderColor: C.border, borderWidth: 1 },
+  box: { height: 380, borderRadius: 12, overflow: 'hidden', borderColor: C.border, borderWidth: 1, backgroundColor: C.bg },
+  spinner: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   swatch: { width: 14, height: 4, borderRadius: 2 },

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { HeaderActions } from '@/components/pod-chip';
-import { TrackMap } from '@/components/track-map';
+import { MapLoading, TrackMap } from '@/components/track-map';
 import { Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
@@ -121,7 +121,8 @@ export default function TripScreen() {
           ),
         }}
       />
-      {!ready ? <Note>Reading the logs…</Note> : null}
+      {/* A drive with a track: the map's box spins while it is read. */}
+      {!ready ? t.gpx ? <MapLoading /> : <Note>Reading the logs…</Note> : null}
       {busy ? <Note>{busy === 'save' ? 'Saving…' : 'Preparing the file…'}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} /> : null}
