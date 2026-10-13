@@ -18,7 +18,8 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the pod’s QR' }} />
+            <Stack.Screen name="gauge" options={{ title: 'Gauge' }} />
+            <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the gauge’s QR' }} />
             <Stack.Screen name="server" options={{ presentation: 'modal', title: 'Upload server' }} />
             <Stack.Screen name="trip/[key]" options={{ title: 'Drive' }} />
             <Stack.Screen name="log-key" options={{ title: 'Log encryption' }} />

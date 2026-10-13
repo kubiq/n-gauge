@@ -30,7 +30,7 @@ async function call(path: string, init: RequestInit = {}, timeoutMs = 5000): Pro
     return r;
   } catch (e) {
     if (e instanceof PodError) throw e;
-    throw new PodError(ctl.signal.aborted ? 'The pod did not answer' : String(e));
+    throw new PodError(ctl.signal.aborted ? 'The gauge did not answer' : String(e));
   } finally {
     clearTimeout(t);
   }

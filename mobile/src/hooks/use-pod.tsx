@@ -37,7 +37,7 @@ export function PodProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
     const sub = PodWifi.addListener('onLost', () => {
       setState('idle');
-      setError('Lost the pod’s WiFi');
+      setError('Lost the gauge’s WiFi');
     });
     return () => sub.remove();
   }, []);

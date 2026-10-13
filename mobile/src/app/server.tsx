@@ -72,7 +72,7 @@ export default function ServerScreen() {
         />
         <Note>The server is backend/ in the repo. The phone reaches it over mobile data, so the VPN must be up.</Note>
         {pod.state === 'connected' ? (
-          <Note tone="bad">Disconnect from the pod to test: while connected, the app can only reach the pod.</Note>
+          <Note tone="bad">Disconnect from the gauge to test: while connected, the app can only reach the gauge.</Note>
         ) : (
           <Button title="Test" kind="plain" busy={busy} disabled={!valid} onPress={test} />
         )}

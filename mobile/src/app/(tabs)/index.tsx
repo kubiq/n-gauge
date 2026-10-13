@@ -1,175 +1,178 @@
-import { router, useNavigation } from 'expo-router';
-import { useEffect, useLayoutEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { router, useFocusEffect, useNavigation } from 'expo-router';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HeaderActions } from '@/components/pod-chip';
-import { Button, Card, Note, Row, Screen } from '@/components/ui';
-import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
-import { getLive, type PodLive, setClock, zeroGmeter } from '@/lib/pod';
-import { scanPodQr } from '@/lib/scan-qr';
-import { UploadCard } from '@/components/upload-card';
-import { UPLOAD_ENABLED } from '@/features';
+import { Card, Note, Screen, styles as ui } from '@/components/ui';
+import { duration, km, when } from '@/lib/format';
+import { LogKeyError } from '@/lib/logtext';
+import { saveLogsToFolder, savedText } from '@/lib/share';
+import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
+import { type CsvSummary, isGpxName, type TripFiles } from '@/lib/trips';
+import { C, S } from '@/theme';
 
-const LIVE_POLL_MS = 2000;
+type Sums = Record<string, GpxStats | CsvSummary>;
 
-export default function PodScreen() {
-  const pod = usePod();
-  const [live, setLive] = useState<PodLive | null>(null);
-  const [liveErr, setLiveErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+// Every drive the phone holds. Summaries missing from the cache (new pulls)
+// are worked out here, one file at a time, and the list fills in as they land.
+//
+// The summaries live in state, read from the cache once per visit and added
+// to as each is worked out - never read from disk during render: the React
+// Compiler skips re-rendering a row whose props did not change, so a row that
+// read the cache itself stayed on "Reading…" after its summary had landed.
+export default function TripsScreen() {
+  const [trips, setTrips] = useState<TripFiles[]>([]);
+  const [sums, setSums] = useState<Sums>({});
+  // Why a file could not be read - an encrypted log without the right key.
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const working = useRef(false);
+  // The sync runs by itself (use-sync.tsx): each file it lands re-reads the
+  // list, so a drive appears while this tab is open. Landing during the
+  // summaries below, the re-read waits for them (`again`, then `rerun`).
+  const { landed } = useSync();
+  const again = useRef(false);
+  const [rerun, setRerun] = useState(0);
 
-  // The pod serves one request at a time: while a sync talks to it, a poll
-  // would only queue behind a multi-MB download and time out.
-  const syncing = useSync().phase !== 'idle';
-
-  useEffect(() => {
-    // The live card is only rendered while connected, so a stale reading from
-    // the last connection is never shown long: the first tick replaces it.
-    if (pod.state !== 'connected' || syncing) return;
-    let stop = false;
-    const tick = async () => {
-      try {
-        const l = await getLive();
-        if (!stop) {
-          setLive(l);
-          setLiveErr(null);
+  useFocusEffect(
+    useCallback(() => {
+      // Read, so they are real dependencies: the triggers for a re-read.
+      if (landed < 0 || rerun < 0) return;
+      const list = tripFiles();
+      const have: Sums = {};
+      const todo: string[] = [];
+      for (const t of list) {
+        for (const name of [t.gpx, t.csv]) {
+          if (!name) continue;
+          const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
+          if (s) have[name] = s;
+          else todo.push(name);
         }
-      } catch (e) {
-        if (!stop) setLiveErr(String((e as Error).message));
       }
-    };
-    tick();
-    const t = setInterval(tick, LIVE_POLL_MS);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, [pod.state, syncing]);
+      setTrips(list);
+      setSums(have);
+      setProblems({});
+      // Says plainly whether the cache is doing its job.
+      if (working.current) {
+        if (todo.length) again.current = true;
+        return;
+      }
+      setStatus(todo.length ? null : `${Object.keys(have).length} files, all from the cache`);
+      if (!todo.length) return;
+      working.current = true;
+      (async () => {
+        for (const [i, name] of todo.entries()) {
+          setStatus(`Reading ${i + 1} of ${todo.length} (${Object.keys(have).length} cached): ${name}`);
+          try {
+            await summarise(name);
+            const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
+            if (s) setSums((prev) => ({ ...prev, [name]: s }));
+          } catch (e) {
+            const msg = e instanceof LogKeyError ? e.message : `Could not read it: ${String(e)}`;
+            setProblems((prev) => ({ ...prev, [name]: msg }));
+          }
+        }
+        setStatus(`Read ${todo.length} new, ${Object.keys(have).length} from the cache`);
+        working.current = false;
+        if (again.current) {
+          again.current = false;
+          setRerun((n) => n + 1);
+        }
+      })();
+    }, [landed, rerun]),
+  );
 
-  const scan = async () => {
-    const r = await scanPodQr();
-    if (r.kind === 'ok') await pod.setCreds(r.creds);
-    else if (r.kind === 'wrong') Alert.alert('Not the pod’s code', 'Scan the QR on the pod’s WiFi screen.');
-    else if (r.kind === 'unavailable') router.push('/scan');
-  };
-
-  // ⋮ in the header: the rare things. Scanning another pod replaces the
-  // stored one, so it is not a button on the screen any more.
-  const navigation = useNavigation();
-  const hasCreds = !!pod.creds;
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <HeaderActions items={hasCreds ? [{ label: 'Scan a different pod', onPress: scan }] : []} />
-      ),
-    });
-  }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const run = async (what: string, fn: () => Promise<string>) => {
-    setBusy(what);
+  const saveAll = async () => {
+    setSaving(true);
     try {
-      Alert.alert(what, await fn());
+      const names = trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n);
+      const r = await saveLogsToFolder(names, setStatus);
+      setStatus(null);
+      Alert.alert('Saved', savedText(r));
     } catch (e) {
-      Alert.alert(what, String((e as Error).message));
+      setStatus(null);
+      Alert.alert('Save', String((e as Error).message));
     } finally {
-      setBusy(null);
+      setSaving(false);
     }
   };
 
+  // ⋮ in the header. "Save all to a folder": decrypted, under plain names -
+  // the way logs reach the PC now that they are encrypted on the card;
+  // already-saved files are skipped. Disabled while a save runs.
+  const navigation = useNavigation();
+  const hasTrips = trips.length > 0;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <HeaderActions
+          items={hasTrips ? [{ label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving }] : []}
+        />
+      ),
+    });
+  }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Screen tabBar>
-      <Card title="Connection">
-        {!pod.ready ? null : pod.creds ? (
-          <>
-            <Row label="Network" value={pod.creds.ssid} />
-            <Row
-              label="Status"
-              value={pod.state === 'connected' ? 'connected' : pod.state === 'connecting' ? 'connecting…' : 'not connected'}
-              tone={pod.state === 'connected' ? 'good' : 'dim'}
-            />
-            {pod.state === 'connected' ? (
-              <Button title="Disconnect" kind="plain" onPress={pod.disconnect} />
-            ) : (
-              <Button title="Connect to pod" busy={pod.state === 'connecting'} onPress={pod.connect} />
-            )}
-            {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
-          </>
-        ) : (
-          <>
-            <Note>
-              Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the
-              password, so this is needed once.
-            </Note>
-            <Button title="Scan the pod’s QR" onPress={scan} />
-          </>
-        )}
-      </Card>
-
-      {pod.state === 'connected' ? (
-        <>
-          <Card title="Live">
-            {syncing ? <Note>Paused while the logs sync.</Note> : null}
-            {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
-            {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
-          </Card>
-          <Card title="Actions">
-            <Button
-              title="Set the pod’s clock from this phone"
-              kind="plain"
-              busy={busy === 'Clock'}
-              onPress={() => run('Clock', setClock)}
-            />
-            <Button
-              title="Zero the g-meter here"
-              kind="plain"
-              busy={busy === 'G-meter'}
-              onPress={() =>
-                Alert.alert('Zero the g-meter?', 'Only with the car level and standing still.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Zero', onPress: () => run('G-meter', zeroGmeter) },
-                ])
-              }
-            />
-          </Card>
-        </>
-      ) : UPLOAD_ENABLED && pod.state === 'idle' ? (
-        // Off the pod's network is the only time the app can reach the server.
-        <UploadCard />
-      ) : null}
+      {status ? <Note>{status}</Note> : null}
+      {trips.length === 0 ? (
+        <Card>
+          <Note>No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.</Note>
+        </Card>
+      ) : (
+        trips.map((t) => (
+          <TripRow
+            key={t.key}
+            t={t}
+            g={t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined}
+            c={t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined}
+            problem={(t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined}
+          />
+        ))
+      )}
     </Screen>
   );
 }
 
-// can.linkUp is only "the TWAI driver started" (obd.h) - true on the bench
-// with nothing on the bus. /api/live has no frame age, so "the car is
-// answering" is read from any reading being fresh, as the gauge shows them.
-function carTalking(l: PodLive): boolean {
-  return l.can.haveOil || l.can.haveCoolant || l.can.haveBoost;
-}
-
-function canText(l: PodLive): string {
-  if (!l.can.linkUp) return 'CAN driver failed';
-  if (l.iso.busOff) return 'bus off';
-  return carTalking(l) ? 'answering' : 'no answer';
-}
-
-function LiveRows({ l }: { l: PodLive }) {
-  const yes = (b: boolean): 'good' | 'bad' => (b ? 'good' : 'bad');
+function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSummary; problem?: string }) {
+  const start = g?.start ?? t.start;
+  const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
   return (
-    <>
-      <Row label="Car" value={canText(l)} tone={yes(carTalking(l))} />
-      <Row label="Oil" value={l.can.haveOil ? `${l.can.oilTempC} °C` : '—'} />
-      <Row label="Coolant" value={l.can.haveCoolant ? `${l.can.coolantC} °C` : '—'} />
-      <Row label="Boost" value={l.can.haveBoost ? `${l.can.boostBar.toFixed(2)} bar` : '—'} />
-      <Row label="ISO-TP ok / aborts" value={`${l.iso.ok} / ${l.iso.aborts}`} tone={l.iso.aborts ? 'bad' : undefined} />
-      <Row
-        label="GPS"
-        value={!l.gps.linkUp ? 'no module' : l.gps.haveFix ? `fix, ${l.gps.sats} sats, hdop ${l.gps.hdop}` : `no fix, ${l.gps.sats} sats`}
-        tone={yes(l.gps.linkUp && l.gps.haveFix)}
-      />
-      <Row label="Clock" value={l.clock.valid ? l.clock.local : 'not set'} tone={yes(l.clock.valid)} />
-      <Row label="Up" value={`${Math.round(l.uptimeMs / 60000)} min`} tone="dim" />
-    </>
+    <Pressable
+      onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
+      style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
+      <View style={styles.head}>
+        <Text style={styles.title}>{start ? when(start) : t.key}</Text>
+        {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
+      </View>
+      <View style={styles.facts}>
+        {secs !== null ? <Fact label="time" value={duration(secs)} /> : null}
+        {g ? <Fact label="top" value={`${Math.round(g.maxKmh)} km/h`} /> : null}
+        {c?.maxBoostBar != null ? <Fact label="boost" value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
+        {c?.maxOilC != null ? <Fact label="oil" value={`${Math.round(c.maxOilC)} °C`} /> : null}
+      </View>
+      {!t.gpx ? <Note>No GPS track - car data only.</Note> : null}
+      {pending ? <Note>Reading…</Note> : null}
+      {problem ? <Note tone="bad">{problem}</Note> : null}
+    </Pressable>
   );
 }
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <View>
+      <Text style={ui.note}>{label}</Text>
+      <Text style={ui.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  title: { color: C.text, fontSize: 16, fontWeight: '600' },
+  big: { color: C.accent, fontSize: 18, fontWeight: '700' },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
+});

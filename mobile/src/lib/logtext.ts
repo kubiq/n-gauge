@@ -12,7 +12,7 @@ export async function readLogText(name: string): Promise<string> {
   const f = inboxFile(name);
   if (!isEncryptedName(name)) return f.text();
   const key = await loadLogKey();
-  if (!key) throw new LogKeyError('Encrypted - this phone has no log key (Pod screen, Log encryption).');
+  if (!key) throw new LogKeyError('Encrypted - this phone has no log key (Settings, Log encryption).');
   const bytes = await f.bytes();
   if (!isEncrypted(bytes)) throw new LogKeyError('Not an encrypted log, despite its name.');
   const { plain } = openLog(bytes, key.secret);

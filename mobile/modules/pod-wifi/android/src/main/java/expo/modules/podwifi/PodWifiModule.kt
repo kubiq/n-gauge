@@ -68,7 +68,7 @@ class PodWifiModule : Module() {
           callback = null
           if (!settled) {
             settled = true
-            promise.reject(CodedException("ERR_UNAVAILABLE", "Pod not found, or the prompt was declined", null))
+            promise.reject(CodedException("ERR_UNAVAILABLE", "Gauge not found, or the prompt was declined", null))
           }
         }
 

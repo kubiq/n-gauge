@@ -85,7 +85,7 @@ export default function LogKeyScreen() {
       await setPodLogKey(value);
       await refreshPod();
     } catch (e) {
-      Alert.alert('Pod', String((e as Error).message));
+      Alert.alert('Gauge', String((e as Error).message));
     } finally {
       setBusy(null);
     }
@@ -99,14 +99,14 @@ export default function LogKeyScreen() {
         {key ? (
           <>
             <Row label="Fingerprint" value={key.fingerprint} />
-            <Note>The pod’s settings page shows the same fingerprint when it encrypts to this key.</Note>
+            <Note>The gauge’s settings page shows the same fingerprint when it encrypts to this key.</Note>
             <Button title="Copy the key for KeePass" kind="plain" onPress={() => copy(key)} />
           </>
         ) : (
           <>
             <Note>
-              With a key, the pod encrypts its logs so that only this phone can read them - a card taken out of the pod
-              gives nothing away. The pod only ever gets the public half.
+              With a key, the gauge encrypts its logs so that only this phone can read them - a card taken out of the
+              gauge gives nothing away. The gauge only ever gets the public half.
             </Note>
             <Button title="Create a key" onPress={create} />
           </>
@@ -135,11 +135,11 @@ export default function LogKeyScreen() {
         )}
       </Card>
 
-      <Card title="The pod">
+      <Card title="The gauge">
         {!connected ? (
-          <Note>Connect to the pod (Pod screen) to set its key.</Note>
+          <Note>Connect to the gauge (tap it at the top) to set its key.</Note>
         ) : podFp === undefined ? (
-          <Note>Reading the pod’s settings… (older firmware does not know about log keys)</Note>
+          <Note>Reading the gauge’s settings… (older firmware does not know about log keys)</Note>
         ) : (
           <>
             <Row
@@ -149,12 +149,12 @@ export default function LogKeyScreen() {
             />
             {podFp && !podUsesMine ? (
               <Note tone="bad">
-                The pod encrypts to {podFp.replace(/(.{4})(?=.)/g, '$1 ')} - not this phone’s key. Its logs only open with
+                The gauge encrypts to {podFp.replace(/(.{4})(?=.)/g, '$1 ')} - not this phone’s key. Its logs only open with
                 that key.
               </Note>
             ) : null}
             {key && !podUsesMine ? (
-              <Button title="Encrypt the pod’s logs with this key" busy={busy === 'on'} onPress={() => sendToPod(toHex(key.pub))} />
+              <Button title="Encrypt the gauge’s logs with this key" busy={busy === 'on'} onPress={() => sendToPod(toHex(key.pub))} />
             ) : null}
             {podFp ? (
               <Button
@@ -169,7 +169,7 @@ export default function LogKeyScreen() {
                 }
               />
             ) : null}
-            <Note>A change applies at once: the pod closes its open logs and starts new files.</Note>
+            <Note>A change applies at once: the gauge closes its open logs and starts new files.</Note>
           </>
         )}
       </Card>

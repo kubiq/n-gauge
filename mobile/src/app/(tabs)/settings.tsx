@@ -80,7 +80,7 @@ export default function SettingsScreen() {
       Alert.alert('Firmware', `${bin.name} is not a .bin`);
       return;
     }
-    Alert.alert('Update firmware?', `${bin.name}, ${(bin.size / 1048576).toFixed(2)} MB. Takes ~30 s; the pod restarts.`, [
+    Alert.alert('Update firmware?', `${bin.name}, ${(bin.size / 1048576).toFixed(2)} MB. Takes ~30 s; the gauge restarts.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Update',
@@ -103,11 +103,11 @@ export default function SettingsScreen() {
   return (
     <Screen tabBar>
       {/* This phone's side, always here: the key is the phone's and is needed
-          off the pod's WiFi too. While connected it also shows the pod's state. */}
+          off the gauge's WiFi too. While connected it also shows the gauge's state. */}
       <LogKeyCard />
       {!connected ? (
-        <Card title="Pod">
-          <Note>Connect to the pod (Pod tab) to change its settings or update its firmware.</Note>
+        <Card title="Gauge">
+          <Note>Connect to the gauge (tap it at the top) to change its settings or update its firmware.</Note>
         </Card>
       ) : null}
       {connected && err ? <Note tone="bad">{err}</Note> : null}
@@ -137,7 +137,7 @@ export default function SettingsScreen() {
           />
           <Card title="Firmware">
             <Note>
-              Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the pod rolls back by itself.
+              Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.
             </Note>
             <Button title="Update firmware" kind="plain" busy={busy === 'fw'} onPress={firmware} />
           </Card>

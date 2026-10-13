@@ -101,10 +101,10 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
             if (m === 'ok') setProblem(null);
             // The real reason, plus the usual one: it is easy to forget that
             // a connection to the pod takes the app's internet with it.
-            else setProblem(`The map did not load (${m.replace(/^error:/, '')}). It needs internet - not while connected to the pod.`);
+            else setProblem(`The map did not load (${m.replace(/^error:/, '')}). It needs internet - not while connected to the gauge.`);
           }}
           onError={(e) =>
-            setProblem(`The map did not load (${e.nativeEvent.description}). It needs internet - not while connected to the pod.`)
+            setProblem(`The map did not load (${e.nativeEvent.description}). It needs internet - not while connected to the gauge.`)
           }
         />
       </View>

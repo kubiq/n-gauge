@@ -35,7 +35,7 @@ export function LogKeyCard() {
       <Row label="This phone’s key" value={key ? key.fingerprint : 'not set up'} tone={key ? undefined : 'dim'} />
       {connected && podFp !== undefined ? (
         <Row
-          label="Pod"
+          label="Gauge"
           value={podFp === '' ? 'not encrypted' : podFp === mine ? 'encrypted to this phone' : 'encrypted to another key'}
           tone={podFp === '' ? 'dim' : podFp === mine ? 'good' : 'bad'}
         />

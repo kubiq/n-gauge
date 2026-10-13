@@ -25,7 +25,7 @@ export default function Scan() {
   if (!perm.granted) {
     return (
       <Screen>
-        <Note>The camera reads the QR code on the pod’s WiFi screen. Nothing else is recorded.</Note>
+        <Note>The camera reads the QR code on the gauge’s WiFi screen. Nothing else is recorded.</Note>
         <Button title="Allow camera" onPress={requestPerm} />
       </Screen>
     );
@@ -49,7 +49,7 @@ export default function Scan() {
       />
       <View style={[styles.hint, { bottom: S.lg + insets.bottom }]}>
         <Note tone={wrong ? 'bad' : undefined}>
-          {wrong ? 'That is not the pod’s WiFi code.' : 'Point at the QR on the pod’s WiFi screen.'}
+          {wrong ? 'That is not the gauge’s WiFi code.' : 'Point at the QR on the gauge’s WiFi screen.'}
         </Note>
       </View>
     </View>

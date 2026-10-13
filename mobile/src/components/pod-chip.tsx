@@ -7,15 +7,15 @@ import { useSync } from '@/hooks/use-sync';
 import { shortWhen } from '@/lib/format';
 import { C, S } from '@/theme';
 
-// The pod in every tab's header, the way Garmin Connect shows its watch: the
-// connection and the sync at a glance, from any screen. The ring is the pod's
-// round face, its colour the state; a spinner while something is going on.
-// A tap connects, or - connected - opens the Pod tab, where Disconnect is.
+// The gauge in every tab's header, the way Garmin Connect shows its watch:
+// the connection and the sync at a glance, from any screen. The ring is the
+// gauge's round face, its colour the state; a spinner while something is
+// going on. A tap opens the Gauge screen - and, if not connected, connects.
 type Status = { title: string; detail: string | null; ring: string; busy: boolean; bad?: boolean };
 
 function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>): Status {
   const synced = sync.lastSync ? `Synced ${shortWhen(sync.lastSync)}` : null;
-  if (!pod.creds) return { title: 'Set up the pod', detail: null, ring: C.dim, busy: false };
+  if (!pod.creds) return { title: 'Set up the gauge', detail: null, ring: C.dim, busy: false };
   if (pod.state === 'connecting') return { title: 'Connecting…', detail: synced, ring: C.dim, busy: true };
   if (pod.state === 'idle') return { title: 'Not connected', detail: synced, ring: C.dim, busy: false };
   if (sync.progress)
@@ -30,17 +30,16 @@ export function PodChip() {
   const { title, detail, ring, busy, bad } = status(pod, useSync());
 
   const onPress = () => {
+    router.push('/gauge');
     if (pod.creds && pod.state === 'idle') pod.connect();
-    else router.navigate('/');
   };
 
   return (
     <Pressable
       onPress={onPress}
-      disabled={pod.state === 'connecting'}
       hitSlop={8}
       accessibilityRole="button"
-      accessibilityLabel={`Pod: ${title}${detail ? `, ${detail}` : ''}`}
+      accessibilityLabel={`Gauge: ${title}${detail ? `, ${detail}` : ''}`}
       style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}>
       <View style={styles.face}>
         {busy ? <ActivityIndicator size="small" color={C.accent} /> : <View style={[styles.ring, { borderColor: ring }]} />}
