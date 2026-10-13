@@ -115,6 +115,23 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   saveInbox(state);
 }
 
+/**
+ * Renames inbox files, old name -> new name. A file already there under the
+ * new name (pulled again before the rename) wins; the old copy goes.
+ */
+export function renameInbox(renames: Record<string, string>): void {
+  if (!Object.keys(renames).length) return;
+  const state = loadInbox();
+  for (const [from, to] of Object.entries(renames)) {
+    const src = inboxFile(from);
+    if (inboxFile(to).exists) src.delete();
+    else src.moveSync(inboxFile(to));
+    state[to] ??= state[from];
+    delete state[from];
+  }
+  saveInbox(state);
+}
+
 function endsWithGpxTail(f: File): boolean {
   if (f.size < GPX_TAIL.length) return false;
   const h = f.open(FileMode.ReadOnly);

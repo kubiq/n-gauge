@@ -155,55 +155,40 @@ export function parseCsv(text: string): CsvSummary {
  * as long as both are set to the same zone.
  */
 export function stampOf(name: string): number | null {
-  const m = /_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:_\d+)?\.(?:gpx|csv)(?:\.nge)?$/.exec(name);
+  const m = /_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:_\d)?_[0-9a-f]{6}\./.exec(name);
   if (!m) return null;
   return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
 }
 
 // ---- names -------------------------------------------------------------------
-// An encrypted log is its plain name plus ".nge" (logcrypt.h).
+// <kind>_<when>_<session>.<ext>[.nge] - "trip_2026-10-12_21-19_3fa81c.gpx".
+// <when> is the start (or a number, before the clock was known); <session>
+// is the pod's boot or wake that wrote it (logger.cpp), shared by a drive's
+// GPX, CSV and VBO. An encrypted log is its plain name plus ".nge" (logcrypt.h).
 export const isEncryptedName = (n: string) => n.endsWith('.nge');
 export const plainName = (n: string) => (isEncryptedName(n) ? n.slice(0, -4) : n);
 export const isGpxName = (n: string) => /^trip_.+\.gpx(?:\.nge)?$/.test(n);
 export const isCsvName = (n: string) => /^drive_.+\.csv(?:\.nge)?$/.test(n);
+export const sessionOf = (n: string) => /_([0-9a-f]{6})\.(?:gpx|csv|vbo)(?:\.nge)?$/.exec(n)?.[1] ?? null;
 
 export type TripFiles = { key: string; gpx?: string; csv?: string; start: number | null };
 
-// A fix can come minutes after the first CAN frame (a garage), or before it
-// (GPS on, engine not yet started).
-const PAIR_WINDOW_MS = 20 * 60 * 1000;
-
 /**
- * One entry per drive, newest first: each GPX with the CSV that started
- * nearest to it within PAIR_WINDOW_MS, and every CSV left over on its own.
- * Undated (numbered) files cannot be paired and come last.
+ * One entry per drive, newest first: each GPX with the CSV of its session,
+ * and every CSV left over on its own. A session can hold more than one of
+ * each (a card share or a key change starts new files): they pair in order.
+ * Undated (numbered) files come last.
  */
 export function pairTrips(names: string[]): TripFiles[] {
-  const gpx = names.filter(isGpxName);
-  const csv = names.filter(isCsvName);
-  // Closest pairs first, across all of them. Taken GPX by GPX, a short GPX
-  // just before a drive's own took its CSV (2026-10-12: 21:18 and 21:19, one
-  // CSV at 21:21), and the drive opened with no car data.
-  const pairs: { g: string; c: string; d: number }[] = [];
-  for (const g of gpx) {
-    const t = stampOf(g);
-    if (t === null) continue;
-    for (const c of csv) {
-      const tc = stampOf(c);
-      if (tc === null) continue;
-      const d = Math.abs(tc - t);
-      if (d <= PAIR_WINDOW_MS) pairs.push({ g, c, d });
-    }
+  const sorted = [...names].sort();
+  const csvs = new Map<string, string[]>();
+  for (const c of sorted.filter(isCsvName)) {
+    const s = sessionOf(c) ?? c;
+    csvs.set(s, [...(csvs.get(s) ?? []), c]);
   }
-  pairs.sort((a, b) => a.d - b.d);
-  const csvOf = new Map<string, string>();
-  const usedCsv = new Set<string>();
-  for (const { g, c } of pairs) {
-    if (csvOf.has(g) || usedCsv.has(c)) continue;
-    csvOf.set(g, c);
-    usedCsv.add(c);
-  }
-  const out: TripFiles[] = gpx.map((g) => ({ key: g, gpx: g, csv: csvOf.get(g), start: stampOf(g) }));
-  for (const c of csv) if (!usedCsv.has(c)) out.push({ key: c, csv: c, start: stampOf(c) });
+  const out: TripFiles[] = sorted
+    .filter(isGpxName)
+    .map((g) => ({ key: g, gpx: g, csv: csvs.get(sessionOf(g) ?? g)?.shift(), start: stampOf(g) }));
+  for (const c of [...csvs.values()].flat()) out.push({ key: c, csv: c, start: stampOf(c) });
   return out.sort((a, b) => (b.start ?? -Infinity) - (a.start ?? -Infinity) || b.key.localeCompare(a.key));
 }

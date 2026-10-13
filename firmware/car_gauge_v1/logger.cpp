@@ -58,7 +58,7 @@ extern "C" uint32_t __wrap_get_fattime(void) {
 }
 
 static File   logFile;
-static char   path[40] = "";    // fits "/drive_2026-09-25_14-32_9.csv"
+static char   path[48] = "";    // fits "/drive_2026-09-25_14-32_9_3fa81c.csv.nge"
 static bool   pathDated = false; // path is a dated name, not a fallback number
 static uint32_t driveOpenMs = 0; // millis() when the CSV was created
 static bool   active = false;   // the CSV is open and taking rows
@@ -69,9 +69,9 @@ static uint32_t lastFlushMs  = 0;
 
 // ---- GPX trip track -------------------------------------------------------
 static File     gpxFile;
-// 40, not 24: a dated name ("/trip_2026-09-25_14-32_2.gpx", 28 chars) does not
-// fit in 24, and snprintf would truncate it silently rather than fail.
-static char     gpxPath[40] = "";
+// Sized like `path`: snprintf would truncate a longer name silently rather
+// than fail.
+static char     gpxPath[48] = "";
 static bool     gpxActive = false;
 static uint32_t gpxLastMs = 0;
 // Byte offset of the point insertion position, i.e. just past the last
@@ -268,6 +268,16 @@ static void gpxCommit() {
   gpxFile.flush();
 }
 
+// ---- the session ------------------------------------------------------------
+// Every log file's name ends in the session it belongs to, before the
+// extension: "trip_2026-10-12_21-19_3fa81c.gpx". A session is one boot or
+// wake, so a drive's GPX, CSV and VBO share it, and the app pairs them by it
+// alone. Pairing by time took the wrong CSV when the pod restarted a minute
+// into a drive (2026-10-12): the GPX from before the restart was nearer.
+// Random rather than counted: a counter in NVS restarts with an erased flash,
+// and would then repeat ids already on the card.
+static char session[7] = "000000";
+
 // ---- choosing the next file number -----------------------------------------
 // Both logs used to find a free name by probing /drive_0001, /drive_0002, ...
 // with SD_MMC.exists() one at a time from 1. Each probe is a full directory
@@ -290,18 +300,20 @@ static int highestIndex(const char *prefix, const char *ext) {
     const char *s = name.c_str();
     if (*s == '/') s++;                 // returned as a full path: "/drive_0001.csv"
     if (strncmp(s, prefix, pl) != 0) continue;
-    // Count only names that are EXACTLY prefix + digits + ext. Trip files are
-    // also written with dated names ("trip_2026-09-25_14-32.gpx"), and atoi()
-    // on those would read 2026 - making the next numbered fallback jump to
-    // trip_2027.
+    // Count only names that are EXACTLY prefix + digits + "_" + session +
+    // ext. Trip files are also written with dated names
+    // ("trip_2026-09-25_14-32_3fa81c.gpx"), and atoi() on those would read
+    // 2026 - making the next numbered fallback jump to trip_2027.
     const char *d = s + pl;
     const char *e = d;
     while (*e >= '0' && *e <= '9') e++;
+    if (e == d || e - d > 4 || *e != '_' || strlen(e) < 8) continue;
     // Encrypted or not (ext + LOGCRYPT_SUFFIX): one sequence of numbers.
+    const char *x = e + 8;              // past "_" and the six-character session
     const size_t el = strlen(ext);
-    const bool match = strcmp(e, ext) == 0 ||
-                       (strncmp(e, ext, el) == 0 && strcmp(e + el, LOGCRYPT_SUFFIX) == 0);
-    if (e == d || !match) continue;
+    const bool match = strcmp(x, ext) == 0 ||
+                       (strncmp(x, ext, el) == 0 && strcmp(x + el, LOGCRYPT_SUFFIX) == 0);
+    if (!match) continue;
     const int n = atoi(d);
     if (n > maxN) maxN = n;
   }
@@ -325,13 +337,13 @@ static const char *logExt(char *out, size_t n, const char *base) {
   return out;
 }
 
-// /<prefix><4 digits><ext>; numbered by `base`, the plain extension, so an
-// encrypted and a plain file never share a number.
+// /<prefix><4 digits>_<session><ext>; numbered by `base`, the plain
+// extension, so an encrypted and a plain file never share a number.
 static int nextFreeIndex(int *cache, const char *prefix, const char *base,
                          const char *ext, char *out, size_t outLen) {
   if (*cache <= 0) *cache = highestIndex(prefix, base) + 1;
   for (int n = *cache; n <= 9999; n++) {
-    snprintf(out, outLen, "/%s%04d%s", prefix, n, ext);
+    snprintf(out, outLen, "/%s%04d_%s%s", prefix, n, session, ext);
     if (SD_MMC.exists(out)) continue;
     *cache = n + 1;
     return n;
@@ -339,9 +351,10 @@ static int nextFreeIndex(int *cache, const char *prefix, const char *base,
   return -1;
 }
 
-// Files are named by when they start - "/trip_2026-09-25_14-32.gpx",
-// "/drive_2026-09-25_14-32.csv" - because that is how you look for a drive
-// afterwards; a bare number means opening files to find the right one.
+// Files are named by when they start - "/trip_2026-09-25_14-32_3fa81c.gpx",
+// "/drive_2026-09-25_14-32_3fa81c.csv" - because that is how you look for a
+// drive afterwards; a bare number means opening files to find the right one.
+// The session goes last, before the extension.
 //
 // LOCAL time, since the name is for a person reading a directory listing (the
 // file contents stay in UTC). Year-first so an alphabetical listing is also
@@ -358,8 +371,8 @@ static bool datedPath(const char *prefix, const char *ext, time_t t,
   char stamp[20];
   strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M", &tm);
   for (int k = 1; k <= 9; k++) {
-    if (k == 1) snprintf(out, n, "/%s%s%s", prefix, stamp, ext);
-    else        snprintf(out, n, "/%s%s_%d%s", prefix, stamp, k, ext);
+    if (k == 1) snprintf(out, n, "/%s%s_%s%s", prefix, stamp, session, ext);
+    else        snprintf(out, n, "/%s%s_%d_%s%s", prefix, stamp, k, session, ext);
     if (!SD_MMC.exists(out)) return true;
   }
   return false;
@@ -622,6 +635,8 @@ static volatile bool stopped = false;
 
 void logger_init() {
   if (!sdLock) sdLock = xSemaphoreCreateRecursiveMutex();
+  // A new session per boot and per wake: every file it writes carries the id.
+  snprintf(session, sizeof(session), "%06lx", (unsigned long)(esp_random() & 0xFFFFFF));
   if (!SD_MMC.setPins(SD_CLK, SD_CMD, SD_D0)) {
     Serial.println(F("[ERR] SD_MMC.setPins failed - no drive log"));
     return;
@@ -759,7 +774,7 @@ static void driveRenameDated() {
 // VBOX HD2 files do), underscored in [column names], values in exponent form.
 // ⚠ Not yet opened in Circuit Tools - do that before trusting a session.
 static File     vboFile;
-static char     vboPath[40] = "";
+static char     vboPath[48] = "";
 static bool     vboActive = false, vboFailed = false;
 static char     vboBuf[4096];
 static uint16_t vboLen = 0;

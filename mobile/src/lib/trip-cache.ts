@@ -5,8 +5,9 @@
 
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
-import { inboxFile, loadInbox } from './store';
+import { inboxFile, loadInbox, renameInbox } from './store';
 import {
   type CsvSummary,
   type GpxSummary,
@@ -39,6 +40,25 @@ function read<T>(f: File, size: number): T | null {
 
 function write<T>(f: File, size: number, summary: T) {
   f.write(JSON.stringify({ size, v: VERSION, summary } satisfies Cached<T>));
+}
+
+/**
+ * Session ids for logs pulled before the pod named files with them
+ * (legacy-names.ts): the inbox and the cached summaries, so nothing is
+ * worked out again. A no-op once done; run at start-up.
+ */
+export function renameLegacyLogs(): void {
+  const renames = legacyRenames(Object.keys(loadInbox()).filter((n) => inboxFile(n).exists));
+  renameInbox(renames);
+  for (const [from, to] of Object.entries(renames)) {
+    for (const ext of ['.json', '.track.json']) {
+      const src = new File(dir, from + ext);
+      const dst = new File(dir, to + ext);
+      if (!src.exists) continue;
+      if (dst.exists) src.delete();
+      else src.moveSync(dst);
+    }
+  }
 }
 
 /** The drives the phone holds, newest first. */

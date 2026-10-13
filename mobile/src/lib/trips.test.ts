@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, pairTrips, parseCsv, parseGpx, stampOf } from './trips.ts';
+import { distM, pairTrips, parseCsv, parseGpx, sessionOf, stampOf } from './trips.ts';
 
 // One line exactly as logger.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -101,55 +101,52 @@ test('csv: the real drive_0181.csv parses', { skip: !existsSync('../data/drive_0
 // Local time, as the pod names files (seen 2026-10-11: trip_..._15-03.gpx
 // held a drive from 15:03 to 15:45 CEST, its first <time> 13:03Z).
 test('stamps from dated names are local time, null for numbered ones', () => {
-  assert.equal(stampOf('trip_2026-10-11_12-45.gpx'), new Date(2026, 9, 11, 12, 45).getTime());
-  assert.equal(stampOf('drive_2026-09-25_14-32_9.csv'), new Date(2026, 8, 25, 14, 32).getTime());
-  assert.equal(stampOf('drive_0279.csv'), null);
+  assert.equal(stampOf('trip_2026-10-11_12-45_3fa81c.gpx'), new Date(2026, 9, 11, 12, 45).getTime());
+  assert.equal(stampOf('drive_2026-09-25_14-32_9_3fa81c.csv.nge'), new Date(2026, 8, 25, 14, 32).getTime());
+  assert.equal(stampOf('drive_0279_3fa81c.csv'), null);
 });
 
-test('encrypted names pair and date like plain ones', () => {
-  assert.equal(stampOf('trip_2026-10-11_23-09.gpx.nge'), new Date(2026, 9, 11, 23, 9).getTime());
-  const trips = pairTrips(['trip_2026-10-11_23-09.gpx.nge', 'drive_2026-10-11_23-08.csv.nge', 'sleeplog.txt']);
-  assert.deepEqual(
-    trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
-    [['trip_2026-10-11_23-09.gpx.nge', 'drive_2026-10-11_23-08.csv.nge']],
-  );
+test('the session is the six characters before the extension', () => {
+  assert.equal(sessionOf('trip_2026-10-12_21-19_3fa81c.gpx.nge'), '3fa81c');
+  assert.equal(sessionOf('drive_0279_00b2e1.csv'), '00b2e1');
+  assert.equal(sessionOf('drive_2026-10-12_21-21.csv'), null);
 });
 
-// 2026-10-12: a short GPX at 21:18, the drive's own at 21:19, one CSV at
-// 21:21. Taken GPX by GPX, 21:18 came first and kept the CSV (3 min away),
-// and the real drive opened with no car data.
-test('pairing: the closest pair wins, not the first gpx to ask', () => {
+// 2026-10-12: the pod restarted a minute into a drive. Its GPX from before
+// the restart (21:18) was nearer the drive's CSV (21:21) than... nothing in
+// the names said which belonged together. The session does.
+test('pairing: by session, not by time', () => {
   const trips = pairTrips([
-    'trip_2026-10-12_21-18.gpx.nge',
-    'trip_2026-10-12_21-19.gpx.nge',
-    'drive_2026-10-12_21-21.csv.nge',
-  ]);
-  assert.deepEqual(
-    trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
-    [
-      ['trip_2026-10-12_21-19.gpx.nge', 'drive_2026-10-12_21-21.csv.nge'],
-      ['trip_2026-10-12_21-18.gpx.nge', null],
-    ],
-  );
-});
-
-test('pairing: nearest csv within the window, leftovers on their own, newest first', () => {
-  const trips = pairTrips([
-    'trip_2026-10-11_12-45.gpx',
-    'drive_2026-10-11_12-44.csv',
-    'trip_2026-10-11_15-03.gpx',
-    'drive_2026-10-11_15-02.csv',
-    'drive_2026-10-11_15-30.csv',   // no gpx: GPS module off
-    'drive_0279.csv',               // undated
+    'trip_2026-10-12_21-18_aaaaaa.gpx.nge',
+    'trip_2026-10-12_21-19_bbbbbb.gpx.nge',
+    'drive_2026-10-12_21-21_bbbbbb.csv.nge',
     'sleeplog.txt',
   ]);
   assert.deepEqual(
     trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
     [
-      [null, 'drive_2026-10-11_15-30.csv'],
-      ['trip_2026-10-11_15-03.gpx', 'drive_2026-10-11_15-02.csv'],
-      ['trip_2026-10-11_12-45.gpx', 'drive_2026-10-11_12-44.csv'],
-      [null, 'drive_0279.csv'],
+      ['trip_2026-10-12_21-19_bbbbbb.gpx.nge', 'drive_2026-10-12_21-21_bbbbbb.csv.nge'],
+      ['trip_2026-10-12_21-18_aaaaaa.gpx.nge', null],
     ],
   );
 });
+
+test('pairing: leftovers on their own, numbered last, a second csv of a session kept', () => {
+  const trips = pairTrips([
+    'trip_2026-10-11_15-03_cccccc.gpx',
+    'drive_2026-10-11_15-02_cccccc.csv',
+    'drive_2026-10-11_15-40_cccccc.csv',   // the same session after a card share
+    'drive_2026-10-11_16-30_dddddd.csv',   // no gpx: GPS module off
+    'drive_0279_eeeeee.csv',
+  ]);
+  assert.deepEqual(
+    trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
+    [
+      [null, 'drive_2026-10-11_16-30_dddddd.csv'],
+      [null, 'drive_2026-10-11_15-40_cccccc.csv'],
+      ['trip_2026-10-11_15-03_cccccc.gpx', 'drive_2026-10-11_15-02_cccccc.csv'],
+      [null, 'drive_0279_eeeeee.csv'],
+    ],
+  );
+});
+

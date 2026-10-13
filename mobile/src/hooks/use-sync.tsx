@@ -13,6 +13,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useR
 import { usePod } from '@/hooks/use-pod';
 import { listFiles } from '@/lib/pod';
 import { dropNonLogs, type Inbox, knownBytes, loadInbox, pull } from '@/lib/store';
+import { renameLegacyLogs } from '@/lib/trip-cache';
 import { type PodFile, planPull, type Pull } from '@/lib/sync-plan';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
@@ -47,7 +48,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<Pull[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [inbox, setInbox] = useState(dropNonLogs);
+  const [inbox, setInbox] = useState(() => {
+    // Before anything lists the inbox: Trips pairs by the session in the names.
+    try {
+      renameLegacyLogs();
+    } catch (e) {
+      console.warn('renaming old logs failed', e);
+    }
+    return dropNonLogs();
+  });
   const [landed, setLanded] = useState(0);
   // One check or pull at a time - the pod serves one request at a time anyway.
   const running = useRef<Promise<void> | null>(null);
