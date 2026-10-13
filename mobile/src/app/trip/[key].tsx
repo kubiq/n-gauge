@@ -9,7 +9,7 @@ import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
-import { type CsvSummary, isEncryptedName, type TrackPoint } from '@/lib/trips';
+import { type CsvSummary, type TrackPoint } from '@/lib/trips';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -149,13 +149,6 @@ export default function TripScreen() {
         </Card>
       ) : null}
 
-      {/* One plain line instead of file names: what a driver needs is that the
-          logs are protected and how to get them out. */}
-      <Note>
-        {isEncryptedName(t.gpx ?? t.csv ?? '')
-          ? 'Encrypted by the gauge. ⋮ shares or saves it decrypted.'
-          : '⋮ shares the track or the car data, or saves both to a folder.'}
-      </Note>
     </Screen>
   );
 }
