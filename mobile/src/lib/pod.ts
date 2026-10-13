@@ -58,6 +58,8 @@ export type PodLive = {
   gps: { linkUp: boolean; haveFix: boolean; sats: number; speedKmh: number; hdop: number };
   clock: { valid: boolean; setFromGps: boolean; utc: string; local: string; tz: string };
   rtc: { present: boolean; valid: boolean; seeded: boolean; driftSec: number };
+  /** The running build - firmware from 2026-10-13 on; older answers lack it. */
+  fw?: { build: string; hash: string };
   uptimeMs: number;
 };
 

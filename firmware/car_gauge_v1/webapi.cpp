@@ -142,6 +142,9 @@ static void handleLiveJson() {
            // Over a few drives it says whether the crystal keeps decent time,
            // and if it does not, CAP_SEL is the first thing to suspect.
            "\"rtc\":{\"present\":%s,\"valid\":%s,\"seeded\":%s,\"driftSec\":%ld},"
+           // Which build is running, for the app's Settings: the build time
+           // and the first bytes of the image's ELF hash (as the Device page).
+           "\"fw\":{\"build\":\"%s\",\"hash\":\"%s\"},"
            "\"uptimeMs\":%lu}",
            obd.linkUp ? "true" : "false",
            // Fresh, not "arrived once" - same answer the screen gives.
@@ -159,6 +162,7 @@ static void handleLiveJson() {
            gps.timeSet ? "true" : "false", utc, local, settings.tz,
            rtc.present ? "true" : "false", rtc.timeValid ? "true" : "false",
            rtc.seeded ? "true" : "false", rtc.driftSec,
+           ota_build(), ota_hash(),
            (unsigned long)millis());
   server.send(200, "application/json", b);
 }

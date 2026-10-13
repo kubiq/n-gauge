@@ -2,7 +2,6 @@
   "expo": {
     "name": "N Gauge",
     "slug": "n-gauge",
-    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ngauge",

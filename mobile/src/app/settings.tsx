@@ -2,6 +2,7 @@ import { File } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { AboutCard } from '@/components/about-card';
 import { LogKeyCard } from '@/components/log-key-card';
 import { LogsFolderCard } from '@/components/logs-folder-card';
 import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
@@ -145,6 +146,7 @@ export default function SettingsScreen() {
           </Card>
         </>
       ) : null}
+      <AboutCard />
     </Screen>
   );
 }

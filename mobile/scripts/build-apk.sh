@@ -14,9 +14,10 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk}"
 
 [ -d node_modules ] || npm install
-# android/ is generated: create it when missing (app.json and its plugins
-# are the source of truth for it).
-[ -d android ] || CI=1 npx expo prebuild --platform android --no-install
+# android/ is generated (app.json, app.config.ts and the plugins are the
+# source of truth for it), and regenerated on every build: the version comes
+# from git (app.config.ts), and prebuild is what writes it into build.gradle.
+CI=1 npx expo prebuild --platform android --no-install
 
 # Build output to another disk (this machine: the NVMe at /data; the system
 # disk is nearly full). Set BUILD_ROOT to choose, or BUILD_ROOT= to keep it
