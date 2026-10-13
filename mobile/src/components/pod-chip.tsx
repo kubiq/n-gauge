@@ -7,7 +7,7 @@ import { useSync } from '@/hooks/use-sync';
 import { shortWhen } from '@/lib/format';
 import { C, S } from '@/theme';
 
-// The gauge in every tab's header, the way Garmin Connect shows its watch:
+// The gauge in the header of Trips and Settings, the way Garmin Connect shows its watch:
 // the connection and the sync at a glance, from any screen. The ring is the
 // gauge's round face, its colour the state; a spinner while something is
 // going on. A tap opens the Gauge screen - and, if not connected, connects.
@@ -58,7 +58,7 @@ export function PodChip() {
   );
 }
 
-/** A tab header's right side: the pod, then the ⋮ menu if there is one. */
+/** A header's right side: the gauge, then the ⋮ menu if there is one. */
 export function HeaderActions({ items = [] }: { items?: MenuItem[] }) {
   return (
     <View style={styles.actions}>

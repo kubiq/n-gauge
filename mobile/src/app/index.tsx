@@ -99,23 +99,23 @@ export default function TripsScreen() {
     }
   };
 
-  // ⋮ in the header. "Save all to a folder": decrypted, under plain names -
-  // the way logs reach the PC now that they are encrypted on the card;
-  // already-saved files are skipped. Disabled while a save runs.
+  // The app's one main screen: in the header the gauge (PodChip) and ⋮ with
+  // Settings and "Save all to a folder" - decrypted, under plain names, the
+  // way logs reach the PC now that they are encrypted on the card; already-
+  // saved files are skipped. Disabled while a save runs.
   const navigation = useNavigation();
   const hasTrips = trips.length > 0;
   useLayoutEffect(() => {
+    const save = { label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving };
     navigation.setOptions({
       headerRight: () => (
-        <HeaderActions
-          items={hasTrips ? [{ label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving }] : []}
-        />
+        <HeaderActions items={[{ label: 'Settings', onPress: () => router.push('/settings') }, ...(hasTrips ? [save] : [])]} />
       ),
     });
   }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Screen tabBar>
+    <Screen>
       {status ? <Note>{status}</Note> : null}
       {trips.length === 0 ? (
         <Card>

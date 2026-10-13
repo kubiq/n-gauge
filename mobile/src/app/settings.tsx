@@ -101,7 +101,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen tabBar>
+    <Screen>
       {/* This phone's side, always here: the key is the phone's and is needed
           off the gauge's WiFi too. While connected it also shows the gauge's state. */}
       <LogKeyCard />

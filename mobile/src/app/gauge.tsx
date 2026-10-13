@@ -17,8 +17,8 @@ const LIVE_POLL_MS = 2000;
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
 
 // Everything about the gauge itself, opened from the gauge in the header
-// (PodChip) - like a watch's page in Garmin Connect. The tabs are the
-// phone's own features: Trips and Settings.
+// (PodChip) - like a watch's page in Garmin Connect. The rest of the app is
+// the phone's own: Trips, and Settings in its ⋮ menu.
 export default function GaugeScreen() {
   const pod = usePod();
   const connected = pod.state === 'connected';

@@ -1,6 +1,7 @@
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { HeaderActions } from '@/components/pod-chip';
 import { PodProvider } from '@/hooks/use-pod';
 import { SyncProvider } from '@/hooks/use-sync';
 import { C } from '@/theme';
@@ -17,7 +18,11 @@ export default function RootLayout() {
         <SyncProvider>
           <StatusBar style="light" />
           <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            {/* No tabs: Trips is the app; Settings is in its ⋮ menu, the gauge
+                in the header (PodChip) - and on Settings too, whose gauge
+                half needs the connection. */}
+            <Stack.Screen name="index" options={{ title: 'Trips' }} />
+            <Stack.Screen name="settings" options={{ title: 'Settings', headerRight: () => <HeaderActions /> }} />
             <Stack.Screen name="gauge" options={{ title: 'Gauge' }} />
             <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the gauge’s QR' }} />
             <Stack.Screen name="server" options={{ presentation: 'modal', title: 'Upload server' }} />
