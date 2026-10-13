@@ -115,6 +115,24 @@ test('encrypted names pair and date like plain ones', () => {
   );
 });
 
+// 2026-10-12: a short GPX at 21:18, the drive's own at 21:19, one CSV at
+// 21:21. Taken GPX by GPX, 21:18 came first and kept the CSV (3 min away),
+// and the real drive opened with no car data.
+test('pairing: the closest pair wins, not the first gpx to ask', () => {
+  const trips = pairTrips([
+    'trip_2026-10-12_21-18.gpx.nge',
+    'trip_2026-10-12_21-19.gpx.nge',
+    'drive_2026-10-12_21-21.csv.nge',
+  ]);
+  assert.deepEqual(
+    trips.map((t) => [t.gpx ?? null, t.csv ?? null]),
+    [
+      ['trip_2026-10-12_21-19.gpx.nge', 'drive_2026-10-12_21-21.csv.nge'],
+      ['trip_2026-10-12_21-18.gpx.nge', null],
+    ],
+  );
+});
+
 test('pairing: nearest csv within the window, leftovers on their own, newest first', () => {
   const trips = pairTrips([
     'trip_2026-10-11_12-45.gpx',

@@ -181,26 +181,29 @@ const PAIR_WINDOW_MS = 20 * 60 * 1000;
 export function pairTrips(names: string[]): TripFiles[] {
   const gpx = names.filter(isGpxName);
   const csv = names.filter(isCsvName);
-  const usedCsv = new Set<string>();
-  const out: TripFiles[] = [];
+  // Closest pairs first, across all of them. Taken GPX by GPX, a short GPX
+  // just before a drive's own took its CSV (2026-10-12: 21:18 and 21:19, one
+  // CSV at 21:21), and the drive opened with no car data.
+  const pairs: { g: string; c: string; d: number }[] = [];
   for (const g of gpx) {
     const t = stampOf(g);
-    let best: string | undefined;
-    let bestD = Infinity;
-    if (t !== null) {
-      for (const c of csv) {
-        const tc = stampOf(c);
-        if (tc === null || usedCsv.has(c)) continue;
-        const d = Math.abs(tc - t);
-        if (d <= PAIR_WINDOW_MS && d < bestD) {
-          best = c;
-          bestD = d;
-        }
-      }
+    if (t === null) continue;
+    for (const c of csv) {
+      const tc = stampOf(c);
+      if (tc === null) continue;
+      const d = Math.abs(tc - t);
+      if (d <= PAIR_WINDOW_MS) pairs.push({ g, c, d });
     }
-    if (best) usedCsv.add(best);
-    out.push({ key: g, gpx: g, csv: best, start: t });
   }
+  pairs.sort((a, b) => a.d - b.d);
+  const csvOf = new Map<string, string>();
+  const usedCsv = new Set<string>();
+  for (const { g, c } of pairs) {
+    if (csvOf.has(g) || usedCsv.has(c)) continue;
+    csvOf.set(g, c);
+    usedCsv.add(c);
+  }
+  const out: TripFiles[] = gpx.map((g) => ({ key: g, gpx: g, csv: csvOf.get(g), start: stampOf(g) }));
   for (const c of csv) if (!usedCsv.has(c)) out.push({ key: c, csv: c, start: stampOf(c) });
   return out.sort((a, b) => (b.start ?? -Infinity) - (a.start ?? -Infinity) || b.key.localeCompare(a.key));
 }
