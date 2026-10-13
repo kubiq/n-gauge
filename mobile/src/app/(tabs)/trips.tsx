@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OverflowMenu } from '@/components/overflow-menu';
+import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
@@ -28,9 +29,17 @@ export default function TripsScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const working = useRef(false);
+  // The sync runs by itself (use-sync.tsx): each file it lands re-reads the
+  // list, so a drive appears while this tab is open. Landing during the
+  // summaries below, the re-read waits for them (`again`, then `rerun`).
+  const { landed } = useSync();
+  const again = useRef(false);
+  const [rerun, setRerun] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
+      // Read, so they are real dependencies: the triggers for a re-read.
+      if (landed < 0 || rerun < 0) return;
       const list = tripFiles();
       const have: Sums = {};
       const todo: string[] = [];
@@ -46,8 +55,12 @@ export default function TripsScreen() {
       setSums(have);
       setProblems({});
       // Says plainly whether the cache is doing its job.
+      if (working.current) {
+        if (todo.length) again.current = true;
+        return;
+      }
       setStatus(todo.length ? null : `${Object.keys(have).length} files, all from the cache`);
-      if (working.current || !todo.length) return;
+      if (!todo.length) return;
       working.current = true;
       (async () => {
         for (const [i, name] of todo.entries()) {
@@ -63,8 +76,12 @@ export default function TripsScreen() {
         }
         setStatus(`Read ${todo.length} new, ${Object.keys(have).length} from the cache`);
         working.current = false;
+        if (again.current) {
+          again.current = false;
+          setRerun((n) => n + 1);
+        }
       })();
-    }, []),
+    }, [landed, rerun]),
   );
 
   const saveAll = async () => {

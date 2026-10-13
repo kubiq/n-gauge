@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 import { OverflowMenu } from '@/components/overflow-menu';
 import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { useSync } from '@/hooks/use-sync';
 import { getLive, type PodLive, setClock, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
 import { UploadCard } from '@/components/upload-card';
@@ -18,10 +19,14 @@ export default function PodScreen() {
   const [liveErr, setLiveErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // The pod serves one request at a time: while a sync talks to it, a poll
+  // would only queue behind a multi-MB download and time out.
+  const syncing = useSync().phase !== 'idle';
+
   useEffect(() => {
     // The live card is only rendered while connected, so a stale reading from
     // the last connection is never shown long: the first tick replaces it.
-    if (pod.state !== 'connected') return;
+    if (pod.state !== 'connected' || syncing) return;
     let stop = false;
     const tick = async () => {
       try {
@@ -40,7 +45,7 @@ export default function PodScreen() {
       stop = true;
       clearInterval(t);
     };
-  }, [pod.state]);
+  }, [pod.state, syncing]);
 
   const scan = async () => {
     const r = await scanPodQr();
@@ -104,8 +109,9 @@ export default function PodScreen() {
       {pod.state === 'connected' ? (
         <>
           <Card title="Live">
-            {liveErr ? <Note tone="bad">{liveErr}</Note> : null}
-            {live ? <LiveRows l={live} /> : <Note>Reading…</Note>}
+            {syncing ? <Note>Paused while the logs sync.</Note> : null}
+            {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
+            {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
           </Card>
           <Card title="Actions">
             <Button

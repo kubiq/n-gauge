@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'rea
 import { LogKeyCard } from '@/components/log-key-card';
 import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { useSync } from '@/hooks/use-sync';
 import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
 import { checkValue, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
 import { C, S } from '@/theme';
@@ -53,15 +54,21 @@ export default function SettingsScreen() {
   }
   const nChanged = Object.keys(changes).length;
 
+  // The pod serves one request at a time, and a download holds it for up to
+  // two minutes: a running sync is stopped first, and picked up again after.
+  const sync = useSync();
+
   const save = async () => {
     setBusy('save');
     try {
+      await sync.cancel();
       Alert.alert('Settings', await saveSettings(saveForm(changes)));
       await load();
     } catch (e) {
       Alert.alert('Settings', String((e as Error).message));
     } finally {
       setBusy(null);
+      sync.sync();
     }
   };
 
@@ -80,6 +87,8 @@ export default function SettingsScreen() {
         onPress: async () => {
           setBusy('fw');
           try {
+            // No sync after: the pod restarts, and the reconnect syncs.
+            await sync.cancel();
             Alert.alert('Firmware', await uploadFirmware(bin));
           } catch (e) {
             Alert.alert('Firmware', String((e as Error).message));
