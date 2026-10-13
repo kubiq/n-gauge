@@ -1007,10 +1007,10 @@ static const GaugeView viewOrder[] = {
   VIEW_TPMS,
   VIEW_GPS,
   VIEW_TRACK,        // next to GPS: same source, and reached from it on track days
-  VIEW_WIFI,
 #if FEATURE_GMETER
   VIEW_GMETER,
 #endif
+  VIEW_WIFI,         // last: set-up and the phone, not something to read while driving
 };
 static const int VIEW_ORDER_N = sizeof(viewOrder) / sizeof(viewOrder[0]);
 static int viewIdx = 0;
