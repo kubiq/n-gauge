@@ -22,12 +22,13 @@ import {
 
 const dir = new Directory(Paths.document, 'trips');
 
-type Cached<T> = { size: number; v: 1; summary: T };
+type Cached<T> = { size: number; v: number; summary: T };
 export type GpxStats = Omit<GpxSummary, 'track'>;
 
 // Bump when a summary's shape or its maths change, so old caches are redone.
 // 2: bad fixes dropped from the track, ends and top speed (2026-10-13).
-const VERSION = 2;
+// 3: the bare <speed> of September's files read (2026-10-13).
+const VERSION = 3;
 
 function read<T>(f: File, size: number): T | null {
   if (!f.exists) return null;

@@ -57,9 +57,10 @@ export function distM(lat1: number, lon1: number, lat2: number, lon2: number): n
 }
 
 // Matches the trkpt line logger.cpp writes. <time> is empty while the clock
-// is unknown, and older files may lack the speed extension.
+// is unknown. The speed is in the gpxtpx extension; files from before
+// 2026-09-23 have a bare <speed> instead, and some have none.
 const TRKPT =
-  /<trkpt lat="(-?[\d.]+)" lon="(-?[\d.]+)">(?:<ele>[^<]*<\/ele>)?<time>([^<]*)<\/time>.*?(?:<gpxtpx:speed>([\d.]+)<\/gpxtpx:speed>|<\/trkpt>)/g;
+  /<trkpt lat="(-?[\d.]+)" lon="(-?[\d.]+)">(?:<ele>[^<]*<\/ele>)?<time>([^<]*)<\/time>.*?(?:<(?:gpxtpx:)?speed>([\d.]+)<\/(?:gpxtpx:)?speed>|<\/trkpt>)/g;
 
 export function parseGpx(text: string): GpxSummary {
   // Pass 0: every point, with its trkseg.

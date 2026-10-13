@@ -94,6 +94,16 @@ test('gpx: the real 23.9. drive - its end and top speed', { skip: !existsSync(re
   assert.ok(r.distanceM > 145_000 && r.distanceM < 150_000);
 });
 
+// September's files: a bare <speed>, not the gpxtpx one - read as no speed at
+// all, it showed "Top speed 0 km/h", 7 min moving and 185 km/h average.
+test('gpx: the older bare <speed> is read', () => {
+  const old = (lat: number, time: string, ms: number) =>
+    `<trkpt lat="${lat}" lon="14.0"><ele>355.8</ele><time>${time}</time><sat>4</sat><hdop>9.9</hdop><speed>${ms.toFixed(2)}</speed></trkpt>\n`;
+  const s = parseGpx(gpx([old(50.0, '2026-09-20T13:40:00Z', 20), old(50.0005, '2026-09-20T13:40:05Z', 22)]));
+  assert.equal(Math.round(s.maxKmh), 79);
+  assert.equal(s.movingS, 5);
+});
+
 test('gpx: a bad FIRST fix does not throw the drive away', () => {
   const pts = [pt(51.0, 14.0, '2026-09-23T07:00:00Z', 10)];   // 111 km off
   for (let i = 1; i <= 120; i++) pts.push(pt(50.0 + i * 0.000004, 14.0, `2026-09-23T07:00:${String(Math.floor(i / 25) + 1).padStart(2, '0')}Z`, 10));
