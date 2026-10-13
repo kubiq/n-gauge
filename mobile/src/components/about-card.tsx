@@ -15,7 +15,8 @@ export function AboutCard() {
   useEffect(() => {
     if (!connected) return;
     getLive().then(
-      (l) => setFw(l.fw ? `${l.fw.build} (${l.fw.hash})` : 'older firmware'),
+      // The build time and commit; the image hash is on the gauge's Device page.
+      (l) => setFw(l.fw ? l.fw.build : 'older firmware'),
       () => setFw(null),
     );
   }, [connected]);
@@ -24,7 +25,7 @@ export function AboutCard() {
   return (
     <Card title="About">
       <Row label="App" value={`${Constants.expoConfig?.version ?? '?'}${build ? ` (${build})` : ''}`} />
-      {connected && fw ? <Row label="Gauge firmware" value={fw} /> : null}
+      {connected && fw ? <Row label="Gauge" value={fw} /> : null}
     </Card>
   );
 }
