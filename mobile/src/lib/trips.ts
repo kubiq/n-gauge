@@ -27,8 +27,25 @@ export type GpxSummary = {
 
 const MOVING_KMH = 3;
 const THIN_M = 10;
-// Faster than this between two points is a position glitch, not driving.
-const GLITCH_KMH = 400;
+// Bad fixes. Logs from before the firmware's own quality gate (sats / hdop,
+// late September 2026) have them, with no quality data to tell them by - the
+// 23.9. drive ended on a fix 13.5 km away; after a tunnel it sat 2.6 km off
+// the road for ten seconds claiming 260 km/h; others start on fixes 150 m
+// out that converge, or hold one-point spikes of 60 m. From positions and
+// times, then, in two passes:
+//  1. the drive is cut into runs wherever two consecutive points jump over
+//     BREAK_M at more than GLITCH_KMH (so 25 Hz jitter of a few metres does
+//     not cut it), at a new <trkseg>, and across a reception gap of GAP_MS;
+//  2. runs shorter than RUN_MIN_MS that a jump borders are dropped - spikes,
+//     a bad stretch, a bad end, a converging start - but never the longest
+//     run. What is kept makes the map, the bounds, the ends, the distance and
+//     the top speed.
+// Distance is summed between consecutive kept points of a trkseg when the
+// step is plausible, so it still bridges a tunnel's gap.
+const GLITCH_KMH = 300;
+const BREAK_M = 30;
+const GAP_MS = 20_000;
+const RUN_MIN_MS = 30_000;
 
 const R = 6371008.8;
 export function distM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -45,50 +62,90 @@ const TRKPT =
   /<trkpt lat="(-?[\d.]+)" lon="(-?[\d.]+)">(?:<ele>[^<]*<\/ele>)?<time>([^<]*)<\/time>.*?(?:<gpxtpx:speed>([\d.]+)<\/gpxtpx:speed>|<\/trkpt>)/g;
 
 export function parseGpx(text: string): GpxSummary {
-  const s: GpxSummary = { start: null, end: null, distanceM: 0, movingS: 0, maxKmh: 0, points: 0, track: [], bbox: null };
-  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  // A new <trkseg> is a gap in reception: no distance across it.
-  for (const seg of text.split('<trkseg>')) {
-    let pLat = NaN, pLon = NaN, pT = NaN;
-    let kLat = NaN, kLon = NaN;
+  // Pass 0: every point, with its trkseg.
+  type Pt = { lat: number; lon: number; t: number; kmh: number; seg: number };
+  const pts: Pt[] = [];
+  text.split('<trkseg>').forEach((seg, si) => {
     TRKPT.lastIndex = 0;
     for (let m = TRKPT.exec(seg); m; m = TRKPT.exec(seg)) {
-      const lat = +m[1], lon = +m[2];
-      const t = m[3] ? Date.parse(m[3]) : NaN;
-      const kmh = m[4] ? +m[4] * 3.6 : NaN;
-      s.points++;
-      if (!Number.isNaN(t)) {
-        if (s.start === null) s.start = t;
-        s.end = t;
+      pts.push({ lat: +m[1], lon: +m[2], t: m[3] ? Date.parse(m[3]) : NaN, kmh: m[4] ? +m[4] * 3.6 : NaN, seg: si });
+    }
+  });
+  // Plausible to go from a to b? Without times (no clock yet) it cannot be
+  // judged, so it is.
+  const plausible = (a: Pt, b: Pt, d: number) => {
+    if (Number.isNaN(a.t) || Number.isNaN(b.t)) return true;
+    const dt = (b.t - a.t) / 1000;
+    return dt > 0 ? (d / dt) * 3.6 <= GLITCH_KMH : d <= BREAK_M;
+  };
+
+  // Pass 1: runs. A cut is a JUMP (a step the car could not have made, even
+  // across a gap) or a plain GAP (a new trkseg, a reception gap); a short run
+  // goes only if a jump borders it - a short stretch between two tunnels is
+  // real.
+  type Run = { i: number; j: number; jumpBefore: boolean; jumpAfter: boolean };
+  const runs: Run[] = [];
+  let from = 0;
+  let jumpBefore = false;
+  for (let k = 1; k <= pts.length; k++) {
+    const a = pts[k - 1], b = pts[k];
+    let jump = false, gap = !b;
+    if (b) {
+      const d = distM(a.lat, a.lon, b.lat, b.lon);
+      jump = d > BREAK_M && !plausible(a, b, d);
+      gap = b.seg !== a.seg || b.t - a.t > GAP_MS;
+    }
+    if (jump || gap) {
+      runs.push({ i: from, j: k - 1, jumpBefore, jumpAfter: jump });
+      from = k;
+      jumpBefore = jump;
+    }
+  }
+  const length = (r: Run) => (Number.isNaN(pts[r.j].t - pts[r.i].t) ? Infinity : pts[r.j].t - pts[r.i].t);
+  let longest = 0;
+  runs.forEach((r, k) => {
+    if (length(r) > length(runs[longest])) longest = k;
+  });
+  const keep = runs
+    .filter((r, k) => k === longest || length(r) >= RUN_MIN_MS || !(r.jumpBefore || r.jumpAfter))
+    .map((r): [number, number] => [r.i, r.j]);
+
+  // Pass 2: the stats, from the kept points only.
+  const s: GpxSummary = { start: null, end: null, distanceM: 0, movingS: 0, maxKmh: 0, points: pts.length, track: [], bbox: null };
+  let prev: Pt | undefined;
+  let kept: Pt | undefined;   // the last point that went into the track
+  for (const [i, j] of keep) {
+    for (let k = i; k <= j; k++) {
+      const p = pts[k];
+      if (!Number.isNaN(p.t)) {
+        if (s.start === null) s.start = p.t;
+        s.end = p.t;
       }
-      if (!Number.isNaN(pLat)) {
-        const d = distM(pLat, pLon, lat, lon);
-        const dt = (t - pT) / 1000;
-        const glitch = dt > 0 && (d / dt) * 3.6 > GLITCH_KMH;
-        if (!glitch) {
+      // No distance across a trkseg; across a dropped run or a gap, only a
+      // step the car could have made.
+      if (prev && prev.seg === p.seg) {
+        const d = distM(prev.lat, prev.lon, p.lat, p.lon);
+        if (plausible(prev, p, d)) {
           s.distanceM += d;
-          if (dt > 0 && dt < 10 && (Number.isNaN(kmh) ? (d / dt) * 3.6 : kmh) > MOVING_KMH) s.movingS += dt;
+          const dt = (p.t - prev.t) / 1000;
+          if (dt > 0 && dt < 10 && (Number.isNaN(p.kmh) ? (d / dt) * 3.6 : p.kmh) > MOVING_KMH) s.movingS += dt;
         }
       }
-      if (!Number.isNaN(kmh) && kmh > s.maxKmh) s.maxKmh = kmh;
-      if (Number.isNaN(kLat) || distM(kLat, kLon, lat, lon) >= THIN_M) {
-        s.track.push([lon, lat, Number.isNaN(kmh) ? 0 : Math.round(kmh)]);
-        kLat = lat;
-        kLon = lon;
+      if (!Number.isNaN(p.kmh) && p.kmh > s.maxKmh) s.maxKmh = p.kmh;
+      // Thinned for drawing, and each run's last point, so the line reaches it.
+      if (!kept || k === j || distM(kept.lat, kept.lon, p.lat, p.lon) >= THIN_M) {
+        if (kept !== p) s.track.push([p.lon, p.lat, Number.isNaN(p.kmh) ? 0 : Math.round(p.kmh)]);
+        kept = p;
       }
-      if (lon < minLon) minLon = lon;
-      if (lon > maxLon) maxLon = lon;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-      pLat = lat;
-      pLon = lon;
-      pT = t;
+      prev = p;
     }
-    // Keep where the segment ended, so the drawn line reaches it.
-    const last = s.track[s.track.length - 1];
-    if (!Number.isNaN(pLat) && last && (last[0] !== pLon || last[1] !== pLat)) s.track.push([pLon, pLat, last[2]]);
   }
-  if (s.points) s.bbox = [minLon, minLat, maxLon, maxLat];
+  // From the kept track - a loop, not Math.min(...): a long drive is too
+  // many arguments for some engines.
+  for (const [lon, lat] of s.track) {
+    if (!s.bbox) s.bbox = [lon, lat, lon, lat];
+    else s.bbox = [Math.min(s.bbox[0], lon), Math.min(s.bbox[1], lat), Math.max(s.bbox[2], lon), Math.max(s.bbox[3], lat)];
+  }
   return s;
 }
 

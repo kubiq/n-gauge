@@ -23,15 +23,15 @@ test('gpx: distance, time, top speed', () => {
   const s = parseGpx(
     gpx([
       pt(50.0, 14.0, '2026-10-11T10:00:00Z', 10),
-      pt(50.001, 14.0, '2026-10-11T10:00:10Z', 30),   // 111 m in 10 s
-      pt(50.002, 14.0, '2026-10-11T10:00:20Z', 20),
+      pt(50.001, 14.0, '2026-10-11T10:00:10Z', 11),   // 111 m in 10 s: 40 km/h, as reported
+      pt(50.002, 14.0, '2026-10-11T10:00:20Z', 10),
     ]),
   );
   assert.equal(s.points, 3);
   assert.equal(s.start, Date.UTC(2026, 9, 11, 10, 0, 0));
   assert.equal(s.end, Date.UTC(2026, 9, 11, 10, 0, 20));
   assert.ok(Math.abs(s.distanceM - 222.4) < 1);
-  assert.equal(Math.round(s.maxKmh), 108);
+  assert.equal(Math.round(s.maxKmh), 40);
   assert.equal(s.track.length, 3);
   assert.deepEqual(s.bbox, [14, 50, 14, 50.002]);
 });
@@ -54,6 +54,52 @@ test('gpx: a position glitch adds no distance', () => {
     ]),
   );
   assert.equal(s.distanceM, 0);
+});
+
+// 2026-10-13, the 23.9. drive: its last fix 13.5 km away, 113 s after the one
+// before (431 km/h) - drawn as the end of the drive, with a line out to it.
+test('gpx: a bad last fix is not the end of the drive', () => {
+  const s = parseGpx(
+    gpx([
+      pt(50.0, 14.0, '2026-09-23T09:34:54Z', 15),
+      pt(50.0001, 14.0, '2026-09-23T09:34:55Z', 15),
+      pt(50.1216, 14.0, '2026-09-23T09:36:48Z', 10),   // 13.5 km on
+    ]),
+  );
+  assert.equal(s.end, Date.UTC(2026, 8, 23, 9, 34, 55));
+  assert.equal(s.track[s.track.length - 1][1], 50.0001);
+  assert.ok(s.bbox![3] < 50.001, 'bounds exclude the bad fix');
+});
+
+// The other one: after a reception gap (a tunnel), ten seconds of fixes
+// 2.6 km off the road claiming 260 km/h, then a jump back. Its way IN looks
+// plausible (2.35 km over 44 s); the jump OUT gives it away.
+test('gpx: a bad stretch after a gap is dropped, top speed and all', () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 8, 23, 7, 0, 0) + s * 1000).toISOString();
+  const pts = [];
+  for (let s = 0; s <= 60; s++) pts.push(pt(50.0 + s * 0.0002, 14.0, at(s), 22));        // 80 km/h, 60 s
+  for (let s = 105; s <= 115; s++) pts.push(pt(50.0333, 14.0 + s * 0.00001, at(s), 72));  // the bad stretch
+  for (let s = 116; s <= 180; s++) pts.push(pt(50.012 + (s - 116) * 0.0002, 14.0, at(s), 22)); // back on the road
+  const r = parseGpx(gpx(pts));
+  assert.equal(Math.round(r.maxKmh), 79, 'not 260');
+  assert.ok(r.bbox![3] < 50.03, 'the bad stretch is not in the bounds');
+});
+
+// The real file, where there is one (data/ is not in the repo).
+const real = '../data/trip_2026-09-23_08-37_b3edf8.gpx';
+test('gpx: the real 23.9. drive - its end and top speed', { skip: !existsSync(real) }, () => {
+  const r = parseGpx(readFileSync(real, 'utf8'));
+  assert.equal(new Date(r.end!).toISOString().slice(11, 19), '09:34:55');   // not 09:36:48, 13.5 km off
+  assert.ok(r.maxKmh < 200, `top ${Math.round(r.maxKmh)} km/h`);           // not 261
+  assert.ok(r.distanceM > 145_000 && r.distanceM < 150_000);
+});
+
+test('gpx: a bad FIRST fix does not throw the drive away', () => {
+  const pts = [pt(51.0, 14.0, '2026-09-23T07:00:00Z', 10)];   // 111 km off
+  for (let i = 1; i <= 120; i++) pts.push(pt(50.0 + i * 0.000004, 14.0, `2026-09-23T07:00:${String(Math.floor(i / 25) + 1).padStart(2, '0')}Z`, 10));
+  const s = parseGpx(gpx(pts));
+  assert.ok(s.distanceM > 0, 'the real points count once re-anchored');
+  assert.ok(s.bbox![3] < 50.01 || s.bbox![1] > 50.9, 'not one box spanning both');
 });
 
 test('gpx: thins 20 Hz points but keeps the end', () => {
