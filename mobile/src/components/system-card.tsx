@@ -11,10 +11,12 @@ const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB
 const gb = (kbytes: number) => `${(kbytes / 1048576).toFixed(1)} GB`;
 
 // The gauge's own resources, from its live status (/api/live "sys"). Internal
-// RAM is the one to watch: WiFi needs ~46 KB of it to start, and the gauge
-// refuses below AP_MIN_INTERNAL_HEAP rather than crash.
+// RAM is the one to watch. The gauge starts WiFi only with 80 KB free
+// (AP_MIN_INTERNAL_HEAP) and WiFi then holds ~46 KB of it, so with the app
+// connected ~45-55 KB free is normal (seen 2026-10-13: 53 KB, lowest 44 KB).
+// Red under 20 KB at its lowest: tight enough that an allocation may fail.
 export function SystemCard({ sys, uptimeMs }: { sys: Sys; uptimeMs: number }) {
-  const ramLow = sys.heapMin < 60 * 1024;
+  const ramLow = sys.heapMin < 20 * 1024;
   return (
     <Card title="System">
       <Bar
