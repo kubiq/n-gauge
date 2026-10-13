@@ -1637,13 +1637,10 @@ void ui_update_usbdisk(bool pcConnected, bool shared) {
   lv_obj_add_flag(wifiTitle, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(shareBtn, LV_OBJ_FLAG_HIDDEN);
   const lv_color_t c = s == 2 ? COL_OIL : COL_BLUE;
-  lv_label_set_text(shareLbl, s == 2 ? "SD on PC: eject there" : "Share SD card with PC");
+  // While shared, the same button takes the card back (usbdisk_unshare).
+  lv_label_set_text(shareLbl, s == 2 ? "Stop sharing SD card" : "Share SD card with PC");
   lv_obj_set_style_text_color(shareLbl, c, 0);
   lv_obj_set_style_border_color(shareBtn, c, 0);
-  // While shared it is a status, not a control: only the PC's eject (or
-  // pulling the cable) gives the card back.
-  if (s == 2) lv_obj_clear_flag(shareBtn, LV_OBJ_FLAG_CLICKABLE);
-  else        lv_obj_add_flag(shareBtn, LV_OBJ_FLAG_CLICKABLE);
 }
 
 bool ui_take_share_tap() {

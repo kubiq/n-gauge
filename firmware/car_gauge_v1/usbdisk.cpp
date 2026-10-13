@@ -11,6 +11,7 @@ void usbdisk_init() {}
 void usbdisk_task() {}
 bool usbdisk_host_connected() { return false; }
 bool usbdisk_share() { return false; }
+void usbdisk_unshare() {}
 UsbDiskState usbdisk_state() { return USBDISK_IDLE; }
 #else
 
@@ -32,6 +33,7 @@ UsbDiskState usbdisk_state() { return USBDISK_IDLE; }
 
 static volatile UsbDiskState state = USBDISK_IDLE;
 static volatile bool ejected = false;   // set from the USB task
+static bool stopped = false;            // "Stop sharing" tapped on the gauge
 static volatile uint32_t sectors = 0;   // the card's size while shared
 
 static void notPresent(uint8_t lun) { tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00); }
@@ -148,6 +150,7 @@ bool usbdisk_share() {
     return false;
   }
   ejected = false;
+  stopped = false;
   state = USBDISK_SHARED;
   Serial.printf("[OK] SD card shared with the PC (%lu sectors)\n", (unsigned long)sectors);
   return true;
@@ -155,12 +158,21 @@ bool usbdisk_share() {
 
 void usbdisk_task() {
   if (state != USBDISK_SHARED) return;
-  // Back when the PC ejects it, or when the cable goes (then the PC never
-  // got to finish anything - same remount either way).
-  if (!ejected && usbdisk_host_connected()) return;
+  // Back when the PC ejects it, when "Stop sharing" is tapped on the gauge,
+  // or when the cable goes.
+  if (!ejected && !stopped && usbdisk_host_connected()) return;
   state = USBDISK_IDLE;
   logger_resume();
-  Serial.printf("[OK] SD card back from the PC (%s)\n", ejected ? "ejected" : "cable removed");
+  Serial.printf("[OK] SD card back from the PC (%s)\n",
+                ejected ? "ejected" : stopped ? "stopped on the gauge" : "cable removed");
+}
+
+// Safe from the gauge's side since the drive is read-only and answers
+// MEDIUM NOT PRESENT once taken back (both 2026-10-13): the PC can lose
+// nothing but a copy still running, which it reports as failed. Before,
+// with the PC writing, only its own eject could end a share.
+void usbdisk_unshare() {
+  if (state == USBDISK_SHARED) stopped = true;
 }
 
 #endif

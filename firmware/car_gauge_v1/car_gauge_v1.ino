@@ -524,8 +524,8 @@ void loop() {
     // a slower start. Returns to the remembered view, which cannot itself be
     // VIEW_WIFI thanks to the guard above.
     static uint32_t wifiShownAt = 0;
-    // While the SD card is lent to a PC the screen stays, so its status
-    // ("SD on PC - eject it there") does not vanish - and that only happens
+    // While the SD card is lent to a PC the screen stays, so its "Stop
+    // sharing" button does not vanish - and that only happens
     // with a PC on the cable, i.e. on the bench, not with a passer-by.
     const bool holdWifi = usbdisk_state() == USBDISK_SHARED;
     // A touch on the screen restarts the countdown too.
@@ -552,9 +552,12 @@ void loop() {
   rtc_task();          // keep the PCF85063 in step with GNSS time
   brightness_update(false);   // day/night, every NIGHT_CHECK_MS
   ota_task();                 // confirms a freshly updated firmware once healthy
-  // The SD card as a USB drive, on the bench: share on a tap, take it back
-  // when the PC ejects it or the cable goes.
-  if (ui_take_share_tap()) usbdisk_share();
+  // The SD card as a USB drive, on the bench: a tap shares it, a tap while
+  // shared takes it back - as do the PC's eject and pulling the cable.
+  if (ui_take_share_tap()) {
+    if (usbdisk_state() == USBDISK_SHARED) usbdisk_unshare();
+    else                                   usbdisk_share();
+  }
   usbdisk_task();
   ui_update_usbdisk(usbdisk_host_connected(), usbdisk_state() == USBDISK_SHARED);
 #if WIFI_AP_ALWAYS
