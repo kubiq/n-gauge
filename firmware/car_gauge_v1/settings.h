@@ -26,6 +26,10 @@ struct Settings {
   char    tz[40];         // DERIVED: POSIX TZ rule built from the two above.
                           // Never edit directly - settings_set_tz_offset owns it.
   uint8_t lastView;       // GaugeView that was on screen when we last saved
+  // The screens a tap or swipe cycles through, in order: GaugeView ids as
+  // digits ("0245736"); one left out is hidden. Always holds VIEW_WIFI - the
+  // way to the phone. Set from the app (settings_set_views).
+  char    views[12];          // room for every GaugeView (8) and the NUL
   // G-meter zero. The pod is mounted tilted on the dash, so gravity leaks
   // into the lateral/longitudinal axes and the dot sits off-centre at rest.
   // These are the at-rest readings, subtracted before display. Persisted
@@ -71,6 +75,11 @@ void settings_apply_tz();   // push settings.tz into libc
 // happens on a different cadence - whenever the driver changes view - and
 // there is no reason to rewrite every other key for it.
 void settings_save_view(uint8_t view);
+
+// The screen order, as the app sends it: digits, see Settings.views. Cleaned
+// (calc_view_order) - unknown and repeated ids dropped, WiFi kept - and
+// applied to the cycle at once; persisted by the next settings_save().
+void settings_set_views(const char *ids);
 
 // Store the current at-rest accelerometer reading as the g-meter zero.
 void settings_set_gmeter_zero(float x, float y, float z);

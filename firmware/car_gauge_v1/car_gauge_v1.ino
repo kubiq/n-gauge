@@ -151,8 +151,9 @@ void setup() {
   // needed: a device that already has it in NVS from before the save guard
   // existed would otherwise keep booting onto the AP passphrase forever, and
   // the code would look perfectly correct while doing it.
+  // Nor a screen hidden since it was stored (settings.views).
   ui_set_view((GaugeView)settings.lastView);
-  if (ui_current_view() == VIEW_WIFI) ui_set_view(VIEW_OIL);
+  if (ui_current_view() == VIEW_WIFI || !ui_view_shown(ui_current_view())) ui_set_view(ui_home_view());
   // Then make lastView agree with what actually loaded. ui_set_view() silently
   // ignores a view it cannot show (out of range, or the g-meter compiled out),
   // so without this the screen falls back to the default while lastView keeps
@@ -567,7 +568,7 @@ void loop() {
         ui_set_view((GaugeView)settings.lastView);
         // Belt and braces: if that did not take, force a known view rather
         // than leaving the passphrase on screen for another minute, forever.
-        if (ui_current_view() == VIEW_WIFI) ui_set_view(VIEW_OIL);
+        if (ui_current_view() == VIEW_WIFI) ui_set_view(ui_home_view());
       }
     } else {
       wifiShownAt = 0;

@@ -100,9 +100,10 @@ static void handleSettingsJson() {
   if (n < sizeof(b))
     n += snprintf(b + n, sizeof(b) - n,
                   "\"night\":%s,\"apSsid\":\"%s\",\"tzOffset\":%d,\"tzDst\":%s,\"tz\":\"%s\","
-                  "\"logKey\":\"%s\"}",
+                  "\"logKey\":\"%s\",\"views\":\"%s\"}",
                   brightness_is_night() ? "true" : "false", jsonEscape(settings.apSsid),
-                  (int)settings.tzOffset, settings.tzDst ? "true" : "false", settings.tz, fp);
+                  (int)settings.tzOffset, settings.tzDst ? "true" : "false", settings.tz, fp,
+                  settings.views);              // digits only: nothing to escape
   if (n >= sizeof(b)) { server.send(500, "text/plain", "settings JSON too long"); return; }
   server.send(200, "application/json", b);
 }
@@ -267,6 +268,9 @@ static void handleSave() {
     if (v.length() == 0) continue;
     setting_set(d, v.toFloat());
   }
+  // The screen order, from the app: cleaned by the setter, and the next tap
+  // already cycles by it.
+  if (server.hasArg("views")) settings_set_views(server.arg("views").c_str());
   settings_save();
 
   // The one setting with immediate hardware effect - day or night value,

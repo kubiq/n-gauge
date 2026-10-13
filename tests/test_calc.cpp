@@ -444,6 +444,30 @@ static void gmeter_shipped_mapping_is_the_bench_verified_one() {
   CHECK(GM_FLIP_Y);
 }
 
+// ---- the screen order (settings.views) -----------------------------------------
+
+static void view_order(const char *in, const char *expect) {
+  char out[12];
+  calc_view_order(in, "0234567", '6', out, sizeof(out));
+  CHECK(strcmp(out, expect) == 0);
+}
+
+static void view_order_keeps_a_good_order() { view_order("0245736", "0245736"); }
+static void view_order_hides_left_out_screens() { view_order("06", "06"); }
+static void view_order_always_has_wifi() {
+  view_order("0245", "02456");
+  view_order("", "6");
+}
+static void view_order_drops_unknown_and_repeated() {
+  view_order("0 1x2 2 9 6 0", "026");   // 1 (old coolant), x, 9, spaces, repeats
+}
+static void view_order_never_overflows() {
+  char out[4];
+  calc_view_order("02345", "0234567", '6', out, sizeof(out));
+  CHECK(strlen(out) <= 3);
+  CHECK(strchr(out, '6') != nullptr);   // WiFi kept even when cut short
+}
+
 // ---- drive detection (drops the WiFi AP while driving) -----------------------
 
 // Feed a constant input for `ms`, in 100 ms steps, as the loop would.
@@ -677,6 +701,11 @@ int main() {
   TEST(gmeter_degenerate_calibration_falls_back);
   TEST(gmeter_screen_axis_straight_down_does_not_divide_by_zero);
   TEST(gmeter_shipped_mapping_is_the_bench_verified_one);
+  TEST(view_order_keeps_a_good_order);
+  TEST(view_order_hides_left_out_screens);
+  TEST(view_order_always_has_wifi);
+  TEST(view_order_drops_unknown_and_repeated);
+  TEST(view_order_never_overflows);
   TEST(drive_starts_only_after_speed_is_held);
   TEST(a_brief_burst_of_speed_does_not_start_a_drive);
   TEST(a_traffic_light_does_not_end_a_drive);

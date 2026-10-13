@@ -960,25 +960,13 @@ void ui_boot_anim_end() {
 }
 
 // --- switching --------------------------------------------------------------
-// Cycle order, and the single place that decides which views are reachable.
-// Anything left out of here is simply never shown.
-static const GaugeView viewOrder[] = {
-  VIEW_OIL,          // now oil AND coolant together
-  VIEW_BOOST,
-  VIEW_TPMS,
-  VIEW_GPS,
-  VIEW_TRACK,        // next to GPS: same source, and reached from it on track days
-  VIEW_GMETER,
-  VIEW_WIFI,         // last: set-up and the phone, not something to read while driving
-};
-static const int VIEW_ORDER_N = sizeof(viewOrder) / sizeof(viewOrder[0]);
-static int viewIdx = 0;
+// The cycle order is settings.views - set from the app, default
+// VIEW_ORDER_DEFAULT - and read on every step, so a change applies at the
+// next tap. A view left out of it is never cycled to.
 
 void ui_set_view(GaugeView v) {
   if (v < 0 || v >= VIEW_COUNT || !scr[v]) return;   // never load a disabled view
   s_view = v;
-  // Keep the cycle position in step, so the next tap continues from here.
-  for (int i = 0; i < VIEW_ORDER_N; i++) if (viewOrder[i] == v) { viewIdx = i; break; }
   lv_scr_load(scr[v]);
 }
 
@@ -989,13 +977,25 @@ void ui_step_view(int delta) {
   // Deliberately NOT in ui_set_view(), which also runs for the boot animation
   // and for restoring the saved screen - neither of which is a person.
   power_note_activity();
-  // + VIEW_ORDER_N keeps it non-negative for delta = -1, since % on a
+  const char *order = settings.views;
+  const int n = (int)strlen(order);          // >= 1: it always holds VIEW_WIFI
+  const char *at = strchr(order, '0' + s_view);
+  // From a view not in the order (hidden since it was shown), start at
+  // either end. + n keeps it non-negative for delta = -1, since % on a
   // negative left operand is negative in C.
-  viewIdx = (viewIdx + VIEW_ORDER_N + delta) % VIEW_ORDER_N;
-  ui_set_view(viewOrder[viewIdx]);
+  const int i = at ? (int)(at - order + n + delta) % n : (delta > 0 ? 0 : n - 1);
+  ui_set_view((GaugeView)(order[i] - '0'));
 }
 
 GaugeView ui_current_view()  { return s_view; }
+
+bool ui_view_shown(GaugeView v) { return strchr(settings.views, '0' + v) != nullptr; }
+
+GaugeView ui_home_view() {
+  for (const char *p = settings.views; *p; p++)
+    if (*p - '0' != VIEW_WIFI) return (GaugeView)(*p - '0');
+  return VIEW_OIL;                   // everything hidden but WiFi
+}
 
 #if FRAME_STATS
 // Render cost per screen, without anyone swiping: a full-screen redraw, and a
@@ -1019,14 +1019,15 @@ void ui_bench() {
     if (pass == 0) lv_obj_clear_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
     else           lv_obj_add_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
     Serial.printf("[BENCH] rim %s\n", pass == 0 ? "ON" : "OFF");
-    for (int i = 0; i < VIEW_ORDER_N; i++) {
-      ui_set_view(viewOrder[i]);
+    for (const char *p = settings.views; *p; p++) {
+      const GaugeView v = (GaugeView)(*p - '0');
+      ui_set_view(v);
       benchRefr(NULL);                                 // settle the load
       uint32_t full = 0, part = 0;
       for (int k = 0; k < 3; k++)  full += benchRefr(NULL);
       for (int k = 0; k < 20; k++) part += benchRefr(&small);
       Serial.printf("[BENCH]   view %d: full %lu us, 40x40 %lu us\n",
-                    (int)viewOrder[i], (unsigned long)(full / 3),
+                    (int)v, (unsigned long)(full / 3),
                     (unsigned long)(part / 20));
       esp_task_wdt_reset();
     }

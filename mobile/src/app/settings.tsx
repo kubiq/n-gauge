@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'rea
 import { AboutCard } from '@/components/about-card';
 import { LogKeyCard } from '@/components/log-key-card';
 import { LogsFolderCard } from '@/components/logs-folder-card';
+import { ScreenOrderCard } from '@/components/screen-order-card';
 import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
@@ -60,11 +61,12 @@ export default function SettingsScreen() {
   // two minutes: a running sync is stopped first, and picked up again after.
   const sync = useSync();
 
-  const save = async () => {
-    setBusy('save');
+  // `what` names the button that shows busy; `body` is the /save form.
+  const save = async (what: string, body: string) => {
+    setBusy(what);
     try {
       await sync.cancel();
-      Alert.alert('Settings', await saveSettings(saveForm(changes)));
+      Alert.alert('Settings', await saveSettings(body));
       await load();
     } catch (e) {
       Alert.alert('Settings', String((e as Error).message));
@@ -136,8 +138,18 @@ export default function SettingsScreen() {
             title={nChanged ? `Save ${nChanged} change${nChanged === 1 ? '' : 's'}` : 'No changes'}
             disabled={!nChanged || problems.length > 0}
             busy={busy === 'save'}
-            onPress={save}
+            onPress={() => save('save', saveForm(changes))}
           />
+          {orig?.views ? (
+            // Keyed by the gauge's value, so a reload after saving - or another
+            // gauge - starts the card afresh.
+            <ScreenOrderCard
+              key={orig.views}
+              views={orig.views}
+              busy={busy === 'views'}
+              onSave={(v) => save('views', `views=${v}`)}
+            />
+          ) : null}
           <Card title="Firmware">
             <Note>
               Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.

@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 // All views that exist. Which of them are actually reachable, and in what
-// order, is the viewOrder table in ui.cpp.
+// order, is settings.views (set from the app; default VIEW_ORDER_DEFAULT).
 // VIEW_OIL shows oil AND coolant together (concentric arcs). VIEW_COOLANT is
 // retained only so the stored "last view" numbering doesn't shift; no screen
 // is built for it and ui_set_view rejects it.
@@ -28,6 +28,11 @@ void ui_set_view(GaugeView v);        // switch active screen
 // -1 = previous (swipe right).
 void ui_step_view(int delta);
 GaugeView ui_current_view();
+// Is the view in the cycle (settings.views), i.e. not hidden?
+bool ui_view_shown(GaugeView v);
+// Where to land when the remembered screen will not do (WiFi, or hidden):
+// the first view of the cycle other than WiFi.
+GaugeView ui_home_view();
 // FRAME_STATS only: time a full and a small redraw on every screen, rim on
 // and off, and print the results. Blocks for a few seconds.
 void ui_bench();

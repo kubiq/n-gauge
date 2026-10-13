@@ -673,6 +673,13 @@
 // on the card can be behind, but each flush leaves it valid and complete.
 #define GPX_FLUSH_MS          2000
 
+// ---- Screens -------------------------------------------------------------
+// The order a tap or swipe cycles through until the app sets another
+// (settings.views): GaugeView ids as digits - oil, boost, tyres, GPS, track,
+// g-meter, WiFi. WiFi last: set-up and the phone, not something to read
+// while driving.
+#define VIEW_ORDER_DEFAULT    "0245736"
+
 // ---- G-meter -----------------------------------------------------------
 // The trail is the point: a g-g trace shows how smooth the inputs were, which
 // is what motorsport uses it for. The sphere around it is decoration.

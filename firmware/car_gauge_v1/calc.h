@@ -453,3 +453,24 @@ static inline uint32_t calc_ms_of_day_diff(uint32_t a, uint32_t b) {
   const uint32_t day = 86400000UL;
   return (b + day - a) % day;
 }
+
+// A screen order as stored (settings.views): view ids as digits, in cycle
+// order; a view left out is hidden. Keeps the digits that are in `valid`,
+// each once (the first wins), in their order, and appends `required` if it
+// is missing - the WiFi screen, so the way to the phone is never hidden.
+// Anything else - letters, unknown or repeated ids - is dropped.
+static inline void calc_view_order(const char *in, const char *valid, char required,
+                                   char *out, size_t n) {
+  size_t o = 0;
+  bool haveRequired = false;
+  for (const char *p = in; *p && o + 2 < n; p++) {
+    bool ok = false, seen = false;
+    for (const char *v = valid; *v; v++) ok |= (*v == *p);
+    for (size_t i = 0; i < o; i++) seen |= (out[i] == *p);
+    if (!ok || seen) continue;
+    out[o++] = *p;
+    haveRequired |= (*p == required);
+  }
+  if (!haveRequired) out[o++] = required;
+  out[o] = '\0';
+}

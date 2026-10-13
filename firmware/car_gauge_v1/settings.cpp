@@ -173,6 +173,7 @@ void settings_load() {
     settings.tzOffset = TZ_OFFSET_DEFAULT;
   buildTz();
   settings.lastView = prefs.getUChar("view", 0);
+  settings_set_views(prefs.getString("views", VIEW_ORDER_DEFAULT).c_str());
   settings.gmOffX   = prefs.getFloat("gmOffX", 0.0f);
   settings.gmOffY   = prefs.getFloat("gmOffY", 0.0f);
   settings.gmOffZ   = prefs.getFloat("gmOffZ", 0.0f);
@@ -218,6 +219,7 @@ void settings_save() {
   prefs.putChar("tzOff",   settings.tzOffset);
   prefs.putBool("tzDst",   settings.tzDst);
   prefs.putUChar("view",   settings.lastView);
+  prefs.putString("views", settings.views);
   prefs.putFloat("gmOffX", settings.gmOffX);
   prefs.putFloat("gmOffY", settings.gmOffY);
   prefs.putFloat("gmOffZ", settings.gmOffZ);
@@ -266,6 +268,15 @@ void settings_save_view(uint8_t view) {
   prefs.begin(NVS_NAMESPACE, /*readOnly=*/false);
   prefs.putUChar("view", view);
   prefs.end();
+}
+
+void settings_set_views(const char *ids) {
+  // Every view with a screen; VIEW_COOLANT has none (oil and coolant share
+  // VIEW_OIL), so it cannot be ordered in.
+  static const char valid[] = { '0' + VIEW_OIL, '0' + VIEW_BOOST, '0' + VIEW_GMETER,
+                                '0' + VIEW_TPMS, '0' + VIEW_GPS, '0' + VIEW_WIFI,
+                                '0' + VIEW_TRACK, '\0' };
+  calc_view_order(ids ? ids : "", valid, '0' + VIEW_WIFI, settings.views, sizeof(settings.views));
 }
 
 bool settings_set_ap_ssid(const char *ssid) {

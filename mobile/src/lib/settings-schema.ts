@@ -66,6 +66,8 @@ export type PodSettings = Record<string, number | boolean> & {
   tz: string;
   /** Fingerprint of the key the pod encrypts its logs to; "" = plain logs. Older firmware: absent. */
   logKey?: string;
+  /** The screen cycle, view ids as digits (screens.ts). Older firmware: absent. */
+  views?: string;
 };
 
 /**
