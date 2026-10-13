@@ -1610,10 +1610,18 @@ void ui_update_wifi_countdown(float remaining) {
     if (v > WIFI_ARC_STEPS) v = WIFI_ARC_STEPS;
   }
   if (v == last) return;
+  // Show or hide only on a change. Clearing HIDDEN invalidates the whole
+  // object even when it is already shown (lv_obj_remove_flag), and doing it
+  // on every step redrew the 446 px arc - QR and all - each frame: ~140 ms a
+  // frame, the loop down to 7 Hz, and swipes on this screen missed because
+  // touch was read that rarely (2026-10-13). lv_arc_set_value() itself only
+  // invalidates the sliver that moved.
+  if ((v < 0) != (last < 0) || last == -2) {
+    if (v < 0) lv_obj_add_flag(wifiArc, LV_OBJ_FLAG_HIDDEN);
+    else       lv_obj_clear_flag(wifiArc, LV_OBJ_FLAG_HIDDEN);
+  }
   last = v;
-  if (v < 0) { lv_obj_add_flag(wifiArc, LV_OBJ_FLAG_HIDDEN); return; }
-  lv_obj_clear_flag(wifiArc, LV_OBJ_FLAG_HIDDEN);
-  lv_arc_set_value(wifiArc, v);
+  if (v >= 0) lv_arc_set_value(wifiArc, v);
 }
 
 void ui_update_usbdisk(bool pcConnected, bool shared) {
