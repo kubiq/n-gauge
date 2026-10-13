@@ -27,7 +27,6 @@
 #include "calc.h"         // calc_drive_update: AP off while driving
 
 
-#if FEATURE_GMETER
 // Raw accelerometer reading -> horizontal g on the screen's axes plus a
 // vertical component. The maths is calc_gmeter_basis()/calc_gmeter_project()
 // in calc.h, host-tested; this only rebuilds the basis when the calibration
@@ -72,7 +71,6 @@ static void ui_update_gmeter_raw(float gx, float gy, float gz) {
   ui_set_brake_lights(settings.gmCal && moving && braking);
   logger_note_brake(settings.gmCal && moving && braking);
 }
-#endif
 
 #if AP_DRIVE_OFF
 // WiFi AP down while driving, back up once stopped - see AP_DRIVE_OFF.
@@ -489,7 +487,6 @@ void loop() {
   }
   ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
                  web_clients());
-#if FEATURE_GMETER
   float gx, gy, gz;
   // The CSV's raw IMU columns take this sample: the logger runs on core 0
   // and must not use the I2C bus itself.
@@ -516,7 +513,6 @@ void loop() {
   } else
 #endif
   ui_update_gmeter_raw(gx, gy, gz);
-#endif
 
   // ---- button: short press cycles screens, long press toggles the AP ----
   {

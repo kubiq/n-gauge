@@ -673,9 +673,6 @@
 // on the card can be behind, but each flush leaves it valid and complete.
 #define GPX_FLUSH_MS          2000
 
-// ---- Feature toggles -------------------------------------------------------
-#define FEATURE_GMETER     1      // QMI8658 IMU g-force screen
-
 // ---- G-meter -----------------------------------------------------------
 // The trail is the point: a g-g trace shows how smooth the inputs were, which
 // is what motorsport uses it for. The sphere around it is decoration.

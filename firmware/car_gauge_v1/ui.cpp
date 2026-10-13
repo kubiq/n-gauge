@@ -511,7 +511,6 @@ void ui_init() {
   fix_value_width(boostVal, "8.88");                // ui_update_boost clamps < 0 to 0
   make_name(scr[VIEW_BOOST], "bar", 40);
 
-#if FEATURE_GMETER
   // G-METER: a faked sphere with a g-g trail across it.
   scr[VIEW_GMETER] = make_screen();
   make_gmeter_backdrop(scr[VIEW_GMETER]);
@@ -525,7 +524,6 @@ void ui_init() {
   }
   gDot   = make_dot(scr[VIEW_GMETER], 26, COL_GOOD, LV_OPA_COVER);
   gLabel = make_name(scr[VIEW_GMETER], "G-FORCE", 150);
-#endif
 
   // TYRES - the car seen from above, a wheel marker at each corner and its
   // pressure and temperature beside it. 466px round panel, so keep it well
@@ -1007,9 +1005,7 @@ static const GaugeView viewOrder[] = {
   VIEW_TPMS,
   VIEW_GPS,
   VIEW_TRACK,        // next to GPS: same source, and reached from it on track days
-#if FEATURE_GMETER
   VIEW_GMETER,
-#endif
   VIEW_WIFI,         // last: set-up and the phone, not something to read while driving
 };
 static const int VIEW_ORDER_N = sizeof(viewOrder) / sizeof(viewOrder[0]);
@@ -1072,7 +1068,6 @@ void ui_bench() {
       esp_task_wdt_reset();
     }
   }
-#if FEATURE_GMETER
   // A real g-meter frame: the dot circling at ~0.8 g, label changing, trail
   // shuffling - each step its own refresh, as at run time.
   if (scr[VIEW_GMETER]) {
@@ -1140,7 +1135,6 @@ void ui_bench() {
                     (unsigned long)mx);
     }
   }
-#endif
 
   // Boost as it changes in the car: a new sample every 2 request slots, a
   // frame every 16 ms in between (so the arc glide is exercised), with small

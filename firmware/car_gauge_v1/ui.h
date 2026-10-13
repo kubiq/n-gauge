@@ -6,8 +6,7 @@
 #include <stdint.h>
 
 // All views that exist. Which of them are actually reachable, and in what
-// order, is the viewOrder table in ui.cpp - the g-meter is built and cycled
-// only when FEATURE_GMETER is 1.
+// order, is the viewOrder table in ui.cpp.
 // VIEW_OIL shows oil AND coolant together (concentric arcs). VIEW_COOLANT is
 // retained only so the stored "last view" numbering doesn't shift; no screen
 // is built for it and ui_set_view rejects it.
