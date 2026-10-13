@@ -10,7 +10,7 @@ import { C, S } from '@/theme';
 // The gauge in the header of Trips and Settings, the way Garmin Connect shows its watch:
 // the connection and the sync at a glance, from any screen. The ring is the
 // gauge's round face, its colour the state; a spinner while something is
-// going on. A tap opens the Gauge screen - and, if not connected, connects.
+// going on. A tap connects, or - connected - opens the Gauge screen.
 type Status = { title: string; detail: string | null; ring: string; busy: boolean; bad?: boolean };
 
 function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>): Status {
@@ -29,9 +29,11 @@ export function PodChip() {
   const pod = usePod();
   const { title, detail, ring, busy, bad } = status(pod, useSync());
 
+  // Not connected: connect and stay put - often the connection is all that
+  // was wanted (a setting to save, firmware to send). Otherwise the Gauge screen.
   const onPress = () => {
-    router.push('/gauge');
     if (pod.creds && pod.state === 'idle') pod.connect();
+    else router.push('/gauge');
   };
 
   return (

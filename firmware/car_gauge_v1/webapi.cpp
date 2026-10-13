@@ -8,6 +8,7 @@
 #include "brightness.h"
 #include "logger.h"         // logger_card_shared(): the card is on the PC
 #include "ota.h"
+#include "ui.h"             // ui_show_notice() during an upload from the app
 #include "calc.h"           // calc_parse_range(), for /dl
 #include "logcrypt.h"       // logcrypt_fingerprint(), for /api/settings
 #include <sys/stat.h>       // stat(), for file sizes without opening them
@@ -267,16 +268,33 @@ static void handleClockSet() {
 // over the AP - so the watchdog is fed per chunk, as handleDownload does.
 static bool otaOk = false, otaStarted = false;
 
+// On the gauge's own screen too, as the SD-card install does (ota.cpp): the
+// upload takes ~30 s and the gauge would otherwise just look frozen, then
+// restart. A multipart upload does not say its size up front, so the notice
+// counts what has arrived, refreshed every 256 KB (ui_show_notice redraws).
+static void otaNotice(size_t bytes) {
+  char m[48];
+  snprintf(m, sizeof(m), "Updating firmware\n%.1f MB received", bytes / 1048576.0f);
+  ui_show_notice(m);
+}
+
 static void handleUpdateUpload() {
   HTTPUpload &up = server.upload();
+  static size_t shownAt = 0;
   switch (up.status) {
     case UPLOAD_FILE_START:
       Serial.printf("[..] firmware upload: %s\n", up.filename.c_str());
       otaStarted = true;
       otaOk = ota_begin(0);
+      shownAt = 0;
+      ui_show_notice(otaOk ? "Updating firmware..." : NULL);
       break;
     case UPLOAD_FILE_WRITE:
       if (otaOk) otaOk = ota_write(up.buf, up.currentSize);
+      if (otaOk && up.totalSize - shownAt >= 256 * 1024) {
+        shownAt = up.totalSize;
+        otaNotice(up.totalSize);
+      }
       esp_task_wdt_reset();
       break;
     case UPLOAD_FILE_END:
@@ -287,6 +305,7 @@ static void handleUpdateUpload() {
     case UPLOAD_FILE_ABORTED:
       ota_abort();
       otaOk = false;
+      ui_show_notice(NULL);
       break;
   }
 }
@@ -296,9 +315,11 @@ static void handleUpdateDone() {
     String msg = String("Update failed: ") + (otaStarted ? ota_error() : "no file") +
                  ". The current firmware keeps running.";
     otaStarted = false;
+    ui_show_notice(NULL);           // back to the gauge; the phone shows why
     server.send(500, "text/plain", msg);
     return;
   }
+  ui_show_notice("Update installed\nrestarting...");
   server.send(200, "text/plain",
               "Update installed. The gauge restarts now; give it ~10 s, then reconnect. "
               "If the new firmware fails, it rolls back to this one by itself.");
