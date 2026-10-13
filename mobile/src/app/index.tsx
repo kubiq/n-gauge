@@ -124,8 +124,10 @@ export default function TripsScreen() {
     c: t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined,
     problem: (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined,
   }));
-  const shown = rows.filter((r) => r.problem || !isStub(r.g, r.c));
-  const hidden = rows.length - shown.length;
+  const [showShort, setShowShort] = useState(false);
+  const longOnes = rows.filter((r) => r.problem || !isStub(r.g, r.c));
+  const hidden = rows.length - longOnes.length;
+  const shown = showShort ? rows : longOnes;
 
   return (
     <Screen>
@@ -138,9 +140,14 @@ export default function TripsScreen() {
         shown.map((r) => <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} />)
       )}
       {hidden ? (
-        <Note>
-          {hidden} very short {hidden === 1 ? 'drive' : 'drives'} (under 200 m) not listed.
-        </Note>
+        // A tap shows them in place, and hides them again.
+        <Pressable onPress={() => setShowShort((s) => !s)} hitSlop={8} style={styles.more}>
+          <Text style={styles.moreText}>
+            {showShort
+              ? `Hide the ${hidden} very short ${hidden === 1 ? 'drive' : 'drives'}`
+              : `Show ${hidden} very short ${hidden === 1 ? 'drive' : 'drives'} (under 200 m)`}
+          </Text>
+        </Pressable>
       ) : null}
     </Screen>
   );
@@ -190,4 +197,7 @@ const styles = StyleSheet.create({
   title: { color: C.text, fontSize: 16, fontWeight: '600' },
   big: { color: C.accent, fontSize: 18, fontWeight: '700' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
+  // A link, not a card: 48 dp tall to hit, styled like the app's other links.
+  more: { minHeight: 48, justifyContent: 'center' },
+  moreText: { color: C.link, fontSize: 14 },
 });
