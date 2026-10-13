@@ -21,20 +21,22 @@ someone with the same car or the same board.
 3D-printed housing replaces the left air vent's surround.*
 
 <p>
-<img src="mobile/docs/screenshots/03-trips.png" width="200">
-<img src="mobile/docs/screenshots/04-trip-map.png" width="200">
-<img src="mobile/docs/screenshots/05-trip-stats.png" width="200">
-<img src="mobile/docs/screenshots/06-pod-live.png" width="200">
+<img src="mobile/docs/screenshots/01-trips.png" width="32%">
+<img src="mobile/docs/screenshots/03-trip-map.png" width="32%">
+<img src="mobile/docs/screenshots/04-gauge.png" width="32%">
 </p>
 
-*The phone app: trips, a drive's track coloured by speed, its stats, the
-pod's live readings (on the bench, hence "no answer").*
+*The phone app: every drive, with the gauge in the header - its connection
+and last sync, like a watch in Garmin Connect; a drive's track coloured by
+speed; and a tap on the gauge for the sync and its live readings (on the
+bench, hence "no answer"). More in [mobile/](mobile).*
 
 ## What it does
 
 - **Gauges:** oil and coolant (concentric arcs, with a cold-engine "not
   ready" state and over-temperature warnings), boost, a g-meter, the four tyre
-  pressures and temperatures, GPS speed and trip distance, a lap timer.
+  pressures and temperatures, GPS speed and trip distance, a lap timer that
+  finds the start/finish line by itself (tap START in the pit, then drive).
 - **Logging:** a CSV of every drive (2 Hz, decoded values plus the raw
   payloads), a GPX track at 25 Hz, a sleep log.
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
