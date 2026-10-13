@@ -199,8 +199,8 @@
 #define OIL_POLL_MS         1000
 // The fast request: six Mode 01 PIDs in ONE request to the engine ECU, which
 // answers all of them in one reply (benchmark: "41 0B xx 05 xx 0D xx 43 xx xx
-// 33 xx"). 0x0B MAP (boost), 0x05 coolant sensor (logged), 0x0D speed (brake
-// gate), 0x43 absolute load (torque estimate), 0x0C RPM (track log), 0x49
+// 33 xx"). 0x0B MAP (boost), 0x05 coolant sensor (logged), 0x0D speed (the
+// gear), 0x43 absolute load (torque estimate), 0x0C RPM (track log), 0x49
 // accelerator pedal. Sent to 0x7E0, not the broadcast 0x7DF, so the gearbox
 // ECU does not answer too. Six is the most Mode 01 allows per request.
 // RPM took baro's place (2026-10-08): baro, the zero for boost, changes only
@@ -699,19 +699,6 @@
 // right edge down -> dot goes right; tilt the top edge away -> dot goes up
 // (the dot shows the force felt, like a ball rolling to the low side, so this
 // is also "turn left -> dot right" and "brake -> dot up" in the car).
-// Brake lights on the tyre screen's car, from the IMU (no CAN brake signal:
-// the OBD port sits behind a gateway). On at BRAKE_G_ON of deceleration, off
-// below BRAKE_G_OFF, held at least BRAKE_MIN_ON_MS. 0.18 g is a
-// firm-but-normal brake; engine braking alone is ~0.05-0.1 g. BRAKE_TAU_MS
-// smooths road vibration without making the light noticeably late.
-// Shown only at BRAKE_MIN_KMH or more (OBD speed, fresh): standing on a ~10%
-// slope reads like a hard stop, and a brake light while stopped says nothing.
-#define BRAKE_G_ON         0.18f
-#define BRAKE_G_OFF        0.10f
-#define BRAKE_TAU_MS       60
-#define BRAKE_MIN_ON_MS    300
-#define BRAKE_MIN_KMH      5
-
 #define GM_SCREEN_X_AXIS   1
 #define GM_FLIP_X          0
 #define GM_FLIP_Y          1      // bench-checked 2026-09-26: tilt back went down

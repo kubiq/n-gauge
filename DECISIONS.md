@@ -260,10 +260,13 @@ in vacuum at part throttle even with the turbo spinning (~−0.5 bar idle,
 stops at zero like the arc; the CSV keeps the true value. The zero is
 PID 0x33 (98–99 kPa measured) rather than a fixed 101 kPa.
 
-**Brake lights need speed as well as deceleration.** On a slope, gravity reads
-exactly like braking, so they show only at ≥ 5 km/h of OBD speed (PID 0x0D,
-polled every 500 ms on its own timer). OBD rather than GPS: there is no fix in
-a garage or tunnel, and the speed is always there while the car is on.
+**No brake lights, and no IMU brake channel.** (2026-10-13.) The tyre
+screen's car lit its tail lights from the IMU's deceleration (with a speed
+gate, since on a slope gravity reads exactly like braking) - and was seen lit
+when it should not have been. A guessed brake light that is sometimes wrong is
+worse than none, so the lights, the VBO's "Brake IMU" channel and the detector
+went. The CAN brake signal is not reachable (the gateway, above); it would be
+the way back.
 
 **The GPX rate limiter runs BEFORE the plausibility check.**
 This ordering is load-bearing. With the limiter last, the jump check ran every

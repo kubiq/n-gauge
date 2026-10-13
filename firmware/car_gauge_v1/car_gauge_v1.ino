@@ -57,19 +57,6 @@ static void ui_update_gmeter_raw(float gx, float gy, float gz) {
   gmeterProject(gx, gy, gz, &hx, &hy, &vert);
   ui_update_gmeter(hx, hy, vert);
   logger_note_g(hx, hy);                 // the track log's IMU channels
-
-  // Brake lights on the tyre screen's car, from the same projected value: hy
-  // is the force felt forwards, i.e. deceleration. Only once the g-meter is
-  // calibrated - uncalibrated, gravity leaks into hy on the tilted pod and a
-  // standstill would read as a permanent hard stop.
-  // And only while moving: on a slope gravity reads exactly like braking.
-  // The filter runs regardless, so pulling away mid-stop is not a step input.
-  static CalcBrake brake = {};
-  const bool braking = calc_brake_update(&brake, hy, millis(), BRAKE_TAU_MS,
-                                         BRAKE_G_ON, BRAKE_G_OFF, BRAKE_MIN_ON_MS);
-  const bool moving = obd_speed_fresh() && obd.speedKmh >= BRAKE_MIN_KMH;
-  ui_set_brake_lights(settings.gmCal && moving && braking);
-  logger_note_brake(settings.gmCal && moving && braking);
 }
 
 #if AP_DRIVE_OFF

@@ -60,8 +60,6 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
 // buttons call laps_start() / laps_stop() directly.
 struct LapInfo;
 void ui_update_track(const LapInfo *info);
-// Light the tail lights of the tyre screen's car. Safe to call every loop.
-void ui_set_brake_lights(bool on);
 
 // Faults for the notification area: a coloured rim around the whole panel plus
 // one line of text, over whichever screen is loaded.

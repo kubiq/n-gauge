@@ -365,43 +365,6 @@ static inline bool calc_drive_update(CalcDrive *d, bool haveFix, float kmh,
   return d->driving;
 }
 
-// "Is the car braking?", from the IMU's longitudinal g (positive = the force
-// felt forwards, i.e. slowing - the g-meter's "dot up"). Not the pedal: engine
-// braking and uphill slowing count too, and a gentle brake below onG does not.
-// It is what is available without a CAN brake signal.
-//
-// The raw sample is noisy (road texture, vibration), so it is low-passed with
-// time constant tauMs first - time-based rather than per-call, since loop()
-// does not run at a fixed rate. Then hysteresis: on at >= onG, off at <= offG,
-// and once on it stays on for at least minOnMs, so a light never flickers.
-struct CalcBrake {
-  bool     on;
-  bool     init;
-  float    filt;         // low-passed g
-  uint32_t lastMs;
-  uint32_t onSince;
-};
-
-static inline bool calc_brake_update(CalcBrake *b, float gLong, uint32_t now,
-                                     uint32_t tauMs, float onG, float offG,
-                                     uint32_t minOnMs) {
-  if (!b->init) {
-    b->init = true;
-    b->filt = gLong;
-  } else {
-    const float dt = (float)(now - b->lastMs);
-    b->filt += (gLong - b->filt) * (dt / ((float)tauMs + dt));
-  }
-  b->lastMs = now;
-  if (!b->on && b->filt >= onG) {
-    b->on = true;
-    b->onSince = now;
-  } else if (b->on && b->filt <= offG && now - b->onSince >= minOnMs) {
-    b->on = false;
-  }
-  return b->on;
-}
-
 // The sun's elevation above the horizon in degrees (negative = below), at a
 // UTC unix time and a position - for dimming the display at night. The usual
 // low-precision solar position (as in the Astronomical Almanac's approximate

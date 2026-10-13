@@ -91,8 +91,6 @@ enum LogLevel : uint8_t {
 // lateral, and longitudinal as force felt forwards (+ = braking). For the
 // track log's IMU channels - see the VBO section of logger.cpp.
 void logger_note_g(float lateral, float longitudinal);
-// The IMU braking state (the tyre screen's brake lights), for the track log.
-void logger_note_brake(bool braking);
 // The loop's latest raw IMU sample, for the CSV's gx/gy/gz - the logger runs
 // on core 0 and must not use the I2C bus, which core 1 shares with touch.
 void logger_note_raw_g(float gx, float gy, float gz);

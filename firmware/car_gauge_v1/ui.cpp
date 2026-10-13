@@ -49,8 +49,6 @@ extern "C" const lv_image_dsc_t n_logo;
 // A symbol with no reading behind it: clearly there, clearly not live.
 // COL_LINE is too close to the background to read as anything.
 #define COL_DIM     lv_color_hex(0x5A6673)
-// Lit brake lamp: brighter and redder than COL_BAD, which is a UI "error".
-#define COL_BRAKE   lv_color_hex(0xFF2A1F)
 
 static GaugeView s_view = VIEW_OIL;
 static lv_obj_t *scr[VIEW_COUNT];
@@ -68,7 +66,6 @@ static lv_obj_t *gDot, *gLabel;
 static lv_obj_t *gTrail[GMETER_TRAIL_N];
 // tpms widgets
 static lv_obj_t *tyreVal[WHEEL_COUNT], *tyreTemp[WHEEL_COUNT];
-static lv_obj_t *brakeLights;   // container of the tail-light glows
 // gps widgets
 static lv_obj_t *gpsSpeed, *gpsState, *gpsTrip, *gpsIcon;
 // track (lap timer) widgets
@@ -538,40 +535,6 @@ void ui_init() {
     lv_image_set_src(car, &car_top);
     lv_obj_center(car);
     lv_obj_clear_flag(car, LV_OBJ_FLAG_CLICKABLE);
-  }
-  // Brake lights: the image's tail lights are thin curved LED strips, so the
-  // glow follows each strip as a polyline - a wide translucent stroke for the
-  // glow, a narrow bright one for the lamp. Points are in the car image's own
-  // pixels (200x278), found by locating its red pixels, so the container is
-  // the image's size and centred the same way. Hidden until braking; hiding
-  // the container switches both off at once.
-  {
-    static const lv_point_precise_t left[]  = {
-      { 44, 221 }, { 45, 228 }, { 48, 232 }, { 54, 235 }, { 62, 237 }, { 69, 238 } };
-    static const lv_point_precise_t right[] = {
-      { 156, 222 }, { 155, 229 }, { 152, 233 }, { 146, 236 }, { 138, 238 } };
-    brakeLights = lv_obj_create(scr[VIEW_TPMS]);
-    lv_obj_remove_style_all(brakeLights);
-    lv_obj_set_size(brakeLights, car_top.header.w, car_top.header.h);
-    lv_obj_center(brakeLights);
-    lv_obj_clear_flag(brakeLights, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(brakeLights, LV_OBJ_FLAG_SCROLLABLE);
-    static const struct { int w; lv_opa_t opa; } strokes[] = {
-      { 12, 110 },            // glow
-      { 4,  LV_OPA_COVER },   // lamp
-    };
-    for (const auto &st : strokes)
-      for (int side = 0; side < 2; side++) {
-        lv_obj_t *l = lv_line_create(brakeLights);
-        if (side == 0) lv_line_set_points(l, left,  sizeof(left)  / sizeof(left[0]));
-        else           lv_line_set_points(l, right, sizeof(right) / sizeof(right[0]));
-        lv_obj_set_style_line_color(l, COL_BRAKE, 0);
-        lv_obj_set_style_line_width(l, st.w, 0);
-        lv_obj_set_style_line_opa(l, st.opa, 0);
-        lv_obj_set_style_line_rounded(l, true, 0);
-        lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
-      }
-    lv_obj_add_flag(brakeLights, LV_OBJ_FLAG_HIDDEN);
   }
   // Where each wheel is on the car image: its body is ~+-64 px wide (the
   // height limits the scaling, so it is narrower than the 200 px box), so a
@@ -1430,14 +1393,6 @@ void ui_update_gmeter(float gx, float gy, float gz) {
   hx[0] = (int16_t)px; hy[0] = (int16_t)py;
   for (int i = 0; i < GMETER_TRAIL_N; i++)
     lv_obj_align(gTrail[i], LV_ALIGN_CENTER, hx[i], -hy[i]);
-}
-
-void ui_set_brake_lights(bool on) {
-  static bool last = false;         // created hidden
-  if (on == last) return;           // called every loop: touch LVGL on change only
-  last = on;
-  if (on) lv_obj_clear_flag(brakeLights, LV_OBJ_FLAG_HIDDEN);
-  else    lv_obj_add_flag(brakeLights, LV_OBJ_FLAG_HIDDEN);
 }
 
 void ui_update_tpms(const bool have[WHEEL_COUNT], const float bar[WHEEL_COUNT],

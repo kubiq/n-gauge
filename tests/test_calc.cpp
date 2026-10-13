@@ -444,65 +444,6 @@ static void gmeter_shipped_mapping_is_the_bench_verified_one() {
   CHECK(GM_FLIP_Y);
 }
 
-// ---- brake lights from the IMU ----------------------------------------------
-
-// Feed a constant longitudinal g for `ms`, in 10 ms steps (~loop rate).
-static bool brake_for(CalcBrake *b, uint32_t *t, uint32_t ms, float g) {
-  bool r = b->on;
-  for (uint32_t e = 0; e < ms; e += 10, *t += 10)
-    r = calc_brake_update(b, g, *t, BRAKE_TAU_MS, BRAKE_G_ON, BRAKE_G_OFF,
-                          BRAKE_MIN_ON_MS);
-  return r;
-}
-
-static void brake_lights_on_a_firm_stop() {
-  CalcBrake b = {};
-  uint32_t t = 1000;
-  CHECK(!brake_for(&b, &t, 2000, 0.0f));            // cruising
-  CHECK(brake_for(&b, &t, 500, 0.35f));             // firm stop
-}
-
-static void engine_braking_does_not_light_them() {
-  CalcBrake b = {};
-  uint32_t t = 1000;
-  CHECK(!brake_for(&b, &t, 5000, 0.08f));
-}
-
-static void a_single_bump_does_not_light_them() {
-  // One 10 ms spike of 1 g - a kerb or a pothole - is filtered out.
-  CalcBrake b = {};
-  uint32_t t = 1000;
-  brake_for(&b, &t, 1000, 0.0f);
-  CHECK(!brake_for(&b, &t, 10, 1.0f));
-  CHECK(!brake_for(&b, &t, 500, 0.0f));
-}
-
-static void a_dab_of_brake_stays_lit_long_enough_to_see() {
-  CalcBrake b = {};
-  uint32_t t = 1000;
-  brake_for(&b, &t, 1000, 0.0f);
-  CHECK(brake_for(&b, &t, 150, 0.4f));              // brief, firm
-  CHECK(brake_for(&b, &t, BRAKE_MIN_ON_MS - 200, 0.0f));  // released, still lit
-  CHECK(!brake_for(&b, &t, 400, 0.0f));             // ...then off
-}
-
-static void braking_near_the_threshold_does_not_flicker() {
-  // Hovering between off and on thresholds: once lit, it stays lit.
-  const float mid = (BRAKE_G_ON + BRAKE_G_OFF) / 2;
-  CalcBrake b = {};
-  uint32_t t = 1000;
-  brake_for(&b, &t, 500, 0.3f);
-  CHECK(brake_for(&b, &t, 3000, mid));
-  CHECK(!brake_for(&b, &t, 1000, 0.0f));
-}
-
-static void brake_timing_survives_millis_wrap() {
-  CalcBrake b = {};
-  uint32_t t = 0xFFFFFFFFu - 200;
-  brake_for(&b, &t, 100, 0.0f);
-  CHECK(brake_for(&b, &t, 400, 0.4f));              // crosses the wrap
-}
-
 // ---- drive detection (drops the WiFi AP while driving) -----------------------
 
 // Feed a constant input for `ms`, in 100 ms steps, as the loop would.
@@ -736,12 +677,6 @@ int main() {
   TEST(gmeter_degenerate_calibration_falls_back);
   TEST(gmeter_screen_axis_straight_down_does_not_divide_by_zero);
   TEST(gmeter_shipped_mapping_is_the_bench_verified_one);
-  TEST(brake_lights_on_a_firm_stop);
-  TEST(engine_braking_does_not_light_them);
-  TEST(a_single_bump_does_not_light_them);
-  TEST(a_dab_of_brake_stays_lit_long_enough_to_see);
-  TEST(braking_near_the_threshold_does_not_flicker);
-  TEST(brake_timing_survives_millis_wrap);
   TEST(drive_starts_only_after_speed_is_held);
   TEST(a_brief_burst_of_speed_does_not_start_a_drive);
   TEST(a_traffic_light_does_not_end_a_drive);

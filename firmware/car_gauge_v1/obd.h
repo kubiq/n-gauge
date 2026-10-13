@@ -35,7 +35,7 @@ struct ObdState {
   uint32_t boostMs       = 0;
   // From the 6-PID request - see OBD_MULTI_PIDS in config.h.
   bool     haveSpeed     = false;
-  int      speedKmh      = 0;       // PID 0x0D, brake-light gate
+  int      speedKmh      = 0;       // PID 0x0D: the gear, and the CSV's obdKmh
   uint32_t speedMs       = 0;
   bool     haveAbsLoad   = false;
   float    absLoadPct    = 0;       // PID 0x43, for a torque estimate

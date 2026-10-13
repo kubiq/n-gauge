@@ -786,8 +786,6 @@ void logger_note_g(float lateral, float longitudinal) {
   gLateral = lateral;
   gLongitudinal = longitudinal;
 }
-static bool braking = false;
-void logger_note_brake(bool b) { braking = b; }
 
 static volatile float rawGx = 0, rawGy = 0, rawGz = 0;
 static volatile bool  haveRawG = false;
@@ -868,14 +866,14 @@ static void vboOpen() {
          "Boost Pressure\r\nOil Temperature\r\nCoolant Temperature\r\n"
          "Throttle Pedal\r\nEngine Torque Estimate\r\n"
          "Lateral G IMU\r\nLongitudinal G IMU\r\nEngine RPM\r\n"
-         "Ignition Timing\r\nIntake Air Temperature\r\nBrake IMU\r\nLap Number\r\n"
+         "Ignition Timing\r\nIntake Air Temperature\r\nLap Number\r\n"
          "Tyre Pressure FL\r\nTyre Pressure FR\r\nTyre Pressure RL\r\nTyre Pressure RR\r\n"
          "Tyre Temperature FL\r\nTyre Temperature FR\r\n"
          "Tyre Temperature RL\r\nTyre Temperature RR\r\nGear\r\n\r\n"
          "[channel units]\r\nbar\r\nC\r\nC\r\n%\r\nNm\r\ng\r\ng\r\nrpm\r\n"
-         // A blank unit line would end the section, so the two
-         // unitless channels get a word instead.
-         "deg\r\nC\r\nflag\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n\r\n"
+         // A blank unit line would end the section, so the unitless
+         // channels get a word instead.
+         "deg\r\nC\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n\r\n"
          // No brackets in comments: they hang Circuit Tools.
          "[comments]\r\ni30 N gauge pod, ESP32-S3 with u-blox M9N\r\n"
          "Log Rate (Hz) : 25.00\r\n"
@@ -897,7 +895,7 @@ static void vboOpen() {
   vboPut("[column names]\r\nsats time lat long velocity heading height "
          "Boost_Pressure Oil_Temperature Coolant_Temperature Throttle_Pedal "
          "Engine_Torque_Estimate Lateral_G_IMU Longitudinal_G_IMU Engine_RPM "
-         "Ignition_Timing Intake_Air_Temperature Brake_IMU Lap_Number "
+         "Ignition_Timing Intake_Air_Temperature Lap_Number "
          "Tyre_Pressure_FL Tyre_Pressure_FR Tyre_Pressure_RL Tyre_Pressure_RR "
          "Tyre_Temperature_FL Tyre_Temperature_FR "
          "Tyre_Temperature_RL Tyre_Temperature_RR Gear\r\n\r\n"
@@ -961,10 +959,10 @@ static void vboTask() {
     const int room = (int)sizeof(vboBuf) - (int)vboLen;
     const int wrote = snprintf(vboBuf + vboLen, room > 0 ? room : 0,
         "%03u %s %s %s %07.3f %06.2f %+09.2f %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
-        " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E\r\n",
+        " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E\r\n",
         gps.sats, t, lat, lon, gps.speedKmh, gps.courseDeg, f.altM,
         boost, oil, cool, pedal, torque, gLateral, -gLongitudinal, rpm,
-        timing, iat, braking ? 1.0f : 0.0f, lap,
+        timing, iat, lap,
         tyreBar[0], tyreBar[1], tyreBar[2], tyreBar[3],
         tyreC[0], tyreC[1], tyreC[2], tyreC[3],
         (float)(gear > 0 ? gear : 0));   // 0 = none or not current
@@ -1167,8 +1165,8 @@ static void loggerTask() {
   // sat/hdop it answers whether the AP near the GNSS antenna hurts the fix
   // (see AP_DRIVE_OFF).
   row.printf(",%d", web_is_up() ? 1 : 0);
-  // OBD speed, what the brake-light gate sees. Also a speed where GPS has no
-  // fix. Appended last for the same reason as apUp.
+  // OBD speed: a speed where GPS has no fix. Appended last for the same
+  // reason as apUp.
   if (obd_speed_fresh()) row.printf(",%d", obd.speedKmh);
   else                   row.print(',');
   // The raw coolant sensor (PID 0x05). coolantC above is the dashboard's
