@@ -407,19 +407,67 @@ void loop() {
   }
   const bool over = overOil || overCool;
 
+  // "No car yet" waits out CAN_MISSING_GRACE_MS, and a wake still sampling
+  // the bus (power_wake_pending: up to 60 s after a motion wake); a CAN
+  // driver that never started (!linkUp) shows at once.
+  const bool canGrace = now < CAN_MISSING_GRACE_MS || power_wake_pending();
+
 #if BOOT_ANIM_MS > 0
-  // Retire the splash once it has run its course. The widget updates below are
-  // harmless while it's up - they write to screens that aren't loaded. Idempotent.
-  if (ui_boot_anim_done()) ui_boot_anim_end();
+  // The splash, once swept, stays up until the car sends a reading: gauges
+  // before that all read "--" and the gauge looks broken. It goes when a
+  // reading is fresh, or when the "no car" fault would show anyway (the
+  // screens then say "--" for a reason), or at a touch. A wake that goes
+  // back to sleep never shows a gauge at all. The widget updates below are
+  // harmless meanwhile - they write to screens that are not loaded.
+  //
+  // On the bench (a PC on USB) it is a status page instead, with no timeout:
+  // the gauges mean nothing at the desk.
+  if (ui_boot_anim_done()) {
+    const bool bench   = usbdisk_host_connected();
+    const bool reading = obd_oil_fresh() || obd_coolant_fresh() || obd_boost_fresh() ||
+                         obd_rpm_fresh() || obd_speed_fresh();
+    if (ui_boot_take_touch() || reading || (!bench && !(canGrace && obd.linkUp))) {
+      ui_boot_anim_end();             // idempotent
+    } else if (bench) {
+      static uint32_t benchAt = 0;
+      if (benchAt == 0 || now - benchAt >= 1000) {
+        benchAt = now ? now : 1;
+        uint32_t sdUsed, sdTotal;
+        web_sd_space_kb(&sdUsed, &sdTotal);
+        char sd[40], wifi[64], gnss[32];
+        if (logger_card_shared())   snprintf(sd, sizeof(sd), "SD lent to the PC");
+        else if (!logger_card_ok()) snprintf(sd, sizeof(sd), "No SD card");
+        else snprintf(sd, sizeof(sd), "SD %.1f / %.1f GB used",
+                      sdUsed / 1048576.0f, sdTotal / 1048576.0f);
+        if (web_is_up()) snprintf(wifi, sizeof(wifi), "WiFi: %s  %s  (%u on)",
+                                  settings.apSsid, web_ip(), web_clients());
+        else             snprintf(wifi, sizeof(wifi), "WiFi off");
+        if (!gps.linkUp)       snprintf(gnss, sizeof(gnss), "GPS: no module");
+        else if (gps.haveFix)  snprintf(gnss, sizeof(gnss), "GPS: fix, %u sats", gps.sats);
+        else                   snprintf(gnss, sizeof(gnss), "GPS: no fix, %u sats", gps.sats);
+        char b[400];
+        // The separator is a bullet (U+2022): Montserrat 14 as built has no
+        // middle dot, which drew as nothing.
+        snprintf(b, sizeof(b),
+                 "On the bench\n"
+                 "Firmware %s\n%s\n%s\n"
+                 "%s  \xE2\x80\xA2  CAN: %s\n"
+                 "RAM %u KB free  \xE2\x80\xA2  PSRAM %.1f MB\n"
+                 "Chip %.0f\xC2\xB0" "C  \xE2\x80\xA2  up %lu min  \xE2\x80\xA2  %s\n\n"
+                 "Touch for the gauges",
+                 ota_build(), wifi, sd, gnss,
+                 !obd.linkUp ? "driver down" : obd.lastFrameMs ? "talking" : "no car",
+                 (unsigned)(ESP.getFreeHeap() / 1024), ESP.getFreePsram() / 1048576.0f,
+                 temperatureRead(), (unsigned long)(now / 60000), web_reset_text());
+        ui_boot_show_bench(b);
+      }
+    }
+  }
 #endif
 
   // ---- push to UI ----
   {
     uint8_t faults = 0;
-    // "No car yet" waits out CAN_MISSING_GRACE_MS, and a wake still sampling
-    // the bus (power_wake_pending: up to 60 s after a motion wake); a CAN
-    // driver that never started (!linkUp) shows at once.
-    const bool canGrace = now < CAN_MISSING_GRACE_MS || power_wake_pending();
     if (!obd.linkUp || (obd.lastFrameMs == 0 && !canGrace)) faults |= FAULT_CAN;
     // A grace period, because at boot the GNSS task is still hunting for the
     // module's baud rate, and "not found yet" is not "missing". Checked on

@@ -29,4 +29,8 @@ bool web_is_up();
 // is up - which, now that it is always up, would mean never sleeping.
 uint8_t web_clients();
 const char *web_ip();       // AP IP as text, "" when down
+// Also for the bench status page (the held boot splash, ui.h):
+const char *web_reset_text();   // why the gauge last started, in a word
+// SD space in KB, cached for a minute; 0/0 with no card or while shared.
+void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb);
 void web_task();            // call often while up; cheap no-op when down

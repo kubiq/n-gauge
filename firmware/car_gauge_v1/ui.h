@@ -122,5 +122,13 @@ void ui_boot_anim_start();
 // is no serial and often no card - so "why did it just go black" had no
 // answer at all. Shows over the splash or a gauge screen equally.
 void ui_show_notice(const char *msg);   // NULL hides it
+// True once the sweep has run. The loop then HOLDS the splash - the N badge
+// rather than gauges reading "--" - until the car sends a reading, or the
+// "no car" fault would show anyway; ui_boot_anim_end() hands over.
 bool ui_boot_anim_done();
+// A press on the held splash, once: the driver wants the gauges now.
+bool ui_boot_take_touch();
+// On the bench (a PC on USB) the held splash becomes a status page: the
+// badge moves up and `text` goes under it. Call again to refresh.
+void ui_boot_show_bench(const char *text);
 void ui_boot_anim_end();

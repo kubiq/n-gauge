@@ -114,7 +114,7 @@ static void handleSettingsJson() {
 // ---- the gauge's own resources, for the app's System card --------------------
 
 // Why the gauge last started, in a word.
-static const char *resetText() {
+const char *web_reset_text() {
   switch (esp_reset_reason()) {
     case ESP_RST_POWERON:   return "power on";
     case ESP_RST_DEEPSLEEP: return "wake";
@@ -131,7 +131,7 @@ static const char *resetText() {
 // SD space in KB, cached: usedBytes() can walk the whole FAT when the
 // free-cluster hint is stale, so not on every 2 s poll - once a minute at
 // most, and under the logger's lock. 0/0 with no card, or while the PC has it.
-static void sdSpaceKb(uint32_t *usedKb, uint32_t *totalKb) {
+void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb) {
   static uint32_t used = 0, total = 0, atMs = 0;
   static bool have = false;
   if (!logger_card_ok() || logger_card_shared()) { *usedKb = *totalKb = 0; return; }
@@ -160,7 +160,7 @@ static void handleLiveJson() {
     strftime(local, sizeof(local), "%Y-%m-%d %H:%M:%S", &tm);
   }
   uint32_t sdUsed, sdTotal;
-  sdSpaceKb(&sdUsed, &sdTotal);
+  web_sd_space_kb(&sdUsed, &sdTotal);
   const esp_partition_t *app = esp_ota_get_running_partition();
   const uint32_t appMax = app ? app->size : 0;
   char b[1300];
@@ -220,7 +220,7 @@ static void handleLiveJson() {
            (unsigned)heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
            (unsigned long)sdUsed, (unsigned long)sdTotal,
            (unsigned long)ESP.getSketchSize(), (unsigned long)appMax,
-           temperatureRead(), resetText(),
+           temperatureRead(), web_reset_text(),
            (unsigned long)millis());
   if (len < 0 || len >= (int)sizeof(b)) { server.send(500, "text/plain", "live JSON too long"); return; }
   server.send(200, "application/json", b);

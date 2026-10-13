@@ -834,6 +834,14 @@ static void boot_y_exec(void *obj, int32_t v) {
 }
 
 static lv_obj_t *bootOuter, *bootInner, *bootName;
+static lv_obj_t *bootBench = NULL;    // the status text, once on the bench
+static volatile bool bootTouched = false;
+
+// After the sweep the splash is held (see the loop), and a touch lets it go.
+static void boot_press_cb(lv_event_t *e) {
+  (void)e;
+  bootTouched = true;                 // acted on from loop(), not from LVGL
+}
 
 void ui_boot_anim_start() {
   bootScr          = make_screen();
@@ -948,13 +956,47 @@ bool ui_boot_anim_done() {
     bootAnimsStart();
     return false;
   }
-  return (lv_tick_get() - bootStartMs) >= BOOT_ANIM_MS;
+  if ((lv_tick_get() - bootStartMs) < BOOT_ANIM_MS) return false;
+  // Swept: from now on a touch may end it (the loop holds it up otherwise).
+  if (!lv_obj_has_flag(bootScr, LV_OBJ_FLAG_CLICKABLE)) {
+    lv_obj_add_flag(bootScr, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(bootScr, boot_press_cb, LV_EVENT_PRESSED, NULL);
+  }
+  return true;
+}
+
+bool ui_boot_take_touch() {
+  const bool t = bootTouched;
+  bootTouched = false;
+  return t;
+}
+
+void ui_boot_show_bench(const char *text) {
+  if (!bootScr) return;
+  if (!bootBench) {
+    // The badge goes up and smaller, the arcs stay as the frame.
+    lv_image_set_scale(bootName, 140);                 // 256 = 100 %
+    lv_obj_align(bootName, LV_ALIGN_CENTER, 0, -120);
+    bootBench = lv_label_create(bootScr);
+    lv_obj_set_style_text_color(bootBench, COL_INK, 0);
+    lv_obj_set_style_text_font(bootBench, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_align(bootBench, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_line_space(bootBench, 4, 0);
+    lv_label_set_long_mode(bootBench, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(bootBench, 300);                  // the chord, with margin
+    lv_obj_align(bootBench, LV_ALIGN_CENTER, 0, 30);
+    lv_obj_clear_flag(bootBench, LV_OBJ_FLAG_CLICKABLE);
+  }
+  // Compare first: setting the same text still invalidates the label.
+  if (strcmp(lv_label_get_text(bootBench), text) != 0) lv_label_set_text(bootBench, text);
 }
 
 void ui_boot_anim_end() {
   if (!bootScr) return;
   lv_obj_t *old = bootScr;
   bootScr = NULL;                   // clear first: load triggers a redraw
+  bootBench = NULL;
+  bootTouched = false;
   ui_set_view(ui_current_view());   // back to the remembered screen
   lv_obj_del(old);                  // reclaims the arcs, labels and anims
 }
