@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
@@ -6,7 +6,7 @@ import { HeaderActions } from '@/components/pod-chip';
 import { TrackMap } from '@/components/track-map';
 import { Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
-import { cachedCsv, cachedGpx, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
+import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
 import { type CsvSummary, isEncryptedName, type TrackPoint } from '@/lib/trips';
@@ -94,6 +94,27 @@ export default function TripScreen() {
                       const r = await saveLogsToFolder([t.gpx, t.csv].filter((n): n is string => !!n));
                       Alert.alert('Saved', savedText(r));
                     }),
+                },
+                {
+                  // The phone's copy only: a log still on the gauge's card
+                  // comes back with the next sync - the dialog says so.
+                  label: 'Delete from this phone',
+                  onPress: () =>
+                    Alert.alert(
+                      'Delete this drive?',
+                      'It is removed from this phone. If it is still on the gauge’s card, the next sync brings it back.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: () => {
+                            deleteDrive(t);
+                            router.back();
+                          },
+                        },
+                      ],
+                    ),
                 },
               ].map((it) => ({ ...it, disabled: busy !== null }))}
             />

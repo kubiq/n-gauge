@@ -139,6 +139,17 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   saveInbox(state);
 }
 
+/** Deletes inbox files and their records - the phone's copy only. */
+export function deleteFromInbox(names: string[]): void {
+  const state = loadInbox();
+  for (const n of names) {
+    const f = inboxFile(n);
+    if (f.exists) f.delete();
+    delete state[n];
+  }
+  saveInbox(state);
+}
+
 /**
  * Renames inbox files, old name -> new name. A file already there under the
  * new name (pulled again before the rename) wins; the old copy goes.

@@ -7,7 +7,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
-import { inboxFile, loadInbox, renameInbox } from './store';
+import { deleteFromInbox, inboxFile, loadInbox, renameInbox } from './store';
 import {
   type CsvSummary,
   type GpxSummary,
@@ -59,6 +59,20 @@ export function renameLegacyLogs(): void {
       else src.moveSync(dst);
     }
   }
+}
+
+/**
+ * A drive off the phone: its logs and their cached summaries. The gauge's
+ * card is not touched - a file still there comes back with the next sync.
+ */
+export function deleteDrive(t: TripFiles): void {
+  const names = [t.gpx, t.csv].filter((n): n is string => !!n);
+  deleteFromInbox(names);
+  for (const n of names)
+    for (const ext of ['.json', '.track.json']) {
+      const f = new File(dir, n + ext);
+      if (f.exists) f.delete();
+    }
 }
 
 /** The drives the phone holds, newest first. */
