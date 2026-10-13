@@ -1,8 +1,8 @@
 // ============================================================================
 // webapi.h  —  WiFi AP + phone settings panel / JSON API.
-//   Up whenever the board is awake (WIFI_AP_ALWAYS), because the pod's buttons
-//   are not reachable once it is mounted, so the long-press toggle is no longer
-//   a usable way in. The old privacy/battery objection to an always-on AP is
+//   Up whenever the board is awake (WIFI_AP_ALWAYS), because the pod's button
+//   is not reachable once it is mounted (and no longer toggles it). The old
+//   privacy/battery objection to an always-on AP is
 //   handled by stopping it as part of the sleep sequence instead: parked, the
 //   board sleeps and the AP goes with it.
 //
@@ -21,7 +21,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-void web_toggle();          // start the AP if down, stop it if up
 void web_start();           // bring it up (no-op if already up)
 void web_stop();            // bring it down; called before deep sleep
 bool web_is_up();

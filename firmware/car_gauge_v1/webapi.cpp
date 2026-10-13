@@ -884,11 +884,6 @@ void web_stop() {
   Serial.println(F("[..] settings AP stopped"));
 }
 
-void web_toggle() {
-  if (up) { web_stop(); return; }
-  web_start();
-}
-
 void web_start() {
   if (up) return;
 

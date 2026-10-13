@@ -104,7 +104,7 @@ static void notice_tap_cb(lv_event_t *e);
 
 // --- helpers ----------------------------------------------------------------
 // Swipe to change screens: left for the next one, right for the previous one.
-// The hardware button still steps forward.
+// (The hardware button only wakes the gauge, since 2026-10-13.)
 //
 // It used to be a tap anywhere, which meant a tap could never mean anything
 // else - no screen could have a button without also cycling away from itself.
@@ -971,9 +971,8 @@ void ui_set_view(GaugeView v) {
 }
 
 void ui_step_view(int delta) {
-  // The one chokepoint for "a person asked for a different screen": the
-  // hardware button (from loop()) and swipes (screen_gesture_cb) both come
-  // through here, so the sleep timer only needs resetting in this one place.
+  // The one chokepoint for "a person asked for a different screen" - swipes
+  // (screen_gesture_cb) come through here, so the sleep timer is reset here.
   // Deliberately NOT in ui_set_view(), which also runs for the boot animation
   // and for restoring the saved screen - neither of which is a person.
   power_note_activity();

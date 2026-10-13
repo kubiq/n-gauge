@@ -302,11 +302,6 @@ void bsp_display_set_brightness(uint8_t b) {
   gfx->setBrightness(b);
 }
 
-bool bsp_button_down() {
-  bool raw = digitalRead(BTN_NEXT_GPIO);
-  return BTN_NEXT_ACTIVE_LOW ? !raw : raw;
-}
-
 // Returns false when there is no fresh sample, and hands back the last good
 // one rather than zeros.
 //

@@ -63,7 +63,6 @@ static void ui_update_gmeter_raw(float gx, float gy, float gz) {
 // WiFi AP down while driving, back up once stopped - see AP_DRIVE_OFF.
 static CalcDrive apDrive = {};
 static bool apDroppedForDrive = false;   // we took it down, so we restore it
-static bool apManualHold      = false;   // long press while driving: hands off
 #if FRAME_STATS
 static int  apBenchKmh        = -1;      // 'v<kmh>' override; -1 = real GNSS
 #endif
@@ -82,7 +81,6 @@ static void apDriveTask(uint32_t now) {
                                          AP_DRIVE_ON_KMH, AP_DRIVE_ON_MS,
                                          AP_DRIVE_OFF_KMH, AP_DRIVE_OFF_MS);
   if (!driving) {
-    apManualHold = false;
     if (apDroppedForDrive) {
       apDroppedForDrive = false;
       Serial.println(F("[..] stopped - WiFi AP back up"));
@@ -93,7 +91,7 @@ static void apDriveTask(uint32_t now) {
   if (!wasDriving) Serial.println(F("[..] driving"));
   // Checked every pass, not only on the transition: if a phone was connected
   // when the drive started, the AP goes down once it disconnects.
-  if (!apManualHold && !apDroppedForDrive && web_is_up() && web_clients() == 0) {
+  if (!apDroppedForDrive && web_is_up() && web_clients() == 0) {
     apDroppedForDrive = true;
     Serial.println(F("[..] driving - WiFi AP down until stopped"));
     web_stop();
@@ -502,34 +500,9 @@ void loop() {
 #endif
   ui_update_gmeter_raw(gx, gy, gz);
 
-  // ---- button: short press cycles screens, long press toggles the AP ----
-  {
-    static uint32_t downSince = 0;
-    static bool     longFired = false;
-    if (bsp_button_down()) {
-      if (downSince == 0) downSince = now;
-      if (!longFired && now - downSince >= BTN_LONG_PRESS_MS) {
-        longFired = true;            // fire once per hold, not repeatedly
-        // A long press does not go through ui_step_view(), so it needs its own
-        // reset - otherwise toggling the AP and then waiting for a phone to
-        // associate could run the idle window out before anyone connects.
-        power_note_activity();
-#if AP_DRIVE_OFF
-        // A deliberate toggle while driving wins until the next stop, both
-        // ways: on stays on, off is not undone when the car stops.
-        if (apDrive.driving) { apManualHold = true; apDroppedForDrive = false; }
-#endif
-        web_toggle();
-      }
-    } else {
-      // Act on RELEASE, not on press: the press edge happens long before we
-      // know whether it will become a long press, so triggering there made a
-      // long press cycle the view *and* toggle the AP.
-      if (downSince != 0 && !longFired && now - downSince >= 40) ui_step_view(+1);
-      downSince = 0;
-      longFired = false;
-    }
-  }
+  // No button handling: screens change by swiping, and the WiFi AP follows
+  // the car (up when awake, down while driving). The button only wakes the
+  // gauge from deep sleep (power.cpp), like the door opening does.
 
   // ---- remember the screen across restarts ----
   // Deferred on purpose: cycling through six views to reach the one you want

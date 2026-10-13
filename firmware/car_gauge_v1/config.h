@@ -710,10 +710,9 @@
 #define GM_FLIP_X          0
 #define GM_FLIP_Y          1      // bench-checked 2026-09-26: tilt back went down
 
-// ---- Phone settings panel (on-demand WiFi AP) ------------------------------
-// Long-press the button to bring the AP up, then browse to http://192.168.4.1/
-// Off by default: it draws current, and an always-on AP in a parked car is
-// both a battery and a privacy nuisance.
+// ---- Phone settings panel (WiFi AP) ----------------------------------------
+// Up whenever the gauge is awake (WIFI_AP_ALWAYS below), down while driving
+// (AP_DRIVE_OFF). Parked, the gauge sleeps and the AP goes with it.
 #define WIFI_AP_SSID       "n-gauge"
 // There is deliberately NO default password any more. The AP is up the whole
 // time the board is awake and serves the complete GPS history of every drive,
@@ -725,10 +724,10 @@
 // Deliberately excludes 0/O/1/l/I and similar - this gets typed on a phone
 // from a screen, in a car, possibly in the dark.
 #define WIFI_AP_PASS_ALPHABET "abcdefghjkmnpqrstuvwxyz23456789"
-#define BTN_LONG_PRESS_MS  1200          // hold this long to toggle the AP
-// 1 = bring the AP up at boot and keep it up while awake. Needed because the
-// pod's buttons cannot be reached once it is mounted, so the long-press toggle
-// is no longer a usable way in. This does NOT stop the board sleeping - the AP
+// 1 = bring the AP up at boot and keep it up while awake. The pod's button
+// cannot be reached once it is mounted (and since 2026-10-13 it only wakes
+// the board - no long-press toggle), so this is the way in. This does NOT stop
+// the board sleeping - the AP
 // is shut down as part of goToSleep(), so parked it goes away with everything
 // else. It does cost current while awake, which the engine is paying for.
 #define WIFI_AP_ALWAYS     1
@@ -737,7 +736,7 @@
 // stopped. A 2.4 GHz transmitter a few centimetres from the GNSS antenna is
 // competing with a -130 dBm satellite signal; stationary is also exactly when
 // the settings page and log downloads are wanted. Never while a phone is
-// connected, and a long press while driving keeps it up until the next stop.
+// connected.
 // Keyed on GNSS speed, NOT on CAN: the bus is alive whenever the engine runs,
 // including parked at the kerb. The premise (does the AP actually hurt the
 // fix?) is still unmeasured - the drive CSV's apUp column plus the GPX

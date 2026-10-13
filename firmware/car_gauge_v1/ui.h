@@ -24,8 +24,7 @@ enum Wheel { WHEEL_FL = 0, WHEEL_FR, WHEEL_RL, WHEEL_RR, WHEEL_COUNT };
 
 void ui_init();                       // build all screens (call after LVGL is up)
 void ui_set_view(GaugeView v);        // switch active screen
-// Step through the screens: +1 = next (swipe left, or the hardware button),
-// -1 = previous (swipe right).
+// Step through the screens: +1 = next (swipe left), -1 = previous (swipe right).
 void ui_step_view(int delta);
 GaugeView ui_current_view();
 // Is the view in the cycle (settings.views), i.e. not hidden?

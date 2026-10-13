@@ -43,8 +43,6 @@ void bsp_display_set_brightness(uint8_t b);   // 0-255, applies immediately
 // prints the frame/flush/loop summary every 2 s.
 void bsp_frame_stats_loop(uint32_t loopUs, uint32_t lvUs, int view);
 
-bool bsp_button_down();   // current button level; the sketch derives
-                          // short vs long press from this
 // QMI8658 accel in g. gz is the vertical axis - used as a depth cue on the
 // g-meter sphere, and it also shows kerb strikes and suspension loading.
 // Returns false if no sample has ever been read; otherwise fills gx/gy/gz and

@@ -10,8 +10,8 @@ void power_task();         // in loop: sleep once the bus has been idle too long
 // anything expensive that only an awake car needs, like the WiFi AP.
 bool power_wake_pending();
 
-// Note that a person is actively operating the gauge - cycling screens with the
-// button or by tapping the panel, or long-pressing to toggle the AP. Each call
+// Note that a person is actively operating the gauge - swiping or tapping the
+// panel. Each call
 // buys another "Sleep after" window (settings.sleepAfterMin), the same a live CAN bus
 // and a connected AP client get.
 //
