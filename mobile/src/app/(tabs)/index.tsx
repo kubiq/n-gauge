@@ -2,7 +2,7 @@ import { router, useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-import { OverflowMenu } from '@/components/overflow-menu';
+import { HeaderActions } from '@/components/pod-chip';
 import { Button, Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
@@ -61,7 +61,7 @@ export default function PodScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <OverflowMenu items={hasCreds ? [{ label: 'Scan a different pod', onPress: scan }] : []} />
+        <HeaderActions items={hasCreds ? [{ label: 'Scan a different pod', onPress: scan }] : []} />
       ),
     });
   }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps

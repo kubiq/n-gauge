@@ -1,6 +1,7 @@
 import { router, Tabs, usePathname } from 'expo-router';
 import { useEffect } from 'react';
 
+import { HeaderActions } from '@/components/pod-chip';
 import { usePod } from '@/hooks/use-pod';
 import { C } from '@/theme';
 
@@ -22,9 +23,11 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        // A header on every tab: the title, and a ⋮ menu (OverflowMenu) for
-        // the rarer actions, set by each screen.
+        // A header on every tab: the title, the pod (PodChip), and a ⋮ menu
+        // for the rarer actions - a screen with menu items sets its own
+        // headerRight to HeaderActions with them.
         headerShown: true,
+        headerRight: () => <HeaderActions />,
         headerStyle: { backgroundColor: C.bg },
         headerTintColor: C.text,
         headerShadowVisible: false,

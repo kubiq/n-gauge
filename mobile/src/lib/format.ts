@@ -10,6 +10,14 @@ export function duration(s: number): string {
   return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`;
 }
 
+/** Short: the time of day if it was today, else the date - "14:45", "11 Oct". */
+export function shortWhen(ms: number, now = Date.now()): string {
+  const d = new Date(ms);
+  return d.toDateString() === new Date(now).toDateString()
+    ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 /** Local date and time of day, e.g. "Sat 11 Oct, 14:45". */
 export function when(ms: number): string {
   const d = new Date(ms);

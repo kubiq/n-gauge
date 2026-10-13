@@ -12,7 +12,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useR
 
 import { usePod } from '@/hooks/use-pod';
 import { listFiles } from '@/lib/pod';
-import { dropNonLogs, type Inbox, knownBytes, loadInbox, pull } from '@/lib/store';
+import { dropNonLogs, type Inbox, knownBytes, loadInbox, loadLastSync, pull, saveLastSync } from '@/lib/store';
 import { renameLegacyLogs } from '@/lib/trip-cache';
 import { type PodFile, planPull, type Pull } from '@/lib/sync-plan';
 
@@ -31,6 +31,10 @@ type Sync = {
   inbox: Inbox;
   /** Bumped each time a file lands, for screens that list the inbox. */
   landed: number;
+  /** While pulling: the file being pulled (1-based) of how many. */
+  progress: { at: number; of: number } | null;
+  /** When a sync last finished with nothing left to pull (ms), across restarts. */
+  lastSync: number | null;
   /** Check, then pull whatever is new. */
   sync: () => Promise<void>;
   check: () => Promise<void>;
@@ -58,6 +62,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return dropNonLogs();
   });
   const [landed, setLanded] = useState(0);
+  const [progress, setProgress] = useState<{ at: number; of: number } | null>(null);
+  const [lastSync, setLastSync] = useState(loadLastSync);
   // One check or pull at a time - the pod serves one request at a time anyway.
   const running = useRef<Promise<void> | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -76,7 +82,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return { files, plan: p };
   };
 
-  const pullPlan = async (files: PodFile[], todo: Pull[]) => {
+  // True when every file landed.
+  const pullPlan = async (files: PodFile[], todo: Pull[]): Promise<boolean> => {
     const ctl = new AbortController();
     abort.current = ctl;
     setPhase('pulling');
@@ -84,6 +91,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     try {
       for (const [i, p] of todo.entries()) {
         if (ctl.signal.aborted) break;
+        setProgress({ at: i + 1, of: todo.length });
         await pull(
           p,
           (b) => setStatus(`${i + 1}/${todo.length} ${p.name}: ${mb(b)} of ${mb(p.size - p.from)}`),
@@ -104,7 +112,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       else setErr(`Stopped after ${done} of ${todo.length}: ${(e as Error).message}`);
     } finally {
       abort.current = null;
+      setProgress(null);
     }
+    return done === todo.length;
   };
 
   // Each run is one promise in `running`, so cancel() can wait for it.
@@ -132,7 +142,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     () =>
       run(async () => {
         const r = await listAndPlan();
-        if (r.plan.length && !stopped.current) await pullPlan(r.files, r.plan);
+        const complete = !r.plan.length || (!stopped.current && (await pullPlan(r.files, r.plan)));
+        if (complete) {
+          const t = Date.now();
+          saveLastSync(t);
+          setLastSync(t);
+        }
       }),
     [run],
   );
@@ -156,7 +171,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, [connected, sync]);
 
   return (
-    <SyncContext.Provider value={{ phase, podFiles, plan, status, err, inbox, landed, sync, check, cancel }}>
+    <SyncContext.Provider
+      value={{ phase, podFiles, plan, status, err, inbox, landed, progress, lastSync, sync, check, cancel }}>
       {children}
     </SyncContext.Provider>
   );

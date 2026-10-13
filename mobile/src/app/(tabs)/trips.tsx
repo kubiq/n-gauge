@@ -2,7 +2,7 @@ import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { OverflowMenu } from '@/components/overflow-menu';
+import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
@@ -107,7 +107,7 @@ export default function TripsScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <OverflowMenu
+        <HeaderActions
           items={hasTrips ? [{ label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving }] : []}
         />
       ),

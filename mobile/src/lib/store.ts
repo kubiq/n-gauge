@@ -36,6 +36,16 @@ export type Inbox = Record<string, InboxEntry>;
 const inboxDir = new Directory(Paths.document, 'inbox');
 const stateFile = new File(Paths.document, 'inbox.json');
 const partsDir = new Directory(Paths.cache, 'pulls');
+const lastSyncFile = new File(Paths.document, 'last-sync.txt');
+
+/** When a sync last left nothing to pull (ms since epoch), or null. */
+export function loadLastSync(): number | null {
+  return lastSyncFile.exists ? Number(lastSyncFile.textSync()) || null : null;
+}
+
+export function saveLastSync(t: number): void {
+  lastSyncFile.write(String(t));
+}
 
 function ensureDir() {
   if (!inboxDir.exists) inboxDir.create({ intermediates: true });
