@@ -46,7 +46,11 @@ if [ -n "${BUILD_ROOT:-}" ]; then
 fi
 
 # arm64 only: every current phone, and a quarter of the native build.
-(cd android && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --console=plain)
+# 4 GB for Gradle, not the template's 2: dex merging ran out of heap twice on
+# 2026-10-14 (D8 OutOfMemoryError), the second time after react-native-svg.
+# Here, not in android/gradle.properties: prebuild rewrites that every build.
+(cd android && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --console=plain \
+  -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m")
 
 APK=android/app/build/outputs/apk/release/app-release.apk
 echo "==> $APK"
