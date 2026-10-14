@@ -165,6 +165,10 @@ export default function TripScreen() {
       {problem ? <Note tone="bad">{problem}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} /> : null}
 
+      {/* The drive's shape first - where (the map), then how (the charts) -
+          and the figures after. */}
+      {series ? <DriveChart series={series} /> : null}
+
       {g ? (
         <Card title="Drive">
           {/* The header carries the name; the date goes here then. */}
@@ -189,8 +193,6 @@ export default function TripScreen() {
           {c.maxObdKmh != null ? <Row label="Top speed (speedometer)" value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
         </Card>
       ) : null}
-
-      {series ? <DriveChart series={series} /> : null}
 
     </Screen>
   );
