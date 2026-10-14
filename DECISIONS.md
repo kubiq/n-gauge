@@ -1,8 +1,8 @@
 # Decisions
 
-Why this firmware is the way it is. Every entry is a choice that could
-reasonably have gone the other way, with the reason and — where one exists —
-the trap that made the reason obvious.
+Why the gauge's firmware and its phone app are the way they are. Every entry
+is a choice that could reasonably have gone the other way, with the reason
+and — where one exists — the trap that made the reason obvious.
 
 Almost none of this is guessable from the code. This holds settled work. If a
 decision here turns out to be wrong, change the entry rather than deleting
@@ -68,6 +68,42 @@ So the tests exercise the same code the board runs rather than a
 reimplementation. `tests/` also includes `config.h`, so the thresholds under
 test are the shipped ones — a test carrying its own copy of a constant stops
 testing the shipped behaviour the moment someone tunes it.
+
+**The logger runs on its own task on core 0.** (2026-10-11.)
+Measured first - `logMaxMs` and `loopMaxMs` columns in the CSV - because the
+guess was wrong: building each CSV row in one buffer instead of ~50 prints
+changed nothing (the logger's median stayed ~20 ms). A bench test of the card
+said why: a 400-byte write costs ~0 ms, a flush 13 ms settled and 40-130 ms on
+a fresh file. **The cost is saves, not writes.** Two fixes followed:
+- The GPX buffer went from 2 KB to 12 KB. At 25 Hz (~4.5 KB/s) 2 KB filled
+  every ~0.4 s, a save each time; 12 KB holds the 2 s of `GPX_FLUSH_MS`.
+- The logger left `loop()` for a priority-1 task on core 0 (below CAN at 5 and
+  the GNSS at 4). Everything on core 1 that touches the card - sleep, the USB
+  share, the phone's downloads, the serial dump - takes `LoggerSdLock`. The
+  CSV's IMU columns take the loop's sample, since I2C is shared with touch.
+On the road (three drives, 2026-10-11): loop pass median 27-29 -> 11 ms,
+passes over 40 ms 22 % -> 4-7 %, max 287-474 -> 147-210 ms, CAN untouched
+(0 RX overflows, 0 ISO-TP aborts over 93 k transfers). The card's saves still
+take up to ~500 ms - now where nothing waits for them.
+
+**Settings are one table.** (2026-10-09.) Each simple setting is a row of
+`settings_table` - NVS key (also the form field), JSON name, type, field,
+default, range - and load, save, `/save` and `/api/settings` all walk it,
+replacing five hand-kept lists. A stored value out of range or NaN loads as
+the default: a brightness of 0 would leave a black screen with the phone page
+as the only way back. Rules between settings (oil warning above ready, tyre
+low below high) are in `settings_fixup()`. The app keeps the same schema in
+`settings-schema.ts`.
+
+**No library swaps.** (Survey, 2026-10-09.) Already on libraries where one
+fits: TinyGPSPlus, SensorLib, Arduino_GFX, LVGL's QR, the core's WebServer,
+DNSServer, Preferences and Update. Kept our own, each for a reason: ISO-TP
+(ours checks which module replied - the oil/TPMS mix-up fix - and handles
+short last frames; 99.8-100 % reassembly on drives; the libraries are small
+hobby projects), the UBX config (SparkFun's is large, adds a second parser on
+the UART, and its blocking waits ignore a sleep request; we send three
+messages), and the web server (ESPAsyncWebServer costs internal RAM and
+cross-task locking). The core's USBMSC was later replaced too - see USB share.
 
 **The LVGL heap pool is allocated from PSRAM.**
 `LV_MEM_SIZE` is 128 KB, which a 466×466 UI needs. In internal DRAM that left
@@ -252,6 +288,9 @@ static bytes, not a boost block. **There is no torque value reachable from
 the OBD port.** Any torque shown will be an estimate from absolute load
 (PID 0x43, logged since), calibrated on a full-throttle pull, and labelled
 as an estimate.
+The probe and the link benchmark were then **removed** (2026-10-09), not left
+switched off: every engine reply still went through their hooks, and they
+were 563 lines and 4 KB of flash for questions already answered.
 
 **Boost shows 0.00 below atmospheric, and its zero is the car's baro.**
 Negative boost is real — on a petrol engine the throttle holds the manifold
@@ -304,11 +343,77 @@ retried on every row. This is the software answer to the missing RTC backup
 cell: the only place to fit one on this board is soldering to CP13, rejected
 as too risky on so small a PCB and not sturdy in a car.
 
-**The SD file server has no delete endpoint.** Deliberately. It is reachable by
-anyone who joins the AP.
+**Logging is a level, not a switch.** (2026-10-09; setting `logLevel`,
+default Full.) Off (the sleep log only), Trips (GPX, and the VBO in track
+mode), Normal (adds the drive CSV), Full (adds the raw hex columns: TPMS and
+the oil DID). Below Full those stay as empty columns, so the CSV's layout
+never depends on the level. A change closes every file; what the new level
+allows reopens as new files. Asked as "a switch to turn logging off if it
+slows the gauge": measured instead (above), and fixed where it cost - a switch
+would have lost the logs that diagnosed the oil byte, sleep and coolant.
 
-**Logs are to be encrypted to a public key; the pod never holds a key that can
-read them.** (Decided 2026-10-11, not built yet.)
+**Every log name carries a session id.** (2026-10-13, bb8b288.) Six random
+hex digits per boot or wake, before the extension:
+`trip_2026-10-12_21-19_3fa81c.gpx`. On 2026-10-12 the pod restarted a minute
+into a drive, and pairing the GPX with its CSV by time took the wrong one;
+nothing in the names said which belonged together. Random rather than
+counted, so an erased NVS cannot repeat ids already on the card. Logs from
+before got ids hashed from their GPX's name (`legacy-names.ts`, and
+`scripts/rename-legacy.ts` for the card and saved folders).
+
+**The gear is worked out, not read.** (2026-10-10.) The DCT picks its own
+gears and the gateway hides which, but in any gear rpm per km/h is fixed.
+Ratios measured from 3957 samples at 12 km/h or more: 122, 74, 50.5, 37.6,
+30.5, 25.2, 20.0, and 16.1 for 8th (a motorway stretch). `calc_gear()` takes
+the nearest within 7 % - half the gap between 6th and 7th, so no two windows
+overlap - above 10 km/h; anything else (shifting, slip, neutral) is gear 0.
+Replayed on two drives: 77-85 % of moving rows got a gear, none jumped two.
+
+**Voltage is PID 0x42, on a request of its own, logged last.** (2026-10-14,
+21a823d.) The ECU's own supply: the battery engine off, the charging voltage
+running - in the supported list since the 2026-10-03 probe. Once a second
+(`VOLTS_POLL_MS`): added to the 5 Hz slow request, its two bytes would push
+that reply past one CAN frame. The CSV's **last** column, `volts`, so no
+column before it moves - the app reads columns by name, but a spreadsheet of
+old and new logs side by side does not. In `/api/live` and the app; not on
+the gauge's screens (the owner's call). First drives (2026-10-14): 14.4-15.0 V
+running (median 14.58), 9.9-10.6 V cranking, ~12.1-12.7 V just after
+switching off - so the "16.6 V charging" of September was the meter. ⚠
+Switching off, the ECU answers **0.00 V** for ~11 s before going silent:
+its shutdown, not the battery. Anything under `VOLTS_MIN_V` (5 V) is no
+reading.
+
+**Firmware on the card is installed once, by its hash.** (2026-10-09.)
+`ota_check_sd()` reads the image's own `app_elf_sha256` from its header
+(~300 bytes, nothing hashed) instead of renaming the file to
+`firmware_installed.bin`. The last hash acted on goes to NVS **before**
+installing: an image that crashes and rolls back is not retried forever, and
+an old file left on the card can never overwrite a later USB flash. The file
+stays where it is.
+
+**The card has a delete, for drive logs only, from the app.** (2026-10-14,
+d45a40c - reversing "no delete endpoint, deliberately: it is reachable by
+anyone who joins the AP".) That rule held while a log was often the only copy
+of an unrepeatable run. Once the phone synced every log, deleting a drive on
+the phone was pointless without it: the next sync pulled the file straight
+back. So `POST /api/delete` exists, narrowed to what the reason was about:
+- **Drive logs only** - `trip_`/`drive_`/`track_` with `.gpx`/`.csv`/`.vbo`,
+  plain or `.nge`. Never the settings, the sleep log or a firmware `.bin`.
+- **Not a file this session still writes** (`logger_is_open`, 409) - that
+  would lose the rest of the drive - nor while the card is lent to a PC (503).
+- **A file already gone is 410, not 404.** An unknown path is answered by the
+  captive portal with a 200 page, so the app counts only the body `deleted`
+  or a 410 as done, and older firmware without the handler can never look
+  like a successful delete.
+What still guards it: the AP's per-device passphrase, the drive-log filter,
+and the app's confirmation dialog. The `/files` page stays read-only.
+
+**Logs are encrypted to a public key; the pod never holds a key that can
+read them.** (Decided and built 2026-10-11; encrypting on the car since that
+evening, seen read back by the app 2026-10-13. Bench check: an 80 s run of 43
+records decrypted to 159 rows with no plaintext in the file; cost +33 KB flash,
++17 KB RAM. The CSV is staged in 4 KB and written at each 2 s flush, so one
+flush is one record.)
 The card holds every drive's GPS track, the CSV included (lat/lon columns) -
 where the car is parked at night - readable by anyone who takes the card out.
 That is the threat: **card theft**. A pod taken whole is covered too, as a
@@ -384,6 +489,65 @@ side effect of the design.
 
 ---
 
+## Lap timing
+
+**Lap 1 starts when the car pulls away, and no lap is under 10 s.**
+(2026-10-09/10.) On the first try the loop after setting the line was timed
+as an out-lap; lap 1 now runs from the last fix under 5 km/h after it. The
+minimum went from 20 s to 10 s after a real 17.7 s test loop was taken for a
+double trigger and two loops merged into one 38.5 s lap: GPS jitter
+re-crosses a line within 1-2 s, and no track lap is under 10.
+
+**The line is found by loop closure: tap START anywhere.** (2026-10-12,
+99556ae, `loopfind.h`; not yet driven.) Setting the line meant stopping on
+it - impossible on a real track - and starting from the pit made lap 1 the
+drive out of it. Now the gauge drops a breadcrumb every 10 m (in PSRAM,
+~40 km before it gives up); after 500 m, the first crumb within 20 m of an
+older one, heading within 30°, closes the loop, and that crumb is the line.
+The pit exit is never driven again, so it never matches; the heading test and
+the minimum length reject figure-8 crossovers, U-turns and out-and-back
+roads. Accepted costs: the line is wherever the loop first closes - often
+just after pit exit, not the official start/finish - so laps are consistent
+but offset from the circuit's own; and the VBO opens once the line is found,
+so it misses lap 1.
+
+---
+
+## USB share
+
+**The card as a USB drive is read-only, and empty until shared.**
+(2026-10-08/12.) A composite USB device - serial plus mass storage - whose
+drive shows no medium until "Share SD card with PC" is tapped on the WiFi
+screen (the button exists only with a PC connected). Sharing suspends the
+logger: every file closed, no card access, until it ends. Read-only because
+a PC writes to a mounted FAT card even when nothing is copied - unmounting
+was slow and left "not properly unmounted" - and because a read-only drive
+can be taken back by the gauge safely ("Stop sharing"): the worst a PC loses
+is a copy in progress.
+
+**Our own `tud_msc_*` callbacks, not the core's USBMSC.** (2026-10-13,
+b18b7dc.) After an eject the board reset every ~9 s for minutes. The core's
+USBMSC answers a READ with no medium as 0, which TinyUSB defines as "busy,
+call again" - so the PC's post-eject read of sector 0 spun forever, starved
+`loop()` into the 8 s watchdog, and the PC asked again after the reset. It
+depended on timing, which is why six ejects in a row had gone fine the day
+before. Ours fails at once with NOT READY / MEDIUM NOT PRESENT (answered in
+1 ms) and refuses writes with DATA PROTECT. Verified: 77 files (~250 MB)
+read without error, an eject, no resets.
+⚠ The first two explanations - the PC's writes, then a race - were both
+wrong; read-only was still worth keeping for its own reasons (above).
+
+**Reads are multi-sector, and the PC is told the partition's size.**
+(2026-10-11.) One sector per card command made a 4 KB PC request eight
+commands; one FatFs read per request took an 8.3 MB file from 571 to
+807 kB/s, near full-speed USB's ~1 MB/s. 4-bit SD would not help and cannot
+be had: D1 and D2 are not wired on this socket. The same change fixed the
+size: the PC had been given the FAT volume's, 8192 sectors short of the
+partition ("p1 extends beyond EOD" on every share), so a file in the last
+4 MB would have read wrong.
+
+---
+
 ## UI
 
 **Every updater compares before touching its object.**
@@ -394,6 +558,12 @@ partial-render display a label that large spans several flush strips — which i
 why oil visibly blinked and the 28 px coolant number next to it did not.
 ⚠ For anything full-panel the guard is not an optimisation but the difference
 between a rendered element and a strobe.
+⚠ Flags too: `lv_obj_remove_flag(HIDDEN)` invalidates the whole object even
+when it is already shown. The WiFi screen's countdown cleared HIDDEN on its
+full-screen arc every step, so every frame redrew ~199 KPx, the loop ran at
+7 Hz there against 121 elsewhere, and touch was read every ~143 ms - swipes
+on that screen were missed (2026-10-13, b56f9a4). Changing the flag only on
+a real change: 122 Hz.
 
 **Swipe to change screens; taps are for buttons.** (Changed 2026-09-25.)
 The hardware buttons are unreachable once the board is in the printed pod, so
@@ -403,6 +573,20 @@ carry a button. Left/right swipes change screen now, and taps are free.
 ⚠ LVGL still sends `LV_EVENT_CLICKED` at the end of a swipe that *started* on a
 button, so every button handler must first ask `touch_was_swipe()`. Otherwise a
 swipe across the track screen could press "Set line".
+
+**The screens and their order are a setting; WiFi is always in, and last.**
+(2026-10-13, 37822ed.) `settings.views` is the order as digits (default
+`0245736`); a screen left out is never cycled to. WiFi cannot be left out -
+it is the way to the phone - and sits last: it is for setting up, not for
+reading while driving. A boot onto a screen since hidden lands on the first
+non-WiFi screen, not always on Oil.
+
+**The hardware button only wakes the board.** (2026-10-13.) With swipes for
+screens and a touch restarting the WiFi countdown, the short press (next
+screen) and long press (toggle the AP) had nothing left to do, and the button
+is unreachable in the mounted pod. Their handling went - and with it the
+manual AP hold, the only way to keep the AP up while driving. It stays a
+deep-sleep wake source.
 
 **Faults are shown as a coloured rim plus one line of text — the notification
 area — not as text in the middle.** It started as a CAN-only red rim and now
@@ -448,6 +632,23 @@ frame and vanished.
 transparent. If the animation does not run, an element animated from
 `LV_OPA_TRANSP` stays invisible with no clue why; one animated from the wrong
 position is merely misplaced.
+
+**The splash stays until the car answers; on the bench it is a status
+page.** (2026-10-13, c00924c.) A wake showed the gauges before any CAN data
+existed, all reading "--", and the gauge looked broken. After its sweep the
+splash now holds until a reading is fresh (oil, coolant, boost, rpm or
+speed), or the "no car" fault would show anyway - the screens then say "--"
+for a reason - or a touch. A wake that goes back to sleep never shows a gauge.
+With a PC on USB the held splash is a status page instead, with no timeout -
+build, WiFi, SD, GPS, CAN, RAM, chip temperature, uptime, reset reason -
+since gauges mean nothing at the desk. ⚠ Montserrat 14 as built has no
+middle dot: "·" drew as nothing, so the separators are bullets.
+
+**Show an update on the gauge itself.** (2026-10-13, e1a57fd.) A firmware
+upload from the app left the gauge silent for ~30 s and then restarting. It
+now says "Updating firmware...", the megabytes received every 256 KB (a
+multipart upload does not give its size up front), then "Update installed,
+restarting..." - and clears the notice on a failed or aborted upload.
 
 **Frame budget: what a frame costs, and why the g-meter is built the way it is.**
 Measured 2026-09-26 with `FRAME_STATS` (serial stats plus an on-board bench,
@@ -540,6 +741,131 @@ usually where its owner lives.
 Otherwise a phone keeps serving a page from before the last reflash, which is
 invisible and very confusing: a control added in firmware simply is not there,
 or is there without its handler.
+
+**The AP goes down while driving.** (2026-09-27, `AP_DRIVE_OFF`.) A 2.4 GHz
+transmitter a few centimetres from the GNSS antenna competes with a
+-130 dBm signal, and the AP is wanted when the car stands - settings,
+downloads - not on the move. Driving is a fix and 20 km/h held 5 s; stopped is
+under 5 km/h or no fix held 60 s, so a red light does not restart it (each
+start takes ~46 KB of internal RAM, and `esp_wifi` panics rather than fails).
+Keyed on GNSS speed, not CAN: the bus is alive at the kerb with the engine
+running. Never dropped while a phone is connected, and restored only if we
+dropped it. ⚠ The premise is unmeasured: the comparison drive with the AP
+left up is still to do.
+
+**No hidden SSID.** (Discussed 2026-10-11.) A hidden AP still sends beacons,
+so it does nothing for the GNSS reason above, and Android joins hidden
+networks less reliably - the QR flow would get worse to gain little.
+
+---
+
+## The phone app
+
+**A phone app after all.** (Planned and started 2026-10-11, replacing both
+the 2026-10-08 "not doing" and a hotspot-upload plan of the same day.) Expo
+SDK 57 with expo-router; native code only for joining the pod's WiFi
+(`modules/pod-wifi`). What it does that the pod's own pages could not: keep
+the logs between syncs, hold the private key the logs are encrypted to, and
+join the pod's network by itself.
+
+**One main screen, the gauge in its header.** (2026-10-13.) Like Garmin
+Connect shows its watch: the drives are the app, titled "N Gauge"; the gauge
+is a ring in the header - grey, green, red after a failed sync, a spinner
+while busy - and a tap connects, or opens the Gauge screen when connected.
+No tabs. Settings in the main ⋮ holds only the phone's things (log key,
+logs folder, About); the gauge's settings, screen order and firmware are a
+screen of their own in the Gauge screen's ⋮ (2026-10-14, e10070d). The
+app says "gauge", never "pod".
+
+**Connected means no internet.** The app joins the pod's network with
+`WifiNetworkSpecifier` - Android's one-tap "connect to this device", with
+mobile data still the default route - and binds its own process to it, or
+requests to 4.3.2.1 would leave over mobile data. So while connected the
+app has no internet: no map tiles, no upload. Everything that must work
+right after a sync works offline - which decided how drives are named
+(below). The Gauge screen says so before connecting. The QR is read with
+Google's code scanner: the gauge's ~12 mm code is too small for the in-app
+camera without zoom.
+
+**Sync: automatic, by name and size, smallest first.** (2026-10-11/13.) On
+every connect, not on a tap - on 2026-10-12 two drives sat on the card while
+the phone only "checked". The pod lists `{name, size}`; a file that grew is
+fetched from where the phone stopped, by Range; one smaller on the pod than
+on the phone is not the same file and is fetched whole. Smallest first, so a
+sync cut short by the pod going to sleep has whole files, not half a GPX.
+Only the pod's own logs are synced (it had been pulling firmware `.bin`s).
+The pod serves one request at a time: live readings pause during a sync, and
+a settings save or firmware upload stops it first.
+
+**A drive deleted on the phone is deleted on the gauge.** (2026-10-14,
+d45a40c.) Its names go on a delete-on-gauge list; every sync asks the gauge
+to delete them before planning, and never pulls a listed name meanwhile. A
+name leaves the list on "deleted", on 410, or once the gauge no longer has
+it - so deleting while not connected, or during a drive still being
+written, just waits.
+
+**Each file is summarised once, and the summary cached by size and
+version.** Parsing a 17 MB GPX takes a second or two; its summary is a few
+hundred bytes, and the thinned track (10 m) is cached apart so the list never
+loads tracks. `VERSION` is bumped whenever a summary's maths change, so old
+caches are redone. ⚠ The summaries live in screen state, loaded once per
+visit - never read from disk during render: the React Compiler memoised such
+a read by file name, it never ran again, and rows stayed on "Reading..."
+after their summary had landed.
+
+**Bad fixes are dropped in the reader.** (2026-10-13, 8db3d6a.) The 23.9.
+drive ended on a fix 13.5 km away and, after a tunnel, spent 10 s 2.6 km off
+the road at "260 km/h" - top speed 261. The firmware's plausibility check is
+newer than that file, so the app cleans what it reads: the track is cut into
+runs at jumps (over 30 m at over 300 km/h), new segments and gaps over 20 s,
+and a run under 30 s bordered by a jump is dropped - never the longest, and
+not a short run between two plain gaps (between tunnels). Checked on all 33
+tracks: only the three September ones changed; 23.9.'s top speed 261 ->
+171 km/h. Files from before 2026-09-23 carry a bare `<speed>`, not the GPX
+extension's - read as no speed at all, they showed 0 km/h tops (4b461b2).
+
+**GPX and CSV pair by session; restart fragments hide.** By the session id in
+their names (above), not by time. A drive under 200 m and 3 min (or car data
+under 1 min) is a restart fragment or a blip: hidden, with a "Show N very
+short drives" link, never silently dropped.
+
+**Drives are named from place lists shipped in the app.** (2026-10-14,
+9095a3c.) "Kolín → Příbram", "Around Kolín" for a loop. Offline on purpose:
+no coordinates leave the phone, and drives are summarised right after a sync,
+on the gauge's WiFi, with no internet. GeoNames lists for CZ and its
+neighbours (SK AT DE PL HU, ~1.9 MB in the APK), built by
+`scripts/make-places.ts`:
+- **Every populated place is kept, those of 100 people or more marked
+  known.** A known place within 3 km wins over a nearer hamlet: in a city the
+  quarter people say, not a cluster of houses by the road that happens to
+  have its own entry. Filtering by population instead lost whole regions:
+  GeoNames has it for a quarter of Slovak and Polish villages, under a tenth
+  of Hungarian ones.
+- **A list is read only while a new drive is summarised,** as an asset file,
+  and let go; the two names are cached with the summary. A required JSON
+  would have stayed in memory for the whole run (Germany: 82 k places).
+- **Your own places win within 300 m,** checked on every render, so renaming
+  "Home" renames every drive from it. They exist because a point per quarter
+  cannot know where a quarter ends: at the far edge of a large quarter, the
+  point of a smaller one across a river can be nearer than its own.
+
+**Logs become readable again only in the app.** (2026-10-11.) The key is on
+the phone, so the phone hands logs on decrypted: share a drive's GPX or CSV,
+or save to a folder - plain names, files already there skipped, the folder
+remembered (Android's persistable permission). No PC tool.
+
+**The map is MapLibre in a WebView, on OpenFreeMap tiles.** No API key and no
+native map SDK to build. Pinned to maplibre-gl 5: version 6 no longer ships
+the plain script build a page without a bundler needs. Its credit is a line
+under the map in the app's style - MapLibre's own box opened as a white bar.
+
+**The version comes from git.** (2026-10-13.) Every APK was 0.1.0 /
+versionCode 1, so which build was on the phone could not be told. versionCode
+is the commit count, the version `0.1.<count>`, and About shows the commit
+(+changes when built from uncommitted work). `build-apk.sh` runs
+`expo prebuild` every time, since that is what writes the version into the
+Android project. ⚠ Another rewrite of the history would lower the count, and
+Android refuses a lower versionCode as an update.
 
 ---
 
