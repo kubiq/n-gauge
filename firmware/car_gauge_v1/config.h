@@ -214,6 +214,11 @@
 // ~7 ms in every 200 (~3.5 % of the fast request's slots).
 #define OBD_SLOW_PIDS       { 0x0E, 0x0F }
 #define OBD_SLOW_POLL_MS    200
+// PID 0x42, control module voltage (2026-10-14): the ECU's own supply - the
+// battery with the engine off, the charging voltage running. Its own request:
+// added to OBD_SLOW_PIDS its 2 bytes would push that reply past one frame.
+// Once a second is plenty for a voltage.
+#define VOLTS_POLL_MS       1000
 
 // A value older than this is treated as NO value. This matters more than it
 // looks: a frozen number on screen is indistinguishable from a steady reading,

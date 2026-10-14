@@ -53,6 +53,8 @@ export type PodLive = {
     coolantC: number;
     haveBoost: boolean;
     boostBar: number;
+    /** The ECU's supply, PID 0x42; null while not fresh. Firmware from 2026-10-14 on. */
+    volts?: number | null;
   };
   iso: { ok: number; aborts: number; rxOverflows: number; busOff: boolean; busOffs: number; recoveries: number; errPassive: number };
   gps: { linkUp: boolean; haveFix: boolean; sats: number; speedKmh: number; hdop: number };

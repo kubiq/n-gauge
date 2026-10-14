@@ -715,7 +715,7 @@ static bool driveOpen() {
                                "t0bar,t1bar,t2bar,t3bar,t0c,t1c,t2c,t3c,tpmsRaw,"
                                "oilRawPayload,apUp,obdKmh,coolantPid05C,"
                                "absLoadPct,baroKpa,pedalRaw,rpm,timingDeg,iatC,gear,"
-                               "logMaxMs,loopMaxMs\r\n";
+                               "logMaxMs,loopMaxMs,volts\r\n";
   sinkBegin(logFile, csvSink);
   csvLen = 0;
   csvPut(HEADER, sizeof(HEADER) - 1);
@@ -1200,6 +1200,9 @@ static void loggerTask() {
   // lands in the next row's figure.
   row.printf(",%.1f,%.1f", logMaxUs / 1000.0f, loopMaxUs / 1000.0f);
   logMaxUs = loopMaxUs = 0;
+  // PID 0x42: the ECU's supply - last, so the columns before keep their place.
+  if (obd_volts_fresh())   row.printf(",%.2f", obd.volts);
+  else                     row.print(',');
   // CRLF, as println() wrote it. The +2 is always free: printf() stops at
   // sizeof(b) - 1, and a row is far shorter anyway.
   if (row.n > sizeof(row.b) - 3) row.n = sizeof(row.b) - 3;

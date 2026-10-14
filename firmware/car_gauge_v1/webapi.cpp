@@ -161,12 +161,16 @@ static void handleLiveJson() {
   }
   uint32_t sdUsed, sdTotal;
   web_sd_space_kb(&sdUsed, &sdTotal);
+  char volts[12] = "null";
+  if (obd_volts_fresh()) snprintf(volts, sizeof(volts), "%.2f", obd.volts);
   const esp_partition_t *app = esp_ota_get_running_partition();
   const uint32_t appMax = app ? app->size : 0;
-  char b[1300];
+  char b[1500];   // ~1.1 KB in practice; too long answers 500, not a cut-off JSON
   const int len = snprintf(b, sizeof(b),
            "{\"can\":{\"linkUp\":%s,\"haveOil\":%s,\"oilTempC\":%d,"
-           "\"haveCoolant\":%s,\"coolantC\":%d,\"haveBoost\":%s,\"boostBar\":%.2f},"
+           "\"haveCoolant\":%s,\"coolantC\":%d,\"haveBoost\":%s,\"boostBar\":%.2f,"
+           // PID 0x42, the ECU's supply; null while not fresh (2026-10-14).
+           "\"volts\":%s},"
            // Bus health. These counters are the whole reason this endpoint is
            // worth opening at the car: they say whether the ISO-TP transfers
            // are actually succeeding, which nothing on the gauge screens shows.
@@ -200,7 +204,7 @@ static void handleLiveJson() {
            // Fresh, not "arrived once" - same answer the screen gives.
            obd_oil_fresh() ? "true" : "false", obd.oilTempC,
            obd_coolant_fresh() ? "true" : "false", obd.coolantC,
-           obd_boost_fresh() ? "true" : "false", obd.boostBar,
+           obd_boost_fresh() ? "true" : "false", obd.boostBar, volts,
            (unsigned long)obd.isoOk, (unsigned long)obd.isoAborts,
            (unsigned long)obd.rxOverflows,
            obd.busOff ? "true" : "false", (unsigned long)obd.busOffs,

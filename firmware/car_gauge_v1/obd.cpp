@@ -80,6 +80,7 @@ bool obd_coolant_fresh() { return fresh(obd.haveCoolant, obd.coolantMs, OBD_STAL
 bool obd_boost_fresh()   { return fresh(obd.haveBoost,   obd.boostMs,   OBD_STALE_MS); }
 bool obd_speed_fresh()   { return fresh(obd.haveSpeed,   obd.speedMs,   OBD_STALE_MS); }
 bool obd_absload_fresh() { return fresh(obd.haveAbsLoad, obd.absLoadMs, OBD_STALE_MS); }
+bool obd_volts_fresh()   { return fresh(obd.haveVolts, obd.voltsMs, OBD_STALE_MS); }
 bool obd_pedal_fresh()   { return fresh(obd.havePedal,   obd.pedalMs,   OBD_STALE_MS); }
 bool obd_rpm_fresh()     { return fresh(obd.haveRpm,     obd.rpmMs,     OBD_STALE_MS); }
 bool obd_timing_fresh()  { return fresh(obd.haveTiming,  obd.timingMs,  OBD_STALE_MS); }
@@ -204,12 +205,14 @@ static void askSlow() {
   sendMode01Multi(pids, sizeof(pids));
 }
 static void askBaro() { sendMode01(0x33); }   // the zero for boost
+static void askVolts() { sendMode01(0x42); }  // control module voltage
 
 static ScheduledRequest schedule[] = {
   //  ask        every             car on only
   { askTyres,  TPMS_POLL_MS,     true  },   // TPMS module: pressures, temps
   { askOil,    OIL_POLL_MS,      false },   // DID 0xE001: oil, dash coolant
   { askBaro,   BARO_POLL_MS,     false },   // PID 0x33: barometric pressure
+  { askVolts,  VOLTS_POLL_MS,    false },   // PID 0x42: battery / charging
   { askSlow,   OBD_SLOW_POLL_MS, false },   // timing advance, intake air temp
   { askFast,   0,                false },   // 6 PIDs: boost, speed, load, ...
 };
@@ -289,6 +292,9 @@ static void handlePid(uint8_t pid, const uint8_t *d, uint16_t dl) {
   else if (pid == 0x43 && dl >= 2) {
     obd.absLoadPct = (d[0] << 8 | d[1]) * 100.0f / 255.0f;
     obd.absLoadMs = millis(); obd.haveAbsLoad = true;
+  }
+  else if (pid == 0x42 && dl >= 2) {             // (256A + B) / 1000 V
+    obd.volts = (d[0] << 8 | d[1]) / 1000.0f; obd.voltsMs = millis(); obd.haveVolts = true;
   }
   // Plausibility guard: a garbage byte must not shift every boost reading.
   else if (pid == 0x33 && d[0] >= 50 && d[0] <= 110) { obd.baroKpa = d[0]; obd.haveBaro = true; }

@@ -51,6 +51,9 @@ struct ObdState {
   bool     haveIat       = false;
   int      iatC          = 0;       // PID 0x0F, intake air (track log)
   uint32_t iatMs         = 0;
+  bool     haveVolts     = false;
+  float    volts         = 0;       // PID 0x42, the ECU's supply (VOLTS_POLL_MS)
+  uint32_t voltsMs       = 0;
   bool     havePedal     = false;
   uint8_t  pedalRaw      = 0;       // PID 0x49, raw: 37 (14.5 %) = foot off
   uint32_t pedalMs       = 0;
@@ -111,6 +114,7 @@ bool obd_coolant_fresh();
 bool obd_boost_fresh();
 bool obd_speed_fresh();
 bool obd_absload_fresh();
+bool obd_volts_fresh();
 bool obd_pedal_fresh();
 bool obd_rpm_fresh();
 bool obd_timing_fresh();

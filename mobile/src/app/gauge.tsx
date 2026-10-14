@@ -240,6 +240,10 @@ function LiveRows({ l }: { l: PodLive }) {
       <Row label="Oil" value={l.can.haveOil ? `${l.can.oilTempC} °C` : '—'} />
       <Row label="Coolant" value={l.can.haveCoolant ? `${l.can.coolantC} °C` : '—'} />
       <Row label="Boost" value={l.can.haveBoost ? `${l.can.boostBar.toFixed(2)} bar` : '—'} />
+      {/* The ECU's supply: the battery engine off, the charging voltage running. */}
+      {l.can.volts !== undefined ? (
+        <Row label="Voltage" value={l.can.volts != null ? `${l.can.volts.toFixed(1)} V` : '—'} />
+      ) : null}
       <Row
         label="GPS"
         value={!l.gps.linkUp ? 'no module' : l.gps.haveFix ? `fix, ${l.gps.sats} satellites` : `no fix yet (${l.gps.sats} satellites)`}
