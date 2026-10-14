@@ -121,6 +121,15 @@ export default function GaugeScreen() {
         ) : (
           <Button title="Connect" busy={pod.state === 'connecting'} onPress={pod.connect} />
         )}
+        {/* What a tap on Connect gets you, and what it costs - the rest of
+            this screen only appears once connected. */}
+        {!connected && !pod.error ? (
+          <Note>
+            Joins the gauge’s WiFi - the gauge must be awake (car on, or a door opened). New drives come over by
+            themselves, and its live readings and system show here. Meanwhile the phone has no internet, so
+            maps will not load.
+          </Note>
+        ) : null}
         {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
       </Card>
 
