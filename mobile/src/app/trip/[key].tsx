@@ -2,13 +2,15 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { DriveChart } from '@/components/drive-chart';
 import { HeaderActions } from '@/components/pod-chip';
 import { MapLoading, TrackMap } from '@/components/track-map';
 import { Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { duration, km, when } from '@/lib/format';
-import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
+import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, seriesOf, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
+import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
@@ -22,6 +24,7 @@ export default function TripScreen() {
   // In state, not read from the cache during render - see trips.tsx.
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
+  const [series, setSeries] = useState<Series | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const connected = usePod().state === 'connected';
   const sync = useSync();
@@ -59,10 +62,13 @@ export default function TripScreen() {
       await attempt(t.gpx);
       await attempt(t.csv);
       const tr = t.gpx && cachedGpx(t.gpx) ? await trackOf(t.gpx) : null;
+      // Cached with the summary; a log from before the charts gets it now, once.
+      const se = t.csv && cachedCsv(t.csv) ? await seriesOf(t.csv).catch(() => null) : null;
       if (live) {
         setG(t.gpx ? cachedGpx(t.gpx) : null);
         setC(t.csv ? cachedCsv(t.csv) : null);
         setTrack(tr);
+        setSeries(se);
         setProblem(issues.length ? [...new Set(issues)].join('\n') : null);
         setReady(true);
       }
@@ -183,6 +189,8 @@ export default function TripScreen() {
           {c.maxObdKmh != null ? <Row label="Top speed (speedometer)" value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
         </Card>
       ) : null}
+
+      {series ? <DriveChart series={series} /> : null}
 
     </Screen>
   );

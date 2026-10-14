@@ -8,6 +8,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
 import { atlasNames } from './place-atlas';
+import { csvSeries, type Series } from './series';
 import { deleteFromInbox, inboxFile, loadDeleted, loadInbox, renameInbox, saveDeleted } from './store';
 import {
   type CsvSummary,
@@ -22,6 +23,8 @@ import {
 } from './trips';
 
 const dir = new Directory(Paths.document, 'trips');
+// What is cached per log: the summary, a GPX's thinned track, a CSV's series.
+const CACHE_EXTS = ['.json', '.track.json', '.series.json'];
 
 type Cached<T> = { size: number; v: number; summary: T };
 /** A GPX summary as cached: no track, and the places its ends are nearest (place-atlas.ts). */
@@ -56,7 +59,7 @@ export function renameLegacyLogs(): void {
   const renames = legacyRenames(Object.keys(loadInbox()).filter((n) => inboxFile(n).exists));
   renameInbox(renames);
   for (const [from, to] of Object.entries(renames)) {
-    for (const ext of ['.json', '.track.json']) {
+    for (const ext of CACHE_EXTS) {
       const src = new File(dir, from + ext);
       const dst = new File(dir, to + ext);
       if (!src.exists) continue;
@@ -76,7 +79,7 @@ export function deleteDrive(t: TripFiles): void {
   saveDeleted([...loadDeleted(), ...names]);
   deleteFromInbox(names);
   for (const n of names)
-    for (const ext of ['.json', '.track.json']) {
+    for (const ext of CACHE_EXTS) {
       const f = new File(dir, n + ext);
       if (f.exists) f.delete();
     }
@@ -114,8 +117,27 @@ export async function summarise(name: string): Promise<void> {
     write(new File(dir, `${name}.json`), size, stats);
   } else if (isCsvName(name)) {
     if (cachedCsv(name)) return;
-    write(new File(dir, `${name}.json`), size, parseCsv(await readLogText(name)));
+    // The chart's series from the same read: a drive opened later needs
+    // neither the file nor its decryption again (seriesOf).
+    const text = await readLogText(name);
+    write(new File(dir, `${name}.series.json`), size, csvSeries(text));
+    write(new File(dir, `${name}.json`), size, parseCsv(text));
   }
+}
+
+/**
+ * A drive's readings over time, for its charts. Cached with the summary; a
+ * CSV summarised before the charts existed gets its series here, once.
+ */
+export async function seriesOf(name: string): Promise<Series | null> {
+  const f = new File(dir, `${name}.series.json`);
+  const size = inboxFile(name).size;
+  const have = read<Series>(f, size);
+  if (have) return have;
+  if (!dir.exists) dir.create({ intermediates: true });
+  const s = csvSeries(await readLogText(name));
+  write(f, size, s);
+  return s;
 }
 
 export async function trackOf(name: string): Promise<TrackPoint[] | null> {
