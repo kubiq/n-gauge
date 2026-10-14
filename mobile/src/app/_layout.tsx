@@ -19,12 +19,13 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack>
             {/* No tabs: Trips is the app; Settings is in its ⋮ menu, the gauge
-                in the header (PodChip) - and on Settings too, whose gauge
-                half needs the connection. */}
+                in the header (PodChip) - and on Settings and Gauge settings
+                too, which need the connection for the gauge's side. */}
             {/* The main screen carries the app's name; it lists the drives. */}
             <Stack.Screen name="index" options={{ title: 'N Gauge' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings', headerRight: () => <HeaderActions /> }} />
             <Stack.Screen name="gauge" options={{ title: 'Gauge' }} />
+            <Stack.Screen name="gauge-settings" options={{ title: 'Gauge settings', headerRight: () => <HeaderActions /> }} />
             <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan the gauge’s QR' }} />
             <Stack.Screen name="server" options={{ presentation: 'modal', title: 'Upload server' }} />
             <Stack.Screen name="trip/[key]" options={{ title: 'Drive' }} />

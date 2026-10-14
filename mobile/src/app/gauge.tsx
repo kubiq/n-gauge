@@ -71,14 +71,24 @@ export default function GaugeScreen() {
     else if (r.kind === 'unavailable') router.push('/scan');
   };
 
-  // ⋮ in the header: the rare things. Scanning another gauge replaces the
+  // ⋮ in the header: the gauge's settings (as Settings sits in the main
+  // screen's ⋮), and the rare things. Scanning another gauge replaces the
   // stored one, so it is not a button on the screen.
   const navigation = useNavigation();
   const hasCreds = !!pod.creds;
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <OverflowMenu items={hasCreds ? [{ label: 'Scan a different gauge', onPress: scan }] : []} />
+        <OverflowMenu
+          items={
+            hasCreds
+              ? [
+                  { label: 'Gauge settings', onPress: () => router.push('/gauge-settings') },
+                  { label: 'Scan a different gauge', onPress: scan },
+                ]
+              : []
+          }
+        />
       ),
     });
   }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -133,6 +143,15 @@ export default function GaugeScreen() {
         {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
       </Card>
 
+      {/* What the car reads now, right under the connection that brings it. */}
+      {connected ? (
+        <Card title="Live">
+          {syncing ? <Note>Paused while the logs sync.</Note> : null}
+          {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
+          {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
+        </Card>
+      ) : null}
+
       <Card title="Logs">
         {UPLOAD_ENABLED ? (
           <Row label="Waiting for upload" value={`${pendingFiles(sync.inbox)} files, ${mb(pendingBytes(sync.inbox))}`} />
@@ -169,11 +188,6 @@ export default function GaugeScreen() {
 
       {connected ? (
         <>
-          <Card title="Live">
-            {syncing ? <Note>Paused while the logs sync.</Note> : null}
-            {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
-            {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
-          </Card>
           {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
           <Card title="Actions">
             <Button
