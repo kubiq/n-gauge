@@ -1,5 +1,5 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { HeaderActions } from '@/components/pod-chip';
@@ -8,6 +8,7 @@ import { Card, Note, Row, Screen } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
+import { endName, loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
 import { type CsvSummary, type TrackPoint } from '@/lib/trips';
 
@@ -20,6 +21,9 @@ export default function TripScreen() {
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Re-read on focus: back from naming (name.tsx), the new name shows.
+  const [names, setNames] = useState<Names>({ places: [], titles: {} });
+  useFocusEffect(useCallback(() => setNames(loadNames()), []));
 
   const run = async (what: string, fn: () => Promise<void>) => {
     setBusy(what);
@@ -74,17 +78,37 @@ export default function TripScreen() {
 
   const start = g?.start ?? t.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  const name = tripName(t, g, names);
+  // Naming, in the modal (name.tsx): the drive itself, or either end as a
+  // place of yours - every drive from or to there is then called by it.
+  const nameItems = [
+    { label: 'Rename this drive', onPress: () => router.push({ pathname: '/name', params: { kind: 'trip', key: t.key, current: name ?? '' } }) },
+    ...placeItem('Name the start place', g?.from, g?.fromPlace),
+    ...placeItem('Name the end place', g?.to, g?.toPlace),
+  ];
+  function placeItem(label: string, pt: [number, number] | null | undefined, listName: string | null | undefined) {
+    if (!pt) return [];
+    const current = endName(pt, listName ?? null, names) ?? '';
+    return [
+      {
+        label,
+        onPress: () =>
+          router.push({ pathname: '/name', params: { kind: 'place', lat: String(pt[1]), lon: String(pt[0]), current } }),
+      },
+    ];
+  }
 
   return (
     <Screen>
       <Stack.Screen
         options={{
-          title: start ? when(start) : 'Undated drive',
+          title: name ?? (start ? when(start) : 'Undated drive'),
           // The gauge, and ⋮: handing the drive on, decrypted (share.ts).
           headerRight: () => (
             <HeaderActions
               compact
               items={[
+                ...nameItems,
                 ...(t.gpx ? [{ label: 'Share the track (GPX)', onPress: () => run('gpx', () => shareLog(t.gpx!)) }] : []),
                 ...(t.csv ? [{ label: 'Share the car data (CSV)', onPress: () => run('csv', () => shareLog(t.csv!)) }] : []),
                 {
@@ -129,6 +153,8 @@ export default function TripScreen() {
 
       {g ? (
         <Card title="Drive">
+          {/* The header carries the name; the date goes here then. */}
+          {name && start ? <Row label="Started" value={when(start)} /> : null}
           <Row label="Distance" value={km(g.distanceM)} />
           {secs !== null ? <Row label="Time" value={duration(secs)} /> : null}
           <Row label="Moving" value={duration(g.movingS)} />

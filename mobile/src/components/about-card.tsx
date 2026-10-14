@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 
-import { Card, Row } from '@/components/ui';
+import { Card, Note, Row } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { getLive } from '@/lib/pod';
 
@@ -26,6 +26,8 @@ export function AboutCard() {
     <Card title="About">
       <Row label="App" value={`${Constants.expoConfig?.version ?? '?'}${build ? ` (${build})` : ''}`} />
       {connected && fw ? <Row label="Gauge" value={fw} /> : null}
+      {/* Required by the licence (CC BY 4.0) of the drives' place names. */}
+      <Note>Place names © GeoNames (geonames.org), CC BY 4.0.</Note>
     </Card>
   );
 }

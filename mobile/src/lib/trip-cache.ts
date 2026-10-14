@@ -7,6 +7,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
+import { atlasNames } from './place-atlas';
 import { deleteFromInbox, inboxFile, loadInbox, renameInbox } from './store';
 import {
   type CsvSummary,
@@ -23,12 +24,14 @@ import {
 const dir = new Directory(Paths.document, 'trips');
 
 type Cached<T> = { size: number; v: number; summary: T };
-export type GpxStats = Omit<GpxSummary, 'track'>;
+/** A GPX summary as cached: no track, and the places its ends are nearest (place-atlas.ts). */
+export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; toPlace: string | null };
 
 // Bump when a summary's shape or its maths change, so old caches are redone.
 // 2: bad fixes dropped from the track, ends and top speed (2026-10-13).
 // 3: the bare <speed> of September's files read (2026-10-13).
-const VERSION = 3;
+// 4: the drive's two ends and the places nearest them, for its name (2026-10-14).
+const VERSION = 4;
 
 function read<T>(f: File, size: number): T | null {
   if (!f.exists) return null;
@@ -99,7 +102,12 @@ export async function summarise(name: string): Promise<void> {
   // so an encrypted log is decrypted once, like a plain one is parsed once.
   if (isGpxName(name)) {
     if (cachedGpx(name)) return;
-    const { track, ...stats } = parseGpx(await readLogText(name));
+    const { track, ...summary } = parseGpx(await readLogText(name));
+    // Named here, once: a place list is read for it and let go, never held
+    // while the drives are shown. A list that will not read leaves the
+    // drive with its date for a title, not without a summary.
+    const [fromPlace, toPlace] = await atlasNames([summary.from, summary.to]).catch(() => [null, null]);
+    const stats: GpxStats = { ...summary, fromPlace, toPlace };
     write(new File(dir, `${name}.track.json`), size, track);
     write(new File(dir, `${name}.json`), size, stats);
   } else if (isCsvName(name)) {

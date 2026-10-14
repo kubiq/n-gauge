@@ -8,6 +8,7 @@ import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
+import { loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
@@ -29,6 +30,9 @@ export default function TripsScreen() {
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Your places and renamed drives: read on every visit, so a name given on
+  // a drive's screen shows on the way back.
+  const [names, setNames] = useState<Names>({ places: [], titles: {} });
   const working = useRef(false);
   // The sync runs by itself (use-sync.tsx): each file it lands re-reads the
   // list, so a drive appears while this tab is open. Landing during the
@@ -53,6 +57,7 @@ export default function TripsScreen() {
         }
       }
       setTrips(list);
+      setNames(loadNames());
       setSums(have);
       setProblems({});
       // Says plainly whether the cache is doing its job.
@@ -118,12 +123,16 @@ export default function TripsScreen() {
 
   // Rows with their summaries; restart fragments and blips hidden (isStub),
   // with a line saying how many - nothing just disappears.
-  const rows = trips.map((t) => ({
-    t,
-    g: t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined,
-    c: t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined,
-    problem: (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined,
-  }));
+  const rows = trips.map((t) => {
+    const g = t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined;
+    return {
+      t,
+      g,
+      c: t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined,
+      problem: (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined,
+      name: tripName(t, g, names),
+    };
+  });
   const [showShort, setShowShort] = useState(false);
   const longOnes = rows.filter((r) => r.problem || !isStub(r.g, r.c));
   const hidden = rows.length - longOnes.length;
@@ -137,7 +146,7 @@ export default function TripsScreen() {
           <Note>No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.</Note>
         </Card>
       ) : (
-        shown.map((r) => <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} />)
+        shown.map((r) => <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} name={r.name} />)
       )}
       {hidden ? (
         // A tap shows them in place, and hides them again.
@@ -153,7 +162,19 @@ export default function TripsScreen() {
   );
 }
 
-function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSummary; problem?: string }) {
+function TripRow({
+  t,
+  g,
+  c,
+  problem,
+  name,
+}: {
+  t: TripFiles;
+  g?: GpxStats;
+  c?: CsvSummary;
+  problem?: string;
+  name: string | null;
+}) {
   const start = g?.start ?? t.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
   const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
@@ -163,10 +184,17 @@ function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSumm
       onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
       style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
       <View style={styles.head}>
-        <View style={styles.titleRow}>
-          {/* No time anywhere in it (a numbered log, no GPS): not the file name. */}
-          <Text style={styles.title}>{start ? when(start) : 'Undated drive'}</Text>
-          {encrypted ? <LockIcon bad={!!problem} /> : null}
+        {/* Where it went (names.ts), the date under it; without a track the
+            date is the title. No time anywhere in it (a numbered log, no
+            GPS): not the file name. */}
+        <View style={styles.titleCol}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {name ?? (start ? when(start) : 'Undated drive')}
+            </Text>
+            {encrypted ? <LockIcon bad={!!problem} /> : null}
+          </View>
+          {name && start ? <Text style={ui.note}>{when(start)}</Text> : null}
         </View>
         {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
       </View>
@@ -193,9 +221,11 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm },
+  // Shrinks, so a long route name gives way to the distance, not over it.
+  titleCol: { flexShrink: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
-  title: { color: C.text, fontSize: 16, fontWeight: '600' },
+  title: { color: C.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
   big: { color: C.accent, fontSize: 18, fontWeight: '700' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
   // A link, not a card: 48 dp tall to hit, styled like the app's other links.

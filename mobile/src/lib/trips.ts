@@ -23,6 +23,9 @@ export type GpxSummary = {
   track: TrackPoint[];
   /** [minLon, minLat, maxLon, maxLat], or null without points. */
   bbox: [number, number, number, number] | null;
+  /** [lon, lat] of the first and last kept points - what the drive is named after (places.ts). */
+  from: [number, number] | null;
+  to: [number, number] | null;
 };
 
 const MOVING_KMH = 3;
@@ -112,7 +115,9 @@ export function parseGpx(text: string): GpxSummary {
     .map((r): [number, number] => [r.i, r.j]);
 
   // Pass 2: the stats, from the kept points only.
-  const s: GpxSummary = { start: null, end: null, distanceM: 0, movingS: 0, maxKmh: 0, points: pts.length, track: [], bbox: null };
+  const s: GpxSummary = {
+    start: null, end: null, distanceM: 0, movingS: 0, maxKmh: 0, points: pts.length, track: [], bbox: null, from: null, to: null,
+  };
   let prev: Pt | undefined;
   let kept: Pt | undefined;   // the last point that went into the track
   for (const [i, j] of keep) {
@@ -146,6 +151,11 @@ export function parseGpx(text: string): GpxSummary {
   for (const [lon, lat] of s.track) {
     if (!s.bbox) s.bbox = [lon, lat, lon, lat];
     else s.bbox = [Math.min(s.bbox[0], lon), Math.min(s.bbox[1], lat), Math.max(s.bbox[2], lon), Math.max(s.bbox[3], lat)];
+  }
+  if (s.track.length) {
+    const a = s.track[0], b = s.track[s.track.length - 1];
+    s.from = [a[0], a[1]];
+    s.to = [b[0], b[1]];
   }
   return s;
 }
