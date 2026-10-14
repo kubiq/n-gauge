@@ -580,7 +580,7 @@ static void handleFiles() {
     server.sendContent(nav);
   }
   server.sendContent(F(
-    "</p><p class='sub'>Read-only. Delete files with the card in a reader."
+    "</p><p class='sub'>Read-only. Delete drives in the phone app, or with the card in a reader."
     "</p><p class='sub'><a href='/device'>&larr; settings</a></p></body></html>"));
   server.sendContent("");    // terminates the chunked response
 }
@@ -732,11 +732,12 @@ static void handleDownload() {
   f.close();
 }
 
-// Deliberately NO delete endpoint. A drive log is frequently the only copy of
-// a run that is expensive or impossible to repeat - a hot-engine oil-temp
-// trace, a track session - and the only thing guarding this server is the AP
-// password. A mistap on a phone should not be able to destroy that. Card
-// housekeeping is done deliberately, with the card in a reader.
+// No delete on these pages: a drive log was often the only copy of a run
+// that is expensive or impossible to repeat - a hot-engine oil-temp trace, a
+// track session - and a mistap here should not destroy it. Deleting is the
+// app's, for drive logs only and behind its confirmation (handleDelete,
+// /api/delete): by then the phone holds a copy of every log it synced, and
+// without it a drive deleted on the phone came back with the next sync.
 
 // ---- settings pages --------------------------------------------------------
 // Three short pages instead of one long scroll (2026-10-09; the one page had
