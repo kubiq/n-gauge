@@ -9,6 +9,7 @@ import { Card, Note, Screen, styles as ui } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { loadNames, type Names, tripName } from '@/lib/names';
+import { groupByWeek, weekLabel } from '@/lib/weeks';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
@@ -137,6 +138,13 @@ export default function TripsScreen() {
   const longOnes = rows.filter((r) => r.problem || !isStub(r.g, r.c));
   const hidden = rows.length - longOnes.length;
   const shown = showShort ? rows : longOnes;
+  // By week, each with its totals - of the drives shown, so the hidden
+  // blips do not count. The same start and time the rows show.
+  const weeks = groupByWeek(shown, (r) => ({
+    start: r.g?.start ?? r.t.start,
+    distanceM: r.g?.distanceM ?? null,
+    secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
+  }));
 
   return (
     <Screen>
@@ -146,7 +154,21 @@ export default function TripsScreen() {
           <Note>No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.</Note>
         </Card>
       ) : (
-        shown.map((r) => <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} name={r.name} />)
+        weeks.map((w) => (
+          <View key={w.monday ?? 'undated'} style={styles.week}>
+            <Text style={styles.weekHead}>
+              {weekLabel(w.monday)}
+              <Text style={styles.weekTotals}>
+                {`  ·  ${w.drives} ${w.drives === 1 ? 'drive' : 'drives'}`}
+                {w.distanceM > 0 ? `  ·  ${km(w.distanceM)}` : ''}
+                {w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
+              </Text>
+            </Text>
+            {w.items.map((r) => (
+              <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} name={r.name} />
+            ))}
+          </View>
+        ))
       )}
       {hidden ? (
         // A tap shows them in place, and hides them again.
@@ -228,6 +250,10 @@ const styles = StyleSheet.create({
   title: { color: C.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
   big: { color: C.accent, fontSize: 18, fontWeight: '700' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
+  // A week: its line, then its drives, spaced as the cards are.
+  week: { gap: S.md },
+  weekHead: { color: C.accent, fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: S.sm },
+  weekTotals: { color: C.dim, fontWeight: '400', letterSpacing: 0 },
   // A link, not a card: 48 dp tall to hit, styled like the app's other links.
   more: { minHeight: 48, justifyContent: 'center' },
   moreText: { color: C.link, fontSize: 14 },
