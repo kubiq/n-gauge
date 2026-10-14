@@ -219,6 +219,9 @@
 // added to OBD_SLOW_PIDS its 2 bytes would push that reply past one frame.
 // Once a second is plenty for a voltage.
 #define VOLTS_POLL_MS       1000
+// Below this a 0x42 answer is not a voltage: the ECU says 0.00 V while it
+// shuts down. Cranking, the lowest real reading, was 9.9 V (2026-10-14).
+#define VOLTS_MIN_V         5.0f
 
 // A value older than this is treated as NO value. This matters more than it
 // looks: a frozen number on screen is indistinguishable from a steady reading,

@@ -293,8 +293,12 @@ static void handlePid(uint8_t pid, const uint8_t *d, uint16_t dl) {
     obd.absLoadPct = (d[0] << 8 | d[1]) * 100.0f / 255.0f;
     obd.absLoadMs = millis(); obd.haveAbsLoad = true;
   }
-  else if (pid == 0x42 && dl >= 2) {             // (256A + B) / 1000 V
-    obd.volts = (d[0] << 8 | d[1]) / 1000.0f; obd.voltsMs = millis(); obd.haveVolts = true;
+  // (256A + B) / 1000 V. Under VOLTS_MIN_V is no reading: switching off, the
+  // ECU answered 0.00 V for ~11 s before going silent (drive 2026-10-14) -
+  // its shutdown, not the battery's - and a logged 0 wrecks any minimum.
+  else if (pid == 0x42 && dl >= 2) {
+    const float v = (d[0] << 8 | d[1]) / 1000.0f;
+    if (v >= VOLTS_MIN_V) { obd.volts = v; obd.voltsMs = millis(); obd.haveVolts = true; }
   }
   // Plausibility guard: a garbage byte must not shift every boost reading.
   else if (pid == 0x33 && d[0] >= 50 && d[0] <= 110) { obd.baroKpa = d[0]; obd.haveBaro = true; }
