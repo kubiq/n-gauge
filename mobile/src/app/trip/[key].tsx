@@ -79,7 +79,7 @@ export default function TripScreen() {
     <Screen>
       <Stack.Screen
         options={{
-          title: start ? when(start) : t.key,
+          title: start ? when(start) : 'Undated drive',
           // The gauge, and ⋮: handing the drive on, decrypted (share.ts).
           headerRight: () => (
             <HeaderActions

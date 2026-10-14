@@ -164,7 +164,8 @@ function TripRow({ t, g, c, problem }: { t: TripFiles; g?: GpxStats; c?: CsvSumm
       style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
       <View style={styles.head}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>{start ? when(start) : t.key}</Text>
+          {/* No time anywhere in it (a numbered log, no GPS): not the file name. */}
+          <Text style={styles.title}>{start ? when(start) : 'Undated drive'}</Text>
           {encrypted ? <LockIcon bad={!!problem} /> : null}
         </View>
         {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
