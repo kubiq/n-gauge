@@ -14,7 +14,11 @@ export function Screen({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <SafeAreaView style={styles.screen} edges={[]}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: S.md + insets.bottom }]}>
+      {/* "handled": a tap on a button while typing presses it. The default
+          spent the first tap only closing the keyboard - Save took two. */}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.scroll, { paddingBottom: S.md + insets.bottom }]}>
         {children}
       </ScrollView>
     </SafeAreaView>
