@@ -11,8 +11,18 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { usePod } from '@/hooks/use-pod';
-import { listFiles } from '@/lib/pod';
-import { dropNonLogs, type Inbox, knownBytes, loadInbox, loadLastSync, pull, saveLastSync } from '@/lib/store';
+import { deletePodFile, listFiles } from '@/lib/pod';
+import {
+  dropNonLogs,
+  type Inbox,
+  knownBytes,
+  loadDeleted,
+  loadInbox,
+  loadLastSync,
+  pull,
+  saveDeleted,
+  saveLastSync,
+} from '@/lib/store';
 import { renameLegacyLogs } from '@/lib/trip-cache';
 import { type PodFile, planPull, type Pull } from '@/lib/sync-plan';
 
@@ -73,8 +83,19 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const listAndPlan = async (): Promise<{ files: PodFile[]; plan: Pull[] }> => {
     setPhase('checking');
     setStatus(null);
-    const files = await listFiles();
-    const p = planPull(files, knownBytes(loadInbox()));
+    const listed = await listFiles();
+    // Drives deleted on the phone go from the gauge too, before planning: a
+    // name the gauge no longer has, or has just deleted, leaves the list; one
+    // it cannot delete yet (still being written) stays, and is not pulled.
+    const deleted = loadDeleted();
+    const onGauge = new Set(listed.map((f) => f.name));
+    const left: string[] = [];
+    for (const n of deleted) {
+      if (onGauge.has(n) && (await deletePodFile(n)) === 'later') left.push(n);
+    }
+    if (left.length !== deleted.length) saveDeleted(left);
+    const files = listed.filter((f) => !deleted.includes(f.name) || left.includes(f.name));
+    const p = planPull(files, knownBytes(loadInbox()), new Set(left));
     setPodFiles(files);
     setPlan(p);
     return { files, plan: p };
@@ -100,7 +121,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         // Trips list move as each one lands.
         const now = loadInbox();
         setInbox(now);
-        setPlan(planPull(files, knownBytes(now)));
+        setPlan(planPull(files, knownBytes(now), new Set(loadDeleted())));
         setLanded((n) => n + 1);
       }
       setStatus(`Pulled ${done} file${done === 1 ? '' : 's'}.`);

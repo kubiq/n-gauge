@@ -109,6 +109,24 @@ export async function zeroGmeter(): Promise<string> {
 }
 
 /**
+ * Deletes a drive log from the card (POST /api/delete, firmware from
+ * 2026-10-14). 'done' when deleted or already gone (410); 'later' when the
+ * gauge cannot now - the drive is still being written (409), the card is
+ * lent to a PC (503) - or cannot at all: older firmware answers an unknown
+ * path with its portal page, a 200 that is not "deleted".
+ */
+export async function deletePodFile(name: string): Promise<'done' | 'later'> {
+  try {
+    const r = await postForm('/api/delete', `f=${encodeURIComponent(name)}`);
+    return (await r.text()) === 'deleted' ? 'done' : 'later';
+  } catch (e) {
+    if (e instanceof PodError && e.status === 410) return 'done';
+    if (e instanceof PodError && e.status !== undefined) return 'later';
+    throw e;   // no answer at all: the connection, not the file
+  }
+}
+
+/**
  * The card's files, all pages. Needs firmware with `GET /api/files`
  * (added 2026-10-11); older firmware answers 404.
  */

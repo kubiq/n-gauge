@@ -10,6 +10,17 @@ test('new files are fetched whole', () => {
   ]);
 });
 
+// 2026-10-14: a drive deleted from the phone came back with the next sync.
+test('a drive deleted on purpose is not pulled back', () => {
+  const pod = [
+    { name: 'trip_2026-10-12_21-18_aaaaaa.gpx.nge', size: 500 },
+    { name: 'drive_2026-10-12_21-18_aaaaaa.csv.nge', size: 300 },
+  ];
+  assert.deepEqual(planPull(pod, {}, new Set(['trip_2026-10-12_21-18_aaaaaa.gpx.nge'])), [
+    { name: 'drive_2026-10-12_21-18_aaaaaa.csv.nge', from: 0, size: 300, restart: false },
+  ]);
+});
+
 test('files we already have are skipped', () => {
   assert.deepEqual(planPull([{ name: 'drive_0001.csv', size: 100 }], { 'drive_0001.csv': 100 }), []);
 });

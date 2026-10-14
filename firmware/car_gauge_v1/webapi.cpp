@@ -638,6 +638,36 @@ static void handleFilesJson() {
 // Feeding the watchdog here is safe because the loop is bounded three ways:
 // end of file, client disconnect, and an absolute deadline. It cannot mask a
 // genuine hang.
+// A drive's log deleted from the card, from the app's "Delete from the phone
+// and the gauge" - otherwise every sync pulls it back. POST, f=<name>.
+// Only drive logs (trip_/drive_/track_ ... .gpx/.csv/.vbo, plain or .nge):
+// never the settings, the sleep log or a firmware .bin. Not a file this
+// session is still writing - deleting it would lose the rest of the drive.
+// 410 for a file that is already gone, which the app counts as done - not
+// 404: an unknown path is answered by the portal (onNotFound, a 200 page),
+// so the app takes only "deleted" or 410 as done, and older firmware
+// without this handler never looks like a success.
+static void handleDelete() {
+  LoggerSdLock lock;
+  if (logger_card_shared()) {
+    server.send(503, "text/plain", "The SD card is shared with a PC right now.");
+    return;
+  }
+  String n = server.arg("f");
+  String plain = n.endsWith(LOGCRYPT_SUFFIX) ? n.substring(0, n.length() - strlen(LOGCRYPT_SUFFIX)) : n;
+  const bool isLog = (n.startsWith("trip_") || n.startsWith("drive_") || n.startsWith("track_")) &&
+                     (plain.endsWith(".gpx") || plain.endsWith(".csv") || plain.endsWith(".vbo"));
+  if (!safeName(n) || !isLog) { server.send(400, "text/plain", "not a drive log"); return; }
+  if (logger_is_open(n.c_str())) {
+    server.send(409, "text/plain", "That log is still being written - delete it after the drive.");
+    return;
+  }
+  if (!SD_MMC.exists("/" + n)) { server.send(410, "text/plain", "already gone"); return; }
+  if (!SD_MMC.remove("/" + n)) { server.send(500, "text/plain", "could not delete it"); return; }
+  Serial.printf("[OK] deleted %s (app)\n", n.c_str());
+  server.send(200, "text/plain", "deleted");
+}
+
 static void handleDownload() {
   // Held for the whole download: the logger pauses meanwhile (rows of that
   // time are skipped, the files themselves stay consistent).
@@ -1047,6 +1077,7 @@ void web_start() {
     server.on("/files",        HTTP_GET,  handleFiles);
     server.on("/api/files",    HTTP_GET,  handleFilesJson);
     server.on("/dl",           HTTP_GET,  handleDownload);
+    server.on("/api/delete",   HTTP_POST, handleDelete);
     // WebServer keeps only the request headers it is told to: without this,
     // hasHeader("Range") is always false and every resume restarts at 0.
     static const char *keep[] = {"Range"};

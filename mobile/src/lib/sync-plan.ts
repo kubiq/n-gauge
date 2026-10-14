@@ -35,10 +35,11 @@ export function isPodLog(name: string): boolean {
   return POD_LOG.test(name);
 }
 
-export function planPull(pod: PodFile[], known: Known): Pull[] {
+/** `deleted`: names deleted from the phone on purpose - never pulled back (store.ts). */
+export function planPull(pod: PodFile[], known: Known, deleted: ReadonlySet<string> = new Set()): Pull[] {
   const out: Pull[] = [];
   for (const f of pod) {
-    if (!isPodLog(f.name)) continue;
+    if (!isPodLog(f.name) || deleted.has(f.name)) continue;
     const have = known[f.name] ?? 0;
     if (have === f.size) continue;
     if (have > f.size) out.push({ name: f.name, from: 0, size: f.size, restart: true });

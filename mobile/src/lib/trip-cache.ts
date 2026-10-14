@@ -8,7 +8,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
 import { atlasNames } from './place-atlas';
-import { deleteFromInbox, inboxFile, loadInbox, renameInbox } from './store';
+import { deleteFromInbox, inboxFile, loadDeleted, loadInbox, renameInbox, saveDeleted } from './store';
 import {
   type CsvSummary,
   type GpxSummary,
@@ -67,11 +67,13 @@ export function renameLegacyLogs(): void {
 }
 
 /**
- * A drive off the phone: its logs and their cached summaries. The gauge's
- * card is not touched - a file still there comes back with the next sync.
+ * A drive gone for good: its logs and cached summaries off the phone, and
+ * its names on the "delete on the gauge" list - the next sync deletes them
+ * from the card (now, if connected) and never pulls them back meanwhile.
  */
 export function deleteDrive(t: TripFiles): void {
   const names = [t.gpx, t.csv].filter((n): n is string => !!n);
+  saveDeleted([...loadDeleted(), ...names]);
   deleteFromInbox(names);
   for (const n of names)
     for (const ext of ['.json', '.track.json']) {

@@ -139,6 +139,23 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   saveInbox(state);
 }
 
+// Names deleted from the phone on purpose, still to be deleted on the gauge.
+// The sync never pulls them (planPull) and asks the gauge to delete each
+// on every connect (use-sync.tsx), until it has or the file is gone.
+const deletedFile = new File(Paths.document, 'delete-on-gauge.json');
+
+export function loadDeleted(): string[] {
+  try {
+    return deletedFile.exists ? JSON.parse(deletedFile.textSync()) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeleted(names: string[]): void {
+  deletedFile.write(JSON.stringify([...new Set(names)]));
+}
+
 /** Deletes inbox files and their records - the phone's copy only. */
 export function deleteFromInbox(names: string[]): void {
   const state = loadInbox();

@@ -104,3 +104,7 @@ void logger_note_loop_us(uint32_t us);
 void logger_suspend();
 void logger_resume();
 bool logger_card_shared();
+
+// Is this card file (a plain name, no slash) one this session writes to?
+// The app's delete (/api/delete) refuses those. Under LoggerSdLock.
+bool logger_is_open(const char *name);

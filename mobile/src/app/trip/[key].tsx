@@ -5,6 +5,8 @@ import { Alert } from 'react-native';
 import { HeaderActions } from '@/components/pod-chip';
 import { MapLoading, TrackMap } from '@/components/track-map';
 import { Card, Note, Row, Screen } from '@/components/ui';
+import { usePod } from '@/hooks/use-pod';
+import { useSync } from '@/hooks/use-sync';
 import { duration, km, when } from '@/lib/format';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import { LogKeyError } from '@/lib/logtext';
@@ -21,6 +23,8 @@ export default function TripScreen() {
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const connected = usePod().state === 'connected';
+  const sync = useSync();
   // Re-read on focus: back from naming (name.tsx), the new name shows.
   const [names, setNames] = useState<Names>({ places: [], titles: {} });
   useFocusEffect(useCallback(() => setNames(loadNames()), []));
@@ -120,13 +124,16 @@ export default function TripScreen() {
                     }),
                 },
                 {
-                  // The phone's copy only: a log still on the gauge's card
-                  // comes back with the next sync - the dialog says so.
-                  label: 'Delete from this phone',
+                  // From the phone at once, and from the gauge's card by
+                  // the sync - right now if connected, else on the next
+                  // connect; it is never pulled back meanwhile (deleteDrive).
+                  label: 'Delete this drive',
                   onPress: () =>
                     Alert.alert(
                       'Delete this drive?',
-                      'It is removed from this phone. If it is still on the gauge’s card, the next sync brings it back.',
+                      connected
+                        ? 'It is removed from this phone and from the gauge’s card.'
+                        : 'It is removed from this phone now, and from the gauge’s card the next time the phone connects.',
                       [
                         { text: 'Cancel', style: 'cancel' },
                         {
@@ -134,6 +141,7 @@ export default function TripScreen() {
                           style: 'destructive',
                           onPress: () => {
                             deleteDrive(t);
+                            if (connected) sync.sync();
                             router.back();
                           },
                         },

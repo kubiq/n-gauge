@@ -1300,3 +1300,12 @@ void logger_dump_tail(size_t bytes) {
   f.close();
 }
 
+
+// Is this card file (a plain name, no slash) one the logger is writing to,
+// or will write to again this session? /api/delete refuses those. Read
+// under LoggerSdLock: the paths change only while it is held.
+bool logger_is_open(const char *name) {
+  for (const char *p : {path, gpxPath, vboPath})
+    if (p[0] == '/' && strcmp(p + 1, name) == 0) return true;
+  return false;
+}
