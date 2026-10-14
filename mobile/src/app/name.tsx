@@ -5,7 +5,7 @@ import { StyleSheet, TextInput } from 'react-native';
 import { Button, Card, Note, Screen } from '@/components/ui';
 import { loadNames, nameOwnPlace, setTripTitle } from '@/lib/names';
 import { ownPlaceAt } from '@/lib/places';
-import { C, S } from '@/theme';
+import { S, themed, useColors } from '@/theme';
 
 // Naming, from a drive's ⋮ (Alert.prompt is iOS only):
 // - kind=trip: the drive's own name, over the automatic one;
@@ -19,6 +19,8 @@ export default function NameScreen() {
   const mine = trip ? null : ownPlaceAt(lat, lon, loadNames().places);
   const own = trip ? !!(p.key && loadNames().titles[p.key]) : !!mine;
   const [text, setText] = useState(p.current ?? '');
+  const C = useColors();
+  const styles = useStyles();
   const name = text.trim();
 
   const save = (value: string | null) => {
@@ -60,14 +62,16 @@ export default function NameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  input: {
-    color: C.text,
-    borderColor: C.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: S.md,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    input: {
+      color: C.text,
+      borderColor: C.border,
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: S.md,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+  }),
+);

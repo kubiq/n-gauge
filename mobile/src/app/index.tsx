@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
-import { Card, Note, Screen, styles as ui } from '@/components/ui';
+import { Card, Note, Screen, useUi } from '@/components/ui';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { loadNames, type Names, tripName } from '@/lib/names';
@@ -13,7 +13,7 @@ import { groupByWeek, weekLabel } from '@/lib/weeks';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
-import { C, S } from '@/theme';
+import { S, themed } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
 
@@ -31,6 +31,7 @@ export default function TripsScreen() {
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const styles = useStyles();
   // Your places and renamed drives: read on every visit, so a name given on
   // a drive's screen shows on the way back.
   const [names, setNames] = useState<Names>({ places: [], titles: {} });
@@ -201,6 +202,8 @@ function TripRow({
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
   const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
   const encrypted = [t.gpx, t.csv].some((n) => n && isEncryptedName(n));
+  const ui = useUi();
+  const styles = useStyles();
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
@@ -234,6 +237,7 @@ function TripRow({
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
+  const ui = useUi();
   return (
     <View>
       <Text style={ui.note}>{label}</Text>
@@ -242,19 +246,21 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm },
-  // Shrinks, so a long route name gives way to the distance, not over it.
-  titleCol: { flexShrink: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
-  title: { color: C.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  big: { color: C.accent, fontSize: 18, fontWeight: '700' },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
-  // A week: its line, then its drives, spaced as the cards are.
-  week: { gap: S.md },
-  weekHead: { color: C.accent, fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: S.sm },
-  weekTotals: { color: C.dim, fontWeight: '400', letterSpacing: 0 },
-  // A link, not a card: 48 dp tall to hit, styled like the app's other links.
-  more: { minHeight: 48, justifyContent: 'center' },
-  moreText: { color: C.link, fontSize: 14 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm },
+    // Shrinks, so a long route name gives way to the distance, not over it.
+    titleCol: { flexShrink: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+    title: { color: C.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
+    big: { color: C.accent, fontSize: 18, fontWeight: '700' },
+    facts: { flexDirection: 'row', flexWrap: 'wrap', gap: S.lg },
+    // A week: its line, then its drives, spaced as the cards are.
+    week: { gap: S.md },
+    weekHead: { color: C.accent, fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: S.sm },
+    weekTotals: { color: C.dim, fontWeight: '400', letterSpacing: 0 },
+    // A link, not a card: 48 dp tall to hit, styled like the app's other links.
+    more: { minHeight: 48, justifyContent: 'center' },
+    moreText: { color: C.link, fontSize: 14 },
+  }),
+);

@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { Card, Note, styles as ui } from '@/components/ui';
+import { Card, Note, useUi } from '@/components/ui';
 import { moved, type ScreenItem, screenItems, viewsOf, WIFI } from '@/lib/screens';
-import { C, S } from '@/theme';
+import { S, themed, useColors } from '@/theme';
 
 // Which of the gauge's screens a tap or swipe cycles through, and in what
 // order (settings.views on the gauge). Each change goes up through onChange;
 // the Settings screen saves it with everything else, under one button.
 export function ScreenOrderCard({ views, onChange }: { views: string; onChange: (views: string) => void }) {
   const [items, setItems] = useState<ScreenItem[]>(() => screenItems(views));
+  const C = useColors();
+  const ui = useUi();
+  const styles = useStyles();
   const update = (next: ScreenItem[]) => {
     setItems(next);
     onChange(viewsOf(next));
@@ -37,6 +40,8 @@ export function ScreenOrderCard({ views, onChange }: { views: string; onChange: 
 
 // 48 dp: Android's minimum touch target.
 function Arrow({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
+  const C = useColors();
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -48,9 +53,11 @@ function Arrow({ label, disabled, onPress }: { label: string; disabled: boolean;
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs },
-  name: { flex: 1 },
-  arrow: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 8, borderWidth: 1, borderColor: C.border },
-  arrowText: { color: C.text, fontSize: 20, fontWeight: '600' },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs },
+    name: { flex: 1 },
+    arrow: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 8, borderWidth: 1, borderColor: C.border },
+    arrowText: { color: C.text, fontSize: 20, fontWeight: '600' },
+  }),
+);

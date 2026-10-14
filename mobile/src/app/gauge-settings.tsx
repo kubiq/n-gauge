@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { ScreenOrderCard } from '@/components/screen-order-card';
-import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
+import { Button, Card, Note, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
 import { checkValue, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
-import { C, S } from '@/theme';
+import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
 
@@ -184,6 +184,9 @@ function SettingRow({
   changed: boolean;
   onChange: (v: string | boolean) => void;
 }) {
+  const C = useColors();
+  const ui = useUi();
+  const styles = useStyles();
   if (d.options) {
     // Label and hint above, the choices full width below: the labels are too
     // long to sit beside the name like a number field does.
@@ -191,15 +194,15 @@ function SettingRow({
     return (
       <View style={{ gap: S.sm }}>
         <Text style={[ui.rowLabel, changed && { color: C.accent }]}>{d.label}</Text>
-        <View style={styles.options}>
+        <View style={ui.options}>
           {d.options.map((o) => {
             const on = o.value === current;
             return (
               <Pressable
                 key={o.value}
                 onPress={() => onChange(String(o.value))}
-                style={({ pressed }) => [styles.option, on && styles.optionOn, pressed && { opacity: 0.6 }]}>
-                <View style={[styles.radio, on && styles.radioOn]} />
+                style={({ pressed }) => [ui.option, on && ui.optionOn, pressed && { opacity: 0.6 }]}>
+                <View style={[ui.radio, on && ui.radioOn]} />
                 <Text style={[ui.rowValue, on && { color: C.accent }]}>{o.label}</Text>
               </Pressable>
             );
@@ -233,30 +236,19 @@ function SettingRow({
   );
 }
 
-const styles = StyleSheet.create({
-  options: { borderColor: C.border, borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.sm,
-    paddingVertical: 12,
-    paddingHorizontal: S.md,
-    borderTopColor: C.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  optionOn: { backgroundColor: C.bg },
-  radio: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: C.dim },
-  radioOn: { borderColor: C.accent, backgroundColor: C.accent },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
-  input: {
-    color: C.text,
-    borderColor: C.border,
-    borderWidth: 1,
-    borderRadius: 6,
-    minWidth: 72,
-    paddingHorizontal: S.sm,
-    paddingVertical: 6,
-    textAlign: 'right',
-    fontSize: 15,
-  },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    inputWrap: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+    input: {
+      color: C.text,
+      borderColor: C.border,
+      borderWidth: 1,
+      borderRadius: 6,
+      minWidth: 72,
+      paddingHorizontal: S.sm,
+      paddingVertical: 6,
+      textAlign: 'right',
+      fontSize: 15,
+    },
+  }),
+);

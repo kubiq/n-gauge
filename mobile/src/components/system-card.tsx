@@ -1,8 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, Row, styles as ui } from '@/components/ui';
+import { Card, Row, useUi } from '@/components/ui';
 import type { PodLive } from '@/lib/pod';
-import { C, S } from '@/theme';
+import { S, themed, useColors } from '@/theme';
 
 type Sys = NonNullable<PodLive['sys']>;
 
@@ -49,6 +49,9 @@ export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso
 // A row with a thin bar under it, filled to the part in use (0..1).
 function Bar({ label, value, used, bad }: { label: string; value: string; used: number; bad?: boolean }) {
   const fill = Math.min(1, Math.max(0, used));
+  const C = useColors();
+  const ui = useUi();
+  const styles = useStyles();
   return (
     <View style={{ gap: S.xs }}>
       <View style={ui.row}>
@@ -62,7 +65,9 @@ function Bar({ label, value, used, bad }: { label: string; value: string; used: 
   );
 }
 
-const styles = StyleSheet.create({
-  track: { height: 6, borderRadius: 3, backgroundColor: C.border, overflow: 'hidden' },
-  fill: { height: 6, borderRadius: 3 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    track: { height: 6, borderRadius: 3, backgroundColor: C.border, overflow: 'hidden' },
+    fill: { height: 6, borderRadius: 3 },
+  }),
+);

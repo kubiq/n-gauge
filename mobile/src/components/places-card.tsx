@@ -2,9 +2,9 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, Note, styles as ui } from '@/components/ui';
+import { Card, Note, useUi } from '@/components/ui';
 import { loadNames, nameOwnPlace, type Names } from '@/lib/names';
-import { C, S } from '@/theme';
+import { S, themed } from '@/theme';
 
 // The places you named from a drive's ⋮ ("Home", "Work"): every drive
 // starting or ending within 300 m of one is called by it. Here they can be
@@ -12,6 +12,8 @@ import { C, S } from '@/theme';
 // every visit, so a rename shows on the way back.
 export function PlacesCard() {
   const [names, setNames] = useState<Names>({ places: [], titles: {} });
+  const ui = useUi();
+  const styles = useStyles();
   useFocusEffect(useCallback(() => setNames(loadNames()), []));
 
   const rename = (p: Names['places'][number]) =>
@@ -47,10 +49,12 @@ export function PlacesCard() {
   );
 }
 
-const styles = StyleSheet.create({
-  // 48 dp tall to hit, as the app's other tap targets.
-  row: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 48 },
-  name: { flex: 1, minHeight: 48, justifyContent: 'center' },
-  action: { minHeight: 48, justifyContent: 'center', paddingHorizontal: S.sm },
-  link: { color: C.link, fontSize: 14 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    // 48 dp tall to hit, as the app's other tap targets.
+    row: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 48 },
+    name: { flex: 1, minHeight: 48, justifyContent: 'center' },
+    action: { minHeight: 48, justifyContent: 'center', paddingHorizontal: S.sm },
+    link: { color: C.link, fontSize: 14 },
+  }),
+);

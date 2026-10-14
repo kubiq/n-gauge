@@ -1,7 +1,7 @@
 import { DropdownMenu, DropdownMenuItem, Host, Icon, IconButton, Text } from '@expo/ui/jetpack-compose';
 import { useState } from 'react';
 
-import { C } from '@/theme';
+import { useColors } from '@/theme';
 
 export type MenuItem = { label: string; onPress: () => void; disabled?: boolean };
 
@@ -10,6 +10,7 @@ export type MenuItem = { label: string; onPress: () => void; disabled?: boolean 
 // have it.
 export function OverflowMenu({ items }: { items: MenuItem[] }) {
   const [open, setOpen] = useState(false);
+  const C = useColors();
   if (!items.length) return null;
   return (
     <Host matchContents>

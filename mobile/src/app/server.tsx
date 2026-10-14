@@ -1,15 +1,17 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 
-import { Button, Card, Note, Screen, styles as ui } from '@/components/ui';
+import { Button, Card, Note, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { loadBackend, saveBackend, testBackend } from '@/lib/backend';
-import { C, S } from '@/theme';
+import { useColors } from '@/theme';
 
 // Where uploads go: backend/ in this repo, on the home server, reached
 // through the phone's VPN.
 export default function ServerScreen() {
+  const C = useColors();
+  const ui = useUi();
   const pod = usePod();
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
@@ -50,7 +52,7 @@ export default function ServerScreen() {
       <Card title="Server">
         <Text style={ui.rowLabel}>Address</Text>
         <TextInput
-          style={styles.input}
+          style={ui.input}
           value={url}
           onChangeText={setUrl}
           placeholder="http://10.8.0.1:8080"
@@ -61,7 +63,7 @@ export default function ServerScreen() {
         />
         <Text style={ui.rowLabel}>Token</Text>
         <TextInput
-          style={styles.input}
+          style={ui.input}
           value={token}
           onChangeText={setToken}
           placeholder="TOKEN from the server's .env"
@@ -82,15 +84,3 @@ export default function ServerScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    color: C.text,
-    borderColor: C.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: S.md,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-});

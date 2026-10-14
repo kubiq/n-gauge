@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 
 import { Note } from '@/components/ui';
 import type { TrackPoint } from '@/lib/trips';
-import { C } from '@/theme';
+import { type Colors, themed, useColors } from '@/theme';
 
 // MapLibre GL JS in a WebView, on OpenFreeMap's vector tiles: no API key, no
 // native map SDK to build. Both come over the internet, so the map only
@@ -12,7 +12,8 @@ import { C } from '@/theme';
 // 5.x, not 6: 6 no longer ships dist/maplibre-gl.js (404), the plain script
 // build a page without a bundler needs.
 const MAPLIBRE = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist';
-const STYLE = 'https://tiles.openfreemap.org/styles/dark';
+// The theme picks the style: 'dark', or 'positron' for the light theme.
+const STYLES = 'https://tiles.openfreemap.org/styles/';
 
 // Speed bands of this width become one line each, so the colour follows the
 // speed without a feature per point.
@@ -39,7 +40,7 @@ export function speedLines(track: TrackPoint[]) {
   return { type: 'FeatureCollection', features };
 }
 
-function html(track: TrackPoint[], bbox: [number, number, number, number]) {
+function html(track: TrackPoint[], bbox: [number, number, number, number], C: Colors) {
   const lines = JSON.stringify(speedLines(track));
   const ends = JSON.stringify({
     type: 'FeatureCollection',
@@ -61,7 +62,7 @@ else {
   const map = new maplibregl.Map({
     // The credit is shown under the map by the app instead (see TrackMap):
     // MapLibre's own box opened as a white bar across the bottom of it.
-    container: 'm', style: '${STYLE}', attributionControl: false,
+    container: 'm', style: '${STYLES}${C.mapStyle}', attributionControl: false,
     bounds: ${JSON.stringify(bbox)}, fitBoundsOptions: { padding: 32 },
   });
   // Only before the map is up: a single missing tile later is not worth a warning.
@@ -90,6 +91,7 @@ else {
 
 /** The map's box with a spinner: while the track is read, before TrackMap. */
 export function MapLoading() {
+  const styles = useStyles();
   return (
     <View style={styles.box}>
       <Spinner />
@@ -98,6 +100,8 @@ export function MapLoading() {
 }
 
 function Spinner() {
+  const C = useColors();
+  const styles = useStyles();
   return (
     <View style={styles.spinner} pointerEvents="none">
       <ActivityIndicator size="large" color={C.accent} />
@@ -108,7 +112,9 @@ function Spinner() {
 export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, number, number, number] }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [drawn, setDrawn] = useState(false);
-  const source = useMemo(() => ({ html: html(track, bbox), baseUrl: 'https://n-gauge.local/' }), [track, bbox]);
+  const C = useColors();
+  const styles = useStyles();
+  const source = useMemo(() => ({ html: html(track, bbox, C), baseUrl: 'https://n-gauge.local/' }), [track, bbox, C]);
   return (
     <View style={{ gap: 8 }}>
       <View style={styles.box}>
@@ -152,11 +158,13 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
   );
 }
 
-const styles = StyleSheet.create({
-  box: { height: 380, borderRadius: 12, overflow: 'hidden', borderColor: C.border, borderWidth: 1, backgroundColor: C.bg },
-  spinner: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  swatch: { width: 14, height: 4, borderRadius: 2 },
-  credit: { color: C.dim, fontSize: 11 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    box: { height: 380, borderRadius: 12, overflow: 'hidden', borderColor: C.border, borderWidth: 1, backgroundColor: C.bg },
+    spinner: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
+    legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    swatch: { width: 14, height: 4, borderRadius: 2 },
+    credit: { color: C.dim, fontSize: 11 },
+  }),
+);

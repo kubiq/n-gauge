@@ -5,7 +5,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ngauge",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0d1116",
     "android": {
       "package": "dev.ngauge.pod",

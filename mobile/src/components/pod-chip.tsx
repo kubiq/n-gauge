@@ -5,7 +5,7 @@ import { type MenuItem, OverflowMenu } from '@/components/overflow-menu';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { shortWhen } from '@/lib/format';
-import { C, S } from '@/theme';
+import { type Colors, S, themed, useColors } from '@/theme';
 
 // The gauge in the header of Trips and Settings, the way Garmin Connect shows its watch:
 // the connection and the sync at a glance, from any screen. The ring is the
@@ -13,7 +13,7 @@ import { C, S } from '@/theme';
 // going on. A tap connects, or - connected - opens the Gauge screen.
 type Status = { title: string; detail: string | null; ring: string; busy: boolean; bad?: boolean };
 
-function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>): Status {
+function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>, C: Colors): Status {
   const synced = sync.lastSync ? `Synced ${shortWhen(sync.lastSync)}` : null;
   if (!pod.creds) return { title: 'Set up the gauge', detail: null, ring: C.dim, busy: false };
   if (pod.state === 'connecting') return { title: 'Connecting…', detail: synced, ring: C.dim, busy: true };
@@ -29,7 +29,9 @@ function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>
 // drive's date); the words stay in the accessibility label.
 export function PodChip({ compact = false }: { compact?: boolean }) {
   const pod = usePod();
-  const { title, detail, ring, busy, bad } = status(pod, useSync());
+  const C = useColors();
+  const styles = useStyles();
+  const { title, detail, ring, busy, bad } = status(pod, useSync(), C);
 
   // Not connected: connect and stay put - often the connection is all that
   // was wanted (a setting to save, firmware to send). Otherwise the Gauge screen.
@@ -66,6 +68,7 @@ export function PodChip({ compact = false }: { compact?: boolean }) {
 
 /** A header's right side: the gauge, then the ⋮ menu if there is one. */
 export function HeaderActions({ items = [], compact = false }: { items?: MenuItem[]; compact?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={styles.actions}>
       <PodChip compact={compact} />
@@ -74,11 +77,13 @@ export function HeaderActions({ items = [], compact = false }: { items?: MenuIte
   );
 }
 
-const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', alignItems: 'center', gap: S.xs, marginRight: S.xs },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingHorizontal: S.sm, maxWidth: 170 },
-  face: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  ring: { width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
-  title: { color: C.text, fontSize: 13, fontWeight: '600' },
-  detail: { color: C.dim, fontSize: 11 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    actions: { flexDirection: 'row', alignItems: 'center', gap: S.xs, marginRight: S.xs },
+    chip: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingHorizontal: S.sm, maxWidth: 170 },
+    face: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+    ring: { width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
+    title: { color: C.text, fontSize: 13, fontWeight: '600' },
+    detail: { color: C.dim, fontSize: 11 },
+  }),
+);

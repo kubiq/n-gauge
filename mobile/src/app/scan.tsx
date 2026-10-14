@@ -8,7 +8,7 @@ import { Button, Note, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { qrText } from '@/lib/scan-qr';
 import { parseWifiQr } from '@/lib/wifi-qr';
-import { S } from '@/theme';
+import { S, themed } from '@/theme';
 
 // The pod's WiFi screen (tap through the views on the gauge) shows the QR.
 export default function Scan() {
@@ -20,6 +20,7 @@ export default function Scan() {
   // The hint floats over the camera, so it keeps clear of the navigation
   // buttons itself (the app draws edge to edge).
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
 
   if (!perm) return null;
   if (!perm.granted) {
@@ -56,7 +57,11 @@ export default function Scan() {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1 },
-  hint: { position: 'absolute', left: S.md, right: S.md, padding: S.md, backgroundColor: '#000a', borderRadius: 8 },
-});
+// The hint is a card over the camera: in the theme's colours, so its text
+// (a Note, in the theme's dim) is readable on it in light and dark alike.
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    wrap: { flex: 1 },
+    hint: { position: 'absolute', left: S.md, right: S.md, padding: S.md, backgroundColor: C.card, borderRadius: 8 },
+  }),
+);

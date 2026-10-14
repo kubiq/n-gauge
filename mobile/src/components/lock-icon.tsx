@@ -1,9 +1,10 @@
 import { Host, Icon } from '@expo/ui/jetpack-compose';
 
-import { C } from '@/theme';
+import { useColors } from '@/theme';
 
 /** An encrypted log: dim, or red when this phone cannot read it. */
 export function LockIcon({ bad = false, size = 16 }: { bad?: boolean; size?: number }) {
+  const C = useColors();
   return (
     <Host matchContents>
       <Icon

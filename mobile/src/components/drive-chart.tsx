@@ -5,18 +5,17 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { Card } from '@/components/ui';
 import { duration } from '@/lib/format';
 import type { Series } from '@/lib/series';
-import { C, S } from '@/theme';
+import { type Colors, S, themed, useColors } from '@/theme';
 
 // A drive's readings over time, as small multiples sharing one time axis:
 // speed, boost, oil and coolant, voltage - one y-axis each, never two scales
 // on one chart. Drag across them: one cursor runs through all, and each
 // heading shows its value there; untouched, the headings show the peak.
 //
-// Series colours from the dataviz palette's dark steps, validated against
-// C.card (CVD ΔE 26.8): blue for a lone series and for coolant, orange for
-// oil - as on the gauge. Text never wears them.
-const BLUE = '#3987e5';
-const ORANGE = '#d95926';
+// Series colours from the theme (series1 blue: a lone series and coolant;
+// series2 orange: oil, as on the gauge) - the dataviz palette's steps for
+// each surface, validated against its card (CVD ΔE 26.8 dark, 24.7 light).
+// Text never wears them.
 
 const PLOT_H = 72;
 const PAD_Y = 6;   // the line's 2 px and the cursor's dots stay inside
@@ -45,8 +44,9 @@ const peak = (digits: number, unit: string) => (lines: Line_[]) =>
     .map((l) => `${lines.length > 1 ? `${l.name} ` : ''}${Math.max(...finite(l.data)).toFixed(digits)}${unit}`)
     .join('  ·  ');
 
-const PANELS = (s: Series): Panel[] =>
-  [
+const PANELS = (s: Series, C: Colors): Panel[] => {
+  const BLUE = C.series1, ORANGE = C.series2;
+  return [
     { title: 'Speed', unit: ' km/h', digits: 0, lines: [{ name: 'Speed', data: s.kmh, color: BLUE }], idle: peak(0, ' km/h') },
     // The true value, vacuum included, with the zero drawn.
     { title: 'Boost', unit: ' bar', digits: 2, zero: true, lines: [{ name: 'Boost', data: s.boostBar, color: BLUE }], idle: peak(2, ' bar') },
@@ -74,6 +74,7 @@ const PANELS = (s: Series): Panel[] =>
     // A channel the log does not have (older logs: no voltage) is no chart.
     .map((p) => ({ ...p, lines: p.lines.filter((l) => finite(l.data).length > 1) }))
     .filter((p) => p.lines.length > 0);
+};
 
 /** The line as a path, lifted at gaps: a dropout is not drawn across. */
 function pathOf(data: (number | null)[], x: (i: number) => number, y: (v: number) => number): string {
@@ -91,7 +92,9 @@ function pathOf(data: (number | null)[], x: (i: number) => number, y: (v: number
 }
 
 export function DriveChart({ series }: { series: Series }) {
-  const panels = useMemo(() => PANELS(series), [series]);
+  const C = useColors();
+  const styles = useStyles();
+  const panels = useMemo(() => PANELS(series, C), [series, C]);
   const n = series.t.length;
   const [width, setWidth] = useState(0);
   const [at, setAt] = useState<number | null>(null);
@@ -191,15 +194,17 @@ export function DriveChart({ series }: { series: Series }) {
   );
 }
 
-const styles = StyleSheet.create({
-  hint: { color: C.dim, fontSize: 13 },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: S.sm },
-  title: { color: C.text, fontSize: 14, fontWeight: '600' },
-  value: { color: C.text, fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1, textAlign: 'right' },
-  keys: { flexDirection: 'row', gap: S.md },
-  key: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
-  swatch: { width: 14, height: 3, borderRadius: 2 },
-  axis: { color: C.dim, fontSize: 11 },
-  top: { position: 'absolute', right: 0, top: 0 },
-  bottom: { position: 'absolute', right: 0, bottom: 0 },
-});
+const useStyles = themed((C) =>
+  StyleSheet.create({
+    hint: { color: C.dim, fontSize: 13 },
+    head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: S.sm },
+    title: { color: C.text, fontSize: 14, fontWeight: '600' },
+    value: { color: C.text, fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1, textAlign: 'right' },
+    keys: { flexDirection: 'row', gap: S.md },
+    key: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+    swatch: { width: 14, height: 3, borderRadius: 2 },
+    axis: { color: C.dim, fontSize: 11 },
+    top: { position: 'absolute', right: 0, top: 0 },
+    bottom: { position: 'absolute', right: 0, bottom: 0 },
+  }),
+);

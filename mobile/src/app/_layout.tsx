@@ -1,22 +1,33 @@
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useMemo } from 'react';
 
 import { HeaderActions } from '@/components/pod-chip';
 import { PodProvider } from '@/hooks/use-pod';
 import { SyncProvider } from '@/hooks/use-sync';
-import { C } from '@/theme';
-
-const theme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, border: C.border, primary: C.accent, text: C.text },
-};
+import { ThemeChoiceProvider } from '@/hooks/use-theme';
+import { useColors } from '@/theme';
 
 export default function RootLayout() {
+  return (
+    <ThemeChoiceProvider>
+      <Themed />
+    </ThemeChoiceProvider>
+  );
+}
+
+// Below the theme choice, so the headers and the status bar follow it.
+function Themed() {
+  const C = useColors();
+  const theme = useMemo(() => {
+    const base = C.dark ? DarkTheme : DefaultTheme;
+    return { ...base, colors: { ...base.colors, background: C.bg, card: C.card, border: C.border, primary: C.accent, text: C.text } };
+  }, [C]);
   return (
     <ThemeProvider value={theme}>
       <PodProvider>
         <SyncProvider>
-          <StatusBar style="light" />
+          <StatusBar style={C.dark ? 'light' : 'dark'} />
           <Stack>
             {/* No tabs: Trips is the app; Settings is in its ⋮ menu, the gauge
                 in the header (PodChip) - and on Settings and Gauge settings

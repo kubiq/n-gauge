@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, TextInput } from 'react-native';
+import { Alert, TextInput } from 'react-native';
 
-import { Button, Card, Note, Row, Screen } from '@/components/ui';
+import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { keyFromText, toHex } from '@/lib/logcrypt';
 import { copyLogKey, createLogKey, importLogKey, loadLogKey, type LogKey } from '@/lib/logkey';
 import { getSettings, setPodLogKey } from '@/lib/pod';
-import { C, S } from '@/theme';
+import { useColors } from '@/theme';
 
 // Log encryption: this phone's key (create, export to KeePass, import), and
 // - while connected - telling the pod to encrypt to it. Design in DECISIONS.md.
 export default function LogKeyScreen() {
+  const C = useColors();
+  const ui = useUi();
   const pod = usePod();
   const connected = pod.state === 'connected';
   const [key, setKey] = useState<LogKey | null | undefined>(undefined);
@@ -114,7 +116,7 @@ export default function LogKeyScreen() {
         {importing ? (
           <>
             <TextInput
-              style={styles.input}
+              style={ui.input}
               value={importText}
               onChangeText={setImportText}
               placeholder="ngauge-log-key-v1:…"
@@ -176,15 +178,3 @@ export default function LogKeyScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    color: C.text,
-    borderColor: C.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: S.md,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-});
