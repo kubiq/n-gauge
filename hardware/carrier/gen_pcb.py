@@ -46,8 +46,8 @@ CX, CY = 100.0, 100.0     # board centre on the sheet, mm
 # pin-1 x is read from the photo's scale (8.74 px/mm: header strip -10.9..+9.5
 # mm, i.e. pins -9.6..+8.2 on the drawing), NOT from its "12.70" dimension,
 # which would put the header over the round edge. Verified with calipers on
-# the real display (2026-09-30).
-J1_PIN1 = (-8.20, 18.30)
+# the real display (2026-09-30), then moved 1 mm left (2026-10-15).
+J1_PIN1 = (-9.20, 18.30)
 
 # The three modules stand on edge in their sockets, like cards, stacked in
 # rows across the back below a ~15 mm area kept free at the top for the GNSS
