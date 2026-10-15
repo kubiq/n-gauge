@@ -37,6 +37,10 @@ struct LapInfo {
   uint32_t bestMs;      // best completed lap this session, 0 = none yet
   uint16_t laps;        // completed laps this session
   float    searchM;     // driven since START while searching (LAP_SEARCH)
+  // How far the line is: the lap in progress so far, and the reference - the
+  // best lap's length (0 until a lap is complete). Left = calc_lap_left_m().
+  float    lapM;        // driven since the line, this lap (LAP_TIMING)
+  float    refM;        // the best lap's length
   bool     gaveUp;      // the last search ended without finding a loop
 };
 

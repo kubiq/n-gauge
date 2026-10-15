@@ -8,6 +8,7 @@
 #include "settings.h"   // live thresholds; config.h holds only the defaults
 #include "power.h"      // a screen change is a sign of life; hold off sleep
 #include "laps.h"       // the track screen's buttons drive the lap timer
+#include "calc.h"       // calc_lap_left_m: how far the line is
 #include "lvgl.h"
 #include <math.h>       // sqrtf, used by the g-meter
 #include <string.h>     // strncmp/strncpy in the update guards
@@ -69,7 +70,7 @@ static lv_obj_t *tyreVal[WHEEL_COUNT], *tyreTemp[WHEEL_COUNT];
 // gps widgets
 static lv_obj_t *gpsSpeed, *gpsState, *gpsTrip, *gpsIcon;
 // track (lap timer) widgets
-static lv_obj_t *trkCurrent, *trkLast, *trkBest, *trkStatus, *trkFlag;
+static lv_obj_t *trkCurrent, *trkLast, *trkBest, *trkStatus, *trkFlag, *trkLeft;
 // SET and STOP share one slot: SET while no session is running, STOP once one
 // is. Only one is ever visible, so neither sits on screen doing nothing.
 static lv_obj_t *trkSetBtn, *trkStopBtn;
@@ -583,6 +584,12 @@ void ui_init() {
   // occupies roughly +163..+179 on this round panel, and below +150 the chord
   // also narrows too fast for two 130 px buttons side by side.
   scr[VIEW_TRACK] = make_screen();
+  // How far the line is, against the best lap's length: an arc round the
+  // edge emptying towards it, as the WiFi screen's countdown. First, so it
+  // is under everything - and not clickable (make_arc_sized), so the
+  // buttons above it still take every tap.
+  trkLeft = make_arc_sized(scr[VIEW_TRACK], COL_GOOD, 0, TRACK_ARC_STEPS, 440, 6);
+  lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
   // Chequered flag in place of the "LAP TIMER" caption (Material Symbols
   // "sports_score", Apache 2.0 - see firmware/assets/). Coloured by session
   // state in ui_update_track().
@@ -1660,8 +1667,39 @@ void ui_update_track(const LapInfo *li) {
         else                    snprintf(s, sizeof(s), "finding the line - waiting for GPS");
         break;
       case LAP_OUT_LAP:  snprintf(s, sizeof(s), "out lap - timing starts at the line"); break;
-      case LAP_TIMING:   snprintf(s, sizeof(s), "lap %u", (unsigned)li->laps + 1); break;
+      // With a reference (a lap done), how far the line is - in 10 m steps
+      // under a kilometre, so the label changes a few times a second at
+      // most. A bullet, not a middle dot: Montserrat 14 has none.
+      case LAP_TIMING: {
+        const float left = calc_lap_left_m(li->refM, li->lapM);
+        if (li->refM <= 0.0f) snprintf(s, sizeof(s), "lap %u", (unsigned)li->laps + 1);
+        else if (left < 1000.0f)
+          snprintf(s, sizeof(s), "lap %u  \xE2\x80\xA2  %d m to the line", (unsigned)li->laps + 1,
+                   (int)(left / 10.0f) * 10);
+        else
+          snprintf(s, sizeof(s), "lap %u  \xE2\x80\xA2  %.1f km to the line", (unsigned)li->laps + 1,
+                   left / 1000.0f);
+        break;
+      }
     }
+  }
+
+  // The arc: hidden with no reference or not timing; otherwise the part of
+  // the best lap still to drive. Shown or hidden only on a change - clearing
+  // HIDDEN invalidates the whole object (the WiFi screen's 7 Hz lesson).
+  static int lastArc = -2;
+  int arc = -1;
+  if (li->state == LAP_TIMING && li->refM > 0.0f) {
+    arc = (int)ceilf(calc_lap_left_m(li->refM, li->lapM) / li->refM * TRACK_ARC_STEPS);
+    if (arc > TRACK_ARC_STEPS) arc = TRACK_ARC_STEPS;
+  }
+  if (arc != lastArc) {
+    if ((arc < 0) != (lastArc < 0) || lastArc == -2) {
+      if (arc < 0) lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
+      else         lv_obj_clear_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (arc >= 0) lv_arc_set_value(trkLeft, arc);
+    lastArc = arc;
   }
   static char lastS[48] = "\x01";                   // never matches real text
   if (strcmp(s, lastS) != 0) {

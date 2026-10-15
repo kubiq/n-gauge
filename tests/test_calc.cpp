@@ -242,6 +242,20 @@ static void gate_crossing_forwards_is_found_and_interpolated() {
   CHECK_NEAR(calc_gate_cross(-2.0f, 0.0f, 0.0f, 0.0f, 25.0f), 1.0f, 0.0001f);
 }
 
+static void lap_distance_counts_real_steps_only() {
+  // 3-4-5: 5 m in 200 ms is 25 m/s - driven.
+  CHECK_NEAR(calc_lap_step_m(0.0f, 0.0f, 3.0f, 4.0f, 200, 100.0f), 5.0f, 0.0001f);
+  // 50 m in 200 ms is 250 m/s - a jumping fix: no distance.
+  CHECK_NEAR(calc_lap_step_m(0.0f, 0.0f, 30.0f, 40.0f, 200, 100.0f), 0.0f, 0.0001f);
+  CHECK_NEAR(calc_lap_step_m(0.0f, 0.0f, 1.0f, 0.0f, 0, 100.0f), 0.0f, 0.0001f);
+}
+
+static void lap_left_never_goes_below_zero() {
+  CHECK_NEAR(calc_lap_left_m(2400.0f, 2050.0f), 350.0f, 0.001f);
+  CHECK_NEAR(calc_lap_left_m(2400.0f, 2500.0f), 0.0f, 0.001f);   // a longer line: 0, not negative
+  CHECK_NEAR(calc_lap_left_m(0.0f, 100.0f), 0.0f, 0.001f);       // no reference yet
+}
+
 static void gate_crossing_backwards_never_counts() {
   // Driving the wrong way over the line - or a return straight passing close
   // to it - must not produce a lap.
@@ -710,6 +724,8 @@ int main() {
   TEST(local_xy_matches_known_offsets);
   TEST(gate_crossing_forwards_is_found_and_interpolated);
   TEST(gate_crossing_backwards_never_counts);
+  TEST(lap_distance_counts_real_steps_only);
+  TEST(lap_left_never_goes_below_zero);
   TEST(gate_crossing_wide_of_the_line_does_not_count);
   TEST(gate_coords_rotate_with_the_direction_of_travel);
   TEST(lap_time_survives_midnight);

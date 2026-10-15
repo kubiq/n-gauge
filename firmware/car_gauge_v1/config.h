@@ -869,6 +869,12 @@
 // signal gap the car's path is unknown, and a straight line through it could
 // "cross" the gate somewhere the car never went.
 #define TRACK_MAX_FIX_GAP_MS   1000UL
+// A step between two fixes faster than this adds no distance along the lap
+// (calc_lap_step_m): a jumping fix, not driving - 100 m/s is 360 km/h.
+#define TRACK_MAX_MPS          100.0f
+// Steps of the track screen's "how far the line is" arc. 500: one step per
+// ~5 m on a 2.5 km lap - smooth, and few enough redraws to cost nothing.
+#define TRACK_ARC_STEPS        500
 // STOP needs a second tap within this long, or a brushed screen mid-session
 // would wipe every lap. (SET is only shown with no session running, so it has
 // nothing to lose and acts at once.) Also how long a status message stays up.

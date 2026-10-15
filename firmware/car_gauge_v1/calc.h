@@ -336,6 +336,25 @@ static inline float calc_gate_cross(float prevAlong, float prevAcross,
   return f;
 }
 
+// One step between two fixes, as distance along the lap: its length in the
+// gate's frame (a rotation, so it is the real distance), or 0 for a step the
+// car cannot have driven - more than maxMps for the time between - so a fix
+// that jumps does not eat the distance left to the line.
+static inline float calc_lap_step_m(float prevAlong, float prevAcross,
+                                    float curAlong, float curAcross,
+                                    uint32_t dtMs, float maxMps) {
+  const float d = sqrtf((curAlong - prevAlong) * (curAlong - prevAlong) +
+                        (curAcross - prevAcross) * (curAcross - prevAcross));
+  return (dtMs > 0 && d <= maxMps * dtMs / 1000.0f) ? d : 0.0f;
+}
+
+// Metres left to the line against a reference lap's length (the best lap):
+// never below 0 - a shorter lap, through the pit lane, simply reaches the
+// line early, and its crossing starts the count again.
+static inline float calc_lap_left_m(float refM, float lapM) {
+  return refM > lapM ? refM - lapM : 0.0f;
+}
+
 // "Is the car being driven?", from GNSS speed, with hysteresis both ways.
 // Starts after speed >= onKmh with a fix, held for onMs; ends after speed
 // < offKmh OR no fix, held for offMs. Anything between the two speeds keeps

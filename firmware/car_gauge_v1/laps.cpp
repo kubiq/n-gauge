@@ -19,6 +19,9 @@ RTC_DATA_ATTR static bool     gateSet   = false;   // the line is known
 RTC_DATA_ATTR static int32_t  gateLat = 0, gateLon = 0;
 RTC_DATA_ATTR static float    dirX = 0.0f, dirY = 0.0f;   // unit direction of travel
 RTC_DATA_ATTR static uint32_t lastLapMs = 0, bestLapMs = 0;
+// The best lap's length, driven: the reference for how far the line is
+// (LapInfo.refM) - the lap being chased.
+RTC_DATA_ATTR static float    bestLapM  = 0.0f;
 RTC_DATA_ATTR static uint16_t lapCount  = 0;
 RTC_DATA_ATTR static bool     gaveUp    = false;
 
@@ -29,6 +32,7 @@ RTC_DATA_ATTR static bool     gaveUp    = false;
 static bool     inLap         = false;
 static uint32_t lapStartFixMs = 0;    // crossing time, UTC ms of day
 static uint32_t lapStartMillis = 0;   // the same instant on millis(), for display
+static float    lapM          = 0.0f; // driven since the line, this lap (calc_lap_step_m)
 static bool     havePrev      = false;
 static float    prevAlong = 0.0f, prevAcross = 0.0f;
 static uint32_t prevFixMs     = 0;
@@ -62,7 +66,10 @@ static bool closeLap(uint32_t crossMs, uint32_t crossMillis) {
     const uint32_t lapMs = calc_ms_of_day_diff(lapStartFixMs, crossMs);
     if (lapMs < TRACK_MIN_LAP_MS) return false;   // jitter at the line: ignore
     lastLapMs = lapMs;
-    if (bestLapMs == 0 || lapMs < bestLapMs) bestLapMs = lapMs;
+    if (bestLapMs == 0 || lapMs < bestLapMs) {
+      bestLapMs = lapMs;
+      bestLapM  = lapM;
+    }
     lapCount++;
     Serial.printf("[OK] lap %u: %lu ms (best %lu)\n", lapCount,
                   (unsigned long)lapMs, (unsigned long)bestLapMs);
@@ -70,6 +77,7 @@ static bool closeLap(uint32_t crossMs, uint32_t crossMillis) {
   inLap          = true;
   lapStartFixMs  = crossMs;
   lapStartMillis = crossMillis;
+  lapM           = 0.0f;
   return true;
 }
 
@@ -120,6 +128,13 @@ static bool searchStep(const GpsFix &f) {
   inLap          = true;
   lapStartFixMs  = c.fixMs;
   lapStartMillis = millis() - calc_ms_of_day_diff(c.fixMs, f.fixMs);
+  // Its distance so far, backdated as its time is: the path from the line's
+  // crumb to the previous fix - laps_task() adds this last step itself, on
+  // its way to the crossing check. (Started at 0 here, lap 1 measured the
+  // few metres since the line was noticed: a 197 s lap of "3 m", replayed
+  // from 2026-10-11, and the countdown stuck at 0 the lap after.)
+  lapM = finder.dist - c.dist - (haveSearchPrev ? sqrtf((x - prevX) * (x - prevX) + (y - prevY) * (y - prevY)) : 0.0f);
+  if (lapM < 0.0f) lapM = 0.0f;
   Serial.printf("[OK] lap line found after %.0f m (direction %.0f deg); lap 1 running\n",
                 finder.dist, atan2f(dirX, dirY) * 57.2957795f);
 
@@ -179,12 +194,21 @@ void laps_task() {
     const float fr = (dt <= TRACK_MAX_FIX_GAP_MS)
         ? calc_gate_cross(prevAlong, prevAcross, along, across, TRACK_GATE_HALF_M)
         : -1.0f;
+    // The distance of this step, for how far the line is: split at the line
+    // as the time is - the part before it closes this lap, the rest starts
+    // the next.
+    const float step = (dt <= TRACK_MAX_FIX_GAP_MS)
+        ? calc_lap_step_m(prevAlong, prevAcross, along, across, dt, TRACK_MAX_MPS)
+        : 0.0f;
     if (fr >= 0.0f) {
       // The crossing instant, interpolated between the fix before the line
       // and the fix after it.
       const uint32_t crossMs = (prevFixMs + (uint32_t)lroundf(fr * dt)) % 86400000UL;
       const uint32_t crossMillis = millis() - (uint32_t)lroundf((1.0f - fr) * dt);
-      closeLap(crossMs, crossMillis);
+      if (inLap) lapM += fr * step;
+      if (closeLap(crossMs, crossMillis)) lapM = (1.0f - fr) * step;
+    } else if (inLap) {
+      lapM += step;
     }
   }
 
@@ -200,6 +224,7 @@ void laps_start() {
   gateSet   = false;
   gaveUp    = false;
   lastLapMs = bestLapMs = 0;
+  bestLapM  = lapM = 0.0f;
   lapCount  = 0;
   inLap     = false;
   forgetPath();
@@ -211,6 +236,7 @@ void laps_stop() {
   searching = gateSet = false;
   gaveUp    = false;
   lastLapMs = bestLapMs = 0;
+  bestLapM  = lapM = 0.0f;
   lapCount  = 0;
   inLap     = false;
   forgetPath();
@@ -231,5 +257,7 @@ void laps_info(LapInfo *out) {
   out->bestMs    = bestLapMs;
   out->laps      = lapCount;
   out->searchM   = (searching && searchStarted) ? finder.dist : 0.0f;
+  out->lapM      = inLap ? lapM : 0.0f;
+  out->refM      = bestLapM;
   out->gaveUp    = gaveUp;
 }
