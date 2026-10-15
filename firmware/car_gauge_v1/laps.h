@@ -41,7 +41,12 @@ struct LapInfo {
   // best lap's length (0 until a lap is complete). Left = calc_lap_left_m().
   float    lapM;        // driven since the line, this lap (LAP_TIMING)
   float    refM;        // the best lap's length
-  bool     gaveUp;      // the last search ended without finding a loop
+  // The live delta: this lap's time minus the best lap's at the same
+  // distance - negative is faster. Only while a lap is timed against a best
+  // one, and within the best lap's length.
+  bool     haveDelta;
+  int32_t  deltaMs;
+  bool     gaveUp;     // the last search ended without finding a loop
 };
 
 void laps_task();                 // in loop(): consumes each new GNSS fix once

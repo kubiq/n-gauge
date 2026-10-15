@@ -70,7 +70,7 @@ static lv_obj_t *tyreVal[WHEEL_COUNT], *tyreTemp[WHEEL_COUNT];
 // gps widgets
 static lv_obj_t *gpsSpeed, *gpsState, *gpsTrip, *gpsIcon;
 // track (lap timer) widgets
-static lv_obj_t *trkCurrent, *trkLast, *trkBest, *trkStatus, *trkFlag, *trkLeft;
+static lv_obj_t *trkCurrent, *trkLast, *trkBest, *trkStatus, *trkFlag, *trkLeft, *trkDelta;
 // SET and STOP share one slot: SET while no session is running, STOP once one
 // is. Only one is ever visible, so neither sits on screen doing nothing.
 static lv_obj_t *trkSetBtn, *trkStopBtn;
@@ -604,6 +604,12 @@ void ui_init() {
   lv_obj_set_style_image_recolor(trkFlag, COL_DIM, 0);
   lv_obj_align(trkFlag, LV_ALIGN_CENTER, 0, -150);
   lv_obj_clear_flag(trkFlag, LV_OBJ_FLAG_CLICKABLE);
+  // The live delta to the best lap, in the flag's place while there is one
+  // (LapInfo.haveDelta): "-1.2" green, ahead; "+0.8" red, behind.
+  // As big as the lap time: it is what is glanced at mid-corner.
+  trkDelta = make_tyre_val(scr[VIEW_TRACK], 0, -146);
+  lv_obj_set_style_text_font(trkDelta, &lv_font_montserrat_48, 0);
+  lv_obj_add_flag(trkDelta, LV_OBJ_FLAG_HIDDEN);
   trkCurrent = make_big_label(scr[VIEW_TRACK], COL_INK, -72);
   trkLast    = make_tyre_val(scr[VIEW_TRACK], 0, -14);
   trkBest    = make_tyre_val(scr[VIEW_TRACK], 0, 24);
@@ -1604,6 +1610,23 @@ void ui_update_track(const LapInfo *li) {
     lv_obj_set_style_image_recolor(trkFlag,
         li->state == LAP_IDLE   ? COL_DIM :
         li->state == LAP_TIMING ? COL_GOOD : COL_BLUE, 0);
+  }
+
+  // The delta, in tenths - INT32_MIN for none, when the flag shows instead.
+  static int32_t lastDelta = INT32_MIN + 1;         // never drawn
+  const int32_t delta = li->haveDelta ? (int32_t)lroundf(li->deltaMs / 100.0f) : INT32_MIN;
+  if (delta != lastDelta) {
+    if ((delta == INT32_MIN) != (lastDelta == INT32_MIN) || lastDelta == INT32_MIN + 1) {
+      if (delta == INT32_MIN) { lv_obj_add_flag(trkDelta, LV_OBJ_FLAG_HIDDEN); lv_obj_clear_flag(trkFlag, LV_OBJ_FLAG_HIDDEN); }
+      else                    { lv_obj_clear_flag(trkDelta, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(trkFlag, LV_OBJ_FLAG_HIDDEN); }
+    }
+    if (delta != INT32_MIN) {
+      const int32_t a = delta < 0 ? -delta : delta;
+      lv_label_set_text_fmt(trkDelta, "%s%ld.%ld", delta < 0 ? "-" : delta > 0 ? "+" : "",
+                            (long)(a / 10), (long)(a % 10));
+      lv_obj_set_style_text_color(trkDelta, delta < 0 ? COL_GOOD : delta > 0 ? COL_BAD : COL_INK, 0);
+    }
+    lastDelta = delta;
   }
 
   // Every label below has its OWN guard - see the note above ui_update_oil().

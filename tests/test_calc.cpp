@@ -256,6 +256,44 @@ static void lap_left_never_goes_below_zero() {
   CHECK_NEAR(calc_lap_left_m(0.0f, 100.0f), 0.0f, 0.001f);       // no reference yet
 }
 
+static void lap_profile_records_time_at_each_mark() {
+  uint16_t p[8] = {0};
+  uint16_t n = 1;   // the line: 0 m at 0 ms
+  // 0 -> 25 m in 1000 ms passes the 20 m mark at 800 ms.
+  n = calc_lap_prof_add(p, n, 8, 20.0f, 0.0f, 0, 25.0f, 1000);
+  CHECK(n == 2);
+  CHECK(p[1] == 80);
+  // A step within one mark's span fills nothing.
+  n = calc_lap_prof_add(p, n, 8, 20.0f, 25.0f, 1000, 35.0f, 1400);
+  CHECK(n == 2);
+  // 35 -> 85 m in 2000 ms: 40, 60 and 80 m at 1600, 2400, 3200 ms.
+  n = calc_lap_prof_add(p, n, 8, 20.0f, 35.0f, 1400, 85.0f, 3400);
+  CHECK(n == 5);
+  CHECK(p[2] == 160 && p[3] == 240 && p[4] == 320);
+  // Standing still adds nothing; the cap is never passed.
+  CHECK(calc_lap_prof_add(p, n, 8, 20.0f, 85.0f, 3400, 85.0f, 9000) == 5);
+  CHECK(calc_lap_prof_add(p, n, 6, 20.0f, 85.0f, 3400, 500.0f, 20000) == 6);
+}
+
+static void lap_profile_backfills_a_backdated_start() {
+  // Lap 1 is found already running: 0 -> 50 m over its first 2000 ms, as one
+  // straight step, fills 20 and 40 m evenly.
+  uint16_t p[8] = {0};
+  const uint16_t n = calc_lap_prof_add(p, 1, 8, 20.0f, 0.0f, 0, 50.0f, 2000);
+  CHECK(n == 3);
+  CHECK(p[1] == 80 && p[2] == 160);
+}
+
+static void lap_profile_time_at_a_distance() {
+  const uint16_t p[] = {0, 100, 250, 300};   // 0, 1.0, 2.5, 3.0 s at 0/20/40/60 m
+  CHECK(calc_lap_prof_ms(p, 4, 20.0f, 0.0f) == 0);
+  CHECK(calc_lap_prof_ms(p, 4, 20.0f, 30.0f) == 1750);   // halfway 20 -> 40 m
+  CHECK(calc_lap_prof_ms(p, 4, 20.0f, 59.0f) == 2975);
+  CHECK(calc_lap_prof_ms(p, 4, 20.0f, 60.0f) == -1);     // its end: no further
+  CHECK(calc_lap_prof_ms(p, 4, 20.0f, -1.0f) == -1);
+  CHECK(calc_lap_prof_ms(p, 1, 20.0f, 0.0f) == -1);      // no profile
+}
+
 static void gate_crossing_backwards_never_counts() {
   // Driving the wrong way over the line - or a return straight passing close
   // to it - must not produce a lap.
@@ -726,6 +764,9 @@ int main() {
   TEST(gate_crossing_backwards_never_counts);
   TEST(lap_distance_counts_real_steps_only);
   TEST(lap_left_never_goes_below_zero);
+  TEST(lap_profile_records_time_at_each_mark);
+  TEST(lap_profile_backfills_a_backdated_start);
+  TEST(lap_profile_time_at_a_distance);
   TEST(gate_crossing_wide_of_the_line_does_not_count);
   TEST(gate_coords_rotate_with_the_direction_of_travel);
   TEST(lap_time_survives_midnight);

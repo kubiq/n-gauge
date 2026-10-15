@@ -355,6 +355,35 @@ static inline float calc_lap_left_m(float refM, float lapM) {
   return refM > lapM ? refM - lapM : 0.0f;
 }
 
+// A lap's time against its distance, for the live delta to the best lap:
+// prof[i] is the lap time, in 10 ms units, at i * stepM along it (prof[0] =
+// 0, at the line). One step of the lap, from (d0 m, t0 ms) to (d1, t1),
+// fills the marks it passes - each at its interpolated time - after the n
+// already filled, up to cap. Returns the new count.
+static inline uint16_t calc_lap_prof_add(uint16_t *prof, uint16_t n, uint16_t cap, float stepM,
+                                         float d0, uint32_t t0Ms, float d1, uint32_t t1Ms) {
+  if (!(d1 > d0)) return n;
+  while (n < cap && n * stepM <= d1) {
+    float f = (n * stepM - d0) / (d1 - d0);
+    if (f < 0.0f) f = 0.0f;   // a mark behind the step (never filled): its start
+    const float t = (t0Ms + f * (float)(t1Ms - t0Ms)) / 10.0f;
+    prof[n++] = t > 65535.0f ? 65535 : (uint16_t)lroundf(t);
+  }
+  return n;
+}
+
+// The time on a lap's profile at d metres along it, in ms - interpolated
+// between its marks - or -1 where it has none: beyond its end, or no
+// profile.
+static inline int32_t calc_lap_prof_ms(const uint16_t *prof, uint16_t n, float stepM, float d) {
+  if (n < 2 || d < 0.0f) return -1;
+  const float x = d / stepM;
+  const uint32_t i = (uint32_t)x;
+  if (i + 1 >= n) return -1;
+  const float f = x - (float)i;
+  return (int32_t)lroundf((prof[i] + f * ((float)prof[i + 1] - (float)prof[i])) * 10.0f);
+}
+
 // "Is the car being driven?", from GNSS speed, with hysteresis both ways.
 // Starts after speed >= onKmh with a fix, held for onMs; ends after speed
 // < offKmh OR no fix, held for offMs. Anything between the two speeds keeps

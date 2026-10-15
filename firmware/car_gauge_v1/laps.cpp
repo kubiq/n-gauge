@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <math.h>
+#include <string.h>
 
 // ---- session state that must survive deep sleep ----------------------------
 // A pit stop with the engine off lets the pod sleep after five minutes, and a
@@ -22,6 +23,10 @@ RTC_DATA_ATTR static uint32_t lastLapMs = 0, bestLapMs = 0;
 // The best lap's length, driven: the reference for how far the line is
 // (LapInfo.refM) - the lap being chased.
 RTC_DATA_ATTR static float    bestLapM  = 0.0f;
+// And its time against distance (calc_lap_prof_add): the live delta compares
+// the lap in progress with it at the same distance. 2 KB of RTC memory.
+RTC_DATA_ATTR static uint16_t bestProf[TRACK_PROF_N];
+RTC_DATA_ATTR static uint16_t bestProfN = 0;
 RTC_DATA_ATTR static uint16_t lapCount  = 0;
 RTC_DATA_ATTR static bool     gaveUp    = false;
 
@@ -33,6 +38,11 @@ static bool     inLap         = false;
 static uint32_t lapStartFixMs = 0;    // crossing time, UTC ms of day
 static uint32_t lapStartMillis = 0;   // the same instant on millis(), for display
 static float    lapM          = 0.0f; // driven since the line, this lap (calc_lap_step_m)
+static uint32_t lapT          = 0;    // the lap time at lapM (fix time), ms
+static uint16_t curProf[TRACK_PROF_N];   // this lap's time against distance
+static uint16_t curProfN      = 0;
+static bool     haveDelta     = false;
+static int32_t  deltaMs       = 0;    // this lap minus the best, at lapM
 static bool     havePrev      = false;
 static float    prevAlong = 0.0f, prevAcross = 0.0f;
 static uint32_t prevFixMs     = 0;
@@ -53,6 +63,27 @@ static bool      haveSearchPrev = false;
 
 static void forgetPath() { havePrev = false; haveSearchPrev = false; }
 
+// A new lap at the line: nothing driven, and its profile at 0 m / 0 ms.
+static void startLapProfile() {
+  lapM = 0.0f;
+  lapT = 0;
+  curProf[0] = 0;
+  curProfN = 1;
+  haveDelta = false;
+}
+
+// The lap goes on to toM metres at toT ms of lap time: its profile filled
+// on the way, and the delta to the best lap at the new distance.
+static void advanceLap(float toM, uint32_t toT) {
+  curProfN = calc_lap_prof_add(curProf, curProfN, TRACK_PROF_N, TRACK_PROF_STEP_M,
+                               lapM, lapT, toM, toT);
+  lapM = toM;
+  lapT = toT;
+  const int32_t ref = calc_lap_prof_ms(bestProf, bestProfN, TRACK_PROF_STEP_M, lapM);
+  haveDelta = ref >= 0;
+  if (haveDelta) deltaMs = (int32_t)lapT - ref;
+}
+
 static void freeCrumbs() {
   if (crumbs) heap_caps_free(crumbs);
   crumbs = nullptr;
@@ -69,6 +100,8 @@ static bool closeLap(uint32_t crossMs, uint32_t crossMillis) {
     if (bestLapMs == 0 || lapMs < bestLapMs) {
       bestLapMs = lapMs;
       bestLapM  = lapM;
+      memcpy(bestProf, curProf, curProfN * sizeof(curProf[0]));
+      bestProfN = curProfN;
     }
     lapCount++;
     Serial.printf("[OK] lap %u: %lu ms (best %lu)\n", lapCount,
@@ -77,7 +110,7 @@ static bool closeLap(uint32_t crossMs, uint32_t crossMillis) {
   inLap          = true;
   lapStartFixMs  = crossMs;
   lapStartMillis = crossMillis;
-  lapM           = 0.0f;
+  startLapProfile();
   return true;
 }
 
@@ -133,8 +166,19 @@ static bool searchStep(const GpsFix &f) {
   // its way to the crossing check. (Started at 0 here, lap 1 measured the
   // few metres since the line was noticed: a 197 s lap of "3 m", replayed
   // from 2026-10-11, and the countdown stuck at 0 the lap after.)
-  lapM = finder.dist - c.dist - (haveSearchPrev ? sqrtf((x - prevX) * (x - prevX) + (y - prevY) * (y - prevY)) : 0.0f);
-  if (lapM < 0.0f) lapM = 0.0f;
+  float backM = finder.dist - c.dist - (haveSearchPrev ? sqrtf((x - prevX) * (x - prevX) + (y - prevY) * (y - prevY)) : 0.0f);
+  if (backM < 0.0f) backM = 0.0f;
+  // Its profile too, from the breadcrumbs since the line - each one's path
+  // length and time, every LF_SPACING_M - then on to the previous fix. (As
+  // one straight run, line to here, lap 1 was a lap at constant speed, and
+  // the delta to it, replayed from 2026-10-11, was seconds off mid-lap.)
+  startLapProfile();
+  for (uint16_t i = (uint16_t)m + 1; i < finder.n; i++) {
+    const float d = crumbs[i].dist - c.dist;
+    if (d > backM) break;
+    advanceLap(d, calc_ms_of_day_diff(c.fixMs, crumbs[i].fixMs));
+  }
+  advanceLap(backM, calc_ms_of_day_diff(c.fixMs, haveSearchPrev ? prevSearchFixMs : f.fixMs));
   Serial.printf("[OK] lap line found after %.0f m (direction %.0f deg); lap 1 running\n",
                 finder.dist, atan2f(dirX, dirY) * 57.2957795f);
 
@@ -205,10 +249,13 @@ void laps_task() {
       // and the fix after it.
       const uint32_t crossMs = (prevFixMs + (uint32_t)lroundf(fr * dt)) % 86400000UL;
       const uint32_t crossMillis = millis() - (uint32_t)lroundf((1.0f - fr) * dt);
-      if (inLap) lapM += fr * step;
-      if (closeLap(crossMs, crossMillis)) lapM = (1.0f - fr) * step;
+      if (inLap) advanceLap(lapM + fr * step, calc_ms_of_day_diff(lapStartFixMs, crossMs));
+      if (closeLap(crossMs, crossMillis))
+        advanceLap((1.0f - fr) * step, calc_ms_of_day_diff(crossMs, f.fixMs));
+      else if (inLap)   // jitter at the line: the same lap goes on
+        advanceLap(lapM + (1.0f - fr) * step, calc_ms_of_day_diff(lapStartFixMs, f.fixMs));
     } else if (inLap) {
-      lapM += step;
+      advanceLap(lapM + step, calc_ms_of_day_diff(lapStartFixMs, f.fixMs));
     }
   }
 
@@ -225,6 +272,8 @@ void laps_start() {
   gaveUp    = false;
   lastLapMs = bestLapMs = 0;
   bestLapM  = lapM = 0.0f;
+  bestProfN = curProfN = 0;
+  haveDelta = false;
   lapCount  = 0;
   inLap     = false;
   forgetPath();
@@ -237,6 +286,8 @@ void laps_stop() {
   gaveUp    = false;
   lastLapMs = bestLapMs = 0;
   bestLapM  = lapM = 0.0f;
+  bestProfN = curProfN = 0;
+  haveDelta = false;
   lapCount  = 0;
   inLap     = false;
   forgetPath();
@@ -259,5 +310,7 @@ void laps_info(LapInfo *out) {
   out->searchM   = (searching && searchStarted) ? finder.dist : 0.0f;
   out->lapM      = inLap ? lapM : 0.0f;
   out->refM      = bestLapM;
+  out->haveDelta = inLap && haveDelta;
+  out->deltaMs   = deltaMs;
   out->gaveUp    = gaveUp;
 }

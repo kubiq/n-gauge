@@ -107,10 +107,13 @@ int main(int argc, char **argv) {
                   li.lastMs / 1000.0, li.bestMs / 1000.0, li.refM);
       nextReport = 0;
     }
-    // Along a timed lap with a reference: how far the line is, every 10 s.
+    // Along a timed lap with a reference: how far the line is, and the live
+    // delta to the best lap, every 10 s.
     if (li.state == LAP_TIMING && li.refM > 0.0f && replayMillis >= nextReport) {
-      std::printf("%s    lap %u at %5.1f s: driven %6.0f m, %6.0f m to the line\n", now, laps + 1,
-                  li.currentMs / 1000.0, li.lapM, calc_lap_left_m(li.refM, li.lapM));
+      char delta[24] = "no delta";
+      if (li.haveDelta) std::snprintf(delta, sizeof(delta), "delta %+.1f s", li.deltaMs / 1000.0);
+      std::printf("%s    lap %u at %5.1f s: driven %6.0f m, %6.0f m to the line, %s\n", now, laps + 1,
+                  li.currentMs / 1000.0, li.lapM, calc_lap_left_m(li.refM, li.lapM), delta);
       nextReport = replayMillis + 10000;
     }
   }

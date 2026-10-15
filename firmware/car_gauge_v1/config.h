@@ -875,6 +875,12 @@
 // Steps of the track screen's "how far the line is" arc. 500: one step per
 // ~5 m on a 2.5 km lap - smooth, and few enough redraws to cost nothing.
 #define TRACK_ARC_STEPS        500
+// The live delta to the best lap compares the lap time at the same distance
+// along it: each lap's time is kept every TRACK_PROF_STEP_M (calc_lap_prof_add).
+// 20 m is under 0.4 s at 200 km/h, interpolated between; 1024 marks cover a
+// 20 km lap (the Nordschleife) in 2 KB - kept across sleep, as the best is.
+#define TRACK_PROF_STEP_M      20.0f
+#define TRACK_PROF_N           1024
 // STOP needs a second tap within this long, or a brushed screen mid-session
 // would wipe every lap. (SET is only shown with no session running, so it has
 // nothing to lose and acts at once.) Also how long a status message stays up.
