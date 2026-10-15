@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, type ReactNode, useContext, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,17 +13,39 @@ import { S, themed, useColors } from '@/theme';
 export function Screen({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const ui = useUi();
+  // Held by something that needs the finger to itself - the map: dragging
+  // it with two fingers scrolled the page instead (useHoldScroll).
+  const [held, setHeld] = useState(false);
   return (
-    <SafeAreaView style={ui.screen} edges={[]}>
-      {/* "handled": a tap on a button while typing presses it. The default
-          spent the first tap only closing the keyboard - Save took two. */}
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[ui.scroll, { paddingBottom: S.md + insets.bottom }]}>
-        {children}
-      </ScrollView>
-    </SafeAreaView>
+    <HoldScrollContext.Provider value={setHeld}>
+      <SafeAreaView style={ui.screen} edges={[]}>
+        {/* "handled": a tap on a button while typing presses it. The default
+            spent the first tap only closing the keyboard - Save took two. */}
+        <ScrollView
+          scrollEnabled={!held}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[ui.scroll, { paddingBottom: S.md + insets.bottom }]}>
+          {children}
+        </ScrollView>
+      </SafeAreaView>
+    </HoldScrollContext.Provider>
   );
+}
+
+const HoldScrollContext = createContext<(held: boolean) => void>(() => {});
+
+/**
+ * Touch handlers that stop the screen scrolling while a finger is down on
+ * the view they are spread on - for one that takes its own gestures (the
+ * map's pan and pinch) inside a scrolling screen.
+ */
+export function useHoldScroll() {
+  const hold = useContext(HoldScrollContext);
+  return {
+    onTouchStart: () => hold(true),
+    onTouchEnd: () => hold(false),
+    onTouchCancel: () => hold(false),
+  };
 }
 
 export function Card({ title, children }: { title?: string; children: ReactNode }) {

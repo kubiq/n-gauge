@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { Note } from '@/components/ui';
+import { Note, useHoldScroll } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { t } from '@/i18n';
 import type { TrackPoint } from '@/lib/trips';
@@ -134,6 +134,7 @@ export function TrackMap({
   mark?: [number, number] | null;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const holdScroll = useHoldScroll();
   // The dot moves in the page, by script: the map is not loaded again.
   const web = useRef<WebView>(null);
   const sendMark = () => web.current?.injectJavaScript(`window.setMark && window.setMark(${JSON.stringify(mark)}); true;`);
@@ -167,10 +168,13 @@ export function TrackMap({
   }, [podState, problem]);
   return (
     <View style={{ gap: 8 }}>
-      <View style={styles.box}>
+      {/* A finger on the map holds the page still: its pan and pinch went
+          to the page's scroll before (2026-10-15). */}
+      <View style={styles.box} {...holdScroll}>
         <WebView
           key={attempt}
           ref={web}
+          nestedScrollEnabled
           source={source}
           originWhitelist={['*']}
           style={{ backgroundColor: C.bg }}
