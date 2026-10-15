@@ -8,6 +8,12 @@ export const SERIES_POINTS = 600;
 export type Series = {
   /** Seconds from the first row to the last. */
   durationS: number;
+  /**
+   * Epoch ms of the first row, from the `utc` column - so a moment on the
+   * chart can be found on the map (the GPX's clock). Null when the gauge's
+   * clock was not set during the drive.
+   */
+  startUtc: number | null;
   /** Each bucket's middle, seconds from the start. */
   t: number[];
   /** Per bucket; null where the bucket has no reading (a dropout, no column). */
@@ -21,7 +27,7 @@ export type Series = {
 type Keep = 'max' | 'mean';
 // Speed and boost keep the bucket's peak - a 2 s spike of boost is the point
 // of the chart; temperatures and voltage its mean.
-const CHANNELS: { key: Exclude<keyof Series, 'durationS' | 't'>; cols: string[]; keep: Keep }[] = [
+const CHANNELS: { key: Exclude<keyof Series, 'durationS' | 'startUtc' | 't'>; cols: string[]; keep: Keep }[] = [
   // The car's speed; GPS speed for logs from before obdKmh existed.
   { key: 'kmh', cols: ['obdKmh', 'speedKmh'], keep: 'max' },
   // The true value, vacuum included: the gauge stops at 0.00, the chart need not.
@@ -39,7 +45,7 @@ export function csvSeries(text: string, points = SERIES_POINTS): Series {
   const lines = text.split(/\r?\n/);
   const head = (lines[0] ?? '').trim().split(',');
   const iMs = head.indexOf('ms');
-  const empty: Series = { durationS: 0, t: [], kmh: [], boostBar: [], oilC: [], coolantC: [], volts: [] };
+  const empty: Series = { durationS: 0, startUtc: null, t: [], kmh: [], boostBar: [], oilC: [], coolantC: [], volts: [] };
   if (iMs < 0) return empty;
   // A channel's column: the first of its names the header has, with data.
   const rows = lines.slice(1).filter(Boolean).map((l) => l.split(','));
@@ -80,7 +86,19 @@ export function csvSeries(text: string, points = SERIES_POINTS): Series {
     });
   }
 
-  const out: Series = { ...empty, durationS: span / 1000 };
+  // The clock at the first row. `utc` is whole seconds, `ms` the uptime to
+  // the millisecond: utc - ms on each row is the uptime's start, a little
+  // early by the truncated fraction - the largest of them is the closest.
+  const iUtc = head.indexOf('utc');
+  let zero = -Infinity;
+  if (iUtc >= 0) {
+    for (const f of rows) {
+      const ms = Number(f[iMs]);
+      const utc = f[iUtc] ? Date.parse(f[iUtc]) : NaN;
+      if (ms >= first && Number.isFinite(utc)) zero = Math.max(zero, utc - ms);
+    }
+  }
+  const out: Series = { ...empty, durationS: span / 1000, startUtc: Number.isFinite(zero) ? zero + first : null };
   for (let b = 0; b < n; b++) out.t.push(round(((b + 0.5) / n) * (span / 1000)));
   CHANNELS.forEach((ch, c) => {
     out[ch.key] = sum[c].map((s, b) =>

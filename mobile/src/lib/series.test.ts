@@ -42,6 +42,13 @@ test('series: an empty last column on a CRLF line is no reading, not 0', () => {
   assert.deepEqual(s.volts, [null, 12.5]);
 });
 
+test('series: the first row\'s time, from the whole-second utc and the uptime', () => {
+  // Uptime 1000 at 10:00:00.6 really: utc says :00 there, :01 at uptime 1500.
+  const s = csvSeries('utc,ms,volts\n2026-10-14T10:00:00Z,1000,14\n2026-10-14T10:00:01Z,1500,14\n', 2);
+  assert.equal(s.startUtc, Date.UTC(2026, 9, 14, 10, 0, 0) + 500);   // within the second's truncation
+  assert.equal(csvSeries('utc,ms,volts\n,1000,14\n,1500,14\n', 2).startUtc, null);   // clock not set
+});
+
 test('series: nothing to chart', () => {
   assert.equal(csvSeries('').t.length, 0);
   assert.equal(csvSeries(HEAD + ',1000,80,85,0,,0,14\n').t.length, 0);

@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { Note } from '@/components/ui';
+import { usePod } from '@/hooks/use-pod';
 import { t } from '@/i18n';
 import type { TrackPoint } from '@/lib/trips';
-import { type Colors, themed, useColors } from '@/theme';
+import { type Colors, S, themed, useColors } from '@/theme';
 
 // MapLibre GL JS in a WebView, on OpenFreeMap's vector tiles: no API key, no
 // native map SDK to build. Both come over the internet, so the map only
@@ -58,9 +59,16 @@ function html(track: TrackPoint[], bbox: [number, number, number, number], C: Co
 const say = (m) => window.ReactNativeWebView.postMessage(m);
 window.onerror = (msg) => say('error:' + msg);
 let loaded = false;
+// The charts' cursor: where the car was then - [lon, lat] or null, sent by
+// the app (TrackMap's mark). Kept until the map is up to take it.
+let mark = null;
+const dot = () => ({ type: 'FeatureCollection', features: mark
+  ? [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: mark } }] : [] });
+window.setMark = (m) => { mark = m; if (loaded) map.getSource('mark').setData(dot()); };
+let map;
 if (!window.maplibregl) say('error:the map library did not load');
 else {
-  const map = new maplibregl.Map({
+  map = new maplibregl.Map({
     // The credit is shown under the map by the app instead (see TrackMap):
     // MapLibre's own box opened as a white bar across the bottom of it.
     container: 'm', style: '${STYLES}${C.mapStyle}', attributionControl: false,
@@ -81,6 +89,11 @@ else {
     map.addLayer({ id: 'ends', type: 'circle', source: 'e',
       paint: { 'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff',
         'circle-color': ['match', ['get', 'end'], 0, '#22c55e', '#ef4444'] } });
+    // Above everything: the accent, ringed white so it stands off any colour of line.
+    map.addSource('mark', { type: 'geojson', data: dot() });
+    map.addLayer({ id: 'mark', type: 'circle', source: 'mark',
+      paint: { 'circle-radius': 8, 'circle-stroke-width': 3, 'circle-stroke-color': '#fff',
+        'circle-color': '${C.accent}' } });
     loaded = true;
     say('ok');
     // The first moment the tiles are drawn too: the spinner goes then.
@@ -110,23 +123,65 @@ function Spinner() {
   );
 }
 
-export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, number, number, number] }) {
+/** `mark`: [lon, lat] of a dot - where the car was at the charts' cursor - or null. */
+export function TrackMap({
+  track,
+  bbox,
+  mark = null,
+}: {
+  track: TrackPoint[];
+  bbox: [number, number, number, number];
+  mark?: [number, number] | null;
+}) {
   const [problem, setProblem] = useState<string | null>(null);
+  // The dot moves in the page, by script: the map is not loaded again.
+  const web = useRef<WebView>(null);
+  const sendMark = () => web.current?.injectJavaScript(`window.setMark && window.setMark(${JSON.stringify(mark)}); true;`);
+  useEffect(() => {
+    sendMark();
+  }, [mark]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drawn, setDrawn] = useState(false);
   const C = useColors();
   const styles = useStyles();
   const source = useMemo(() => ({ html: html(track, bbox, C), baseUrl: 'https://n-gauge.local/' }), [track, bbox, C]);
+
+  // Loading again: a new WebView (its key), the spinner back up.
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => {
+    setProblem(null);
+    setDrawn(false);
+    setAttempt((a) => a + 1);
+  };
+  // A map that failed while connected to the gauge - no internet then - is
+  // tried again once the phone leaves the gauge's WiFi: only on that change,
+  // never on every failure, which with no internet at all would loop. After
+  // a moment, as Android takes one to route the app back to mobile data.
+  const podState = usePod().state;
+  const was = useRef(podState);
+  useEffect(() => {
+    const left = was.current === 'connected' && podState !== 'connected';
+    was.current = podState;
+    if (!left || !problem) return;
+    const timer = setTimeout(retry, 1500);
+    return () => clearTimeout(timer);
+  }, [podState, problem]);
   return (
     <View style={{ gap: 8 }}>
       <View style={styles.box}>
         <WebView
+          key={attempt}
+          ref={web}
           source={source}
           originWhitelist={['*']}
           style={{ backgroundColor: C.bg }}
           onMessage={(e) => {
             const m = e.nativeEvent.data;
             if (m === 'drawn') setDrawn(true);
-            else if (m === 'ok') setProblem(null);
+            else if (m === 'ok') {
+              setProblem(null);
+              // A dot picked before the page was up - or before a reload.
+              sendMark();
+            }
             // The real reason, plus the usual one: it is easy to forget that
             // a connection to the pod takes the app's internet with it.
             else setProblem(t('The map did not load ({reason}). It needs internet - not while connected to the gauge.', { reason: m.replace(/^error:/, '') }));
@@ -137,7 +192,15 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
         />
         {!drawn && !problem ? <Spinner /> : null}
       </View>
-      {problem ? <Note tone="bad">{problem}</Note> : null}
+      {problem ? (
+        <View style={styles.problem}>
+          <Note tone="bad">{problem}</Note>
+          {/* Any other cause - a dead zone, a slow network - by hand. */}
+          <Pressable onPress={retry} hitSlop={8} style={styles.retry} accessibilityRole="button">
+            <Text style={styles.link}>{t('Try again')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.legend}>
         {[
           ['#3b82f6', '0'],
@@ -167,5 +230,9 @@ const useStyles = themed((C) =>
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     swatch: { width: 14, height: 4, borderRadius: 2 },
     credit: { color: C.dim, fontSize: 11 },
+    problem: { gap: S.xs },
+    // A link, 48 dp tall to hit, as the app's other links.
+    retry: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
+    link: { color: C.link, fontSize: 14 },
   }),
 );

@@ -3,7 +3,7 @@
 // few hundred bytes, so the trip list opens at once after the first time.
 // The thinned track is cached on its own, so the list never loads tracks.
 
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
 import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
@@ -18,6 +18,7 @@ import {
   pairTrips,
   parseCsv,
   parseGpx,
+  staleCopyCandidates,
   type TrackPoint,
   type TripFiles,
 } from './trips';
@@ -35,7 +36,10 @@ export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; t
 // 3: the bare <speed> of September's files read (2026-10-13).
 // 4: the drive's two ends and the places nearest them, for its name (2026-10-14).
 // 5: CSV lines split on CRLF - an empty last column (voltage) was 0 (2026-10-14).
-const VERSION = 5;
+// 6: ends in a Czech city named by the quarter they lie in (2026-10-15).
+// 7: track points keep their time, the series its start: the chart's cursor
+//    shown on the map (2026-10-15).
+const VERSION = 7;
 
 function read<T>(f: File, size: number): T | null {
   if (!f.exists) return null;
@@ -84,6 +88,48 @@ export function deleteDrive(t: TripFiles): void {
       const f = new File(dir, n + ext);
       if (f.exists) f.delete();
     }
+}
+
+/** Is `a` byte for byte the beginning of `b`? Read in chunks - `b` may be a big GPX. */
+function isPrefix(a: File, b: File): boolean {
+  const n = a.size ?? 0;
+  if (n === 0 || (b.size ?? 0) < n) return false;
+  const ha = a.open(FileMode.ReadOnly);
+  const hb = b.open(FileMode.ReadOnly);
+  try {
+    for (let done = 0; done < n; ) {
+      const len = Math.min(65536, n - done);
+      const x = ha.readBytes(len), y = hb.readBytes(len);
+      for (let i = 0; i < len; i++) if (x[i] !== y[i]) return false;
+      done += len;
+    }
+    return true;
+  } finally {
+    ha.close();
+    hb.close();
+  }
+}
+
+/**
+ * Removes logs held twice: a numbered copy synced before the gauge renamed
+ * the file to its dated name (trips.ts staleCopyCandidates) - only when its
+ * bytes are exactly the dated file's beginning, so a real log is never
+ * taken for one. The phone's copy only: the gauge no longer has that name.
+ * Run at start and after each sync. Returns what went.
+ */
+export function dropStaleCopies(): string[] {
+  const names = Object.keys(loadInbox()).filter((n) => inboxFile(n).exists);
+  const drop = staleCopyCandidates(names, (n) => inboxFile(n).size ?? 0)
+    .filter(([copy, dated]) => isPrefix(inboxFile(copy), inboxFile(dated)))
+    .map(([copy]) => copy);
+  if (!drop.length) return [];
+  deleteFromInbox(drop);
+  for (const n of drop)
+    for (const ext of CACHE_EXTS) {
+      const f = new File(dir, n + ext);
+      if (f.exists) f.delete();
+    }
+  return drop;
 }
 
 /** The drives the phone holds, newest first. */

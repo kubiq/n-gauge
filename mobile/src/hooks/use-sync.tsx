@@ -24,7 +24,7 @@ import {
   saveDeleted,
   saveLastSync,
 } from '@/lib/store';
-import { renameLegacyLogs } from '@/lib/trip-cache';
+import { dropStaleCopies, renameLegacyLogs } from '@/lib/trip-cache';
 import { type PodFile, planPull, type Pull } from '@/lib/sync-plan';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
@@ -69,6 +69,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       renameLegacyLogs();
     } catch (e) {
       console.warn('renaming old logs failed', e);
+    }
+    // A numbered copy of a log the gauge renamed since: it would pair with
+    // the drive's GPX in place of the whole log (trip-cache.ts).
+    try {
+      dropStaleCopies();
+    } catch (e) {
+      console.warn('dropping stale copies failed', e);
     }
     return dropNonLogs();
   });
@@ -175,6 +182,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       run(async () => {
         const r = await listAndPlan();
         const complete = !r.plan.length || (!stopped.current && (await pullPlan(r.files, r.plan)));
+        // A log renamed on the gauge since the last sync came again under
+        // its dated name: the old numbered copy goes now, not at the next start.
+        if (r.plan.length && dropStaleCopies().length) {
+          setInbox(loadInbox());
+          setLanded((n) => n + 1);
+        }
         if (complete) {
           const now = Date.now();
           saveLastSync(now);

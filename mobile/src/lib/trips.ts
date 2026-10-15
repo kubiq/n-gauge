@@ -8,7 +8,12 @@
 // ---- GPX -------------------------------------------------------------------
 
 /** [lon, lat, km/h] - lon first, as GeoJSON wants it. */
-export type TrackPoint = [number, number, number];
+/**
+ * [lon, lat, km/h, seconds from the drive's start] - lon first, as GeoJSON
+ * wants it. The seconds (null for a point without a clock) let a moment on
+ * the charts be found on the map (pointAt).
+ */
+export type TrackPoint = [number, number, number, number | null];
 
 export type GpxSummary = {
   /** Epoch ms of the first and last point with a time, or null. */
@@ -140,7 +145,10 @@ export function parseGpx(text: string): GpxSummary {
       if (!Number.isNaN(p.kmh) && p.kmh > s.maxKmh) s.maxKmh = p.kmh;
       // Thinned for drawing, and each run's last point, so the line reaches it.
       if (!kept || k === j || distM(kept.lat, kept.lon, p.lat, p.lon) >= THIN_M) {
-        if (kept !== p) s.track.push([p.lon, p.lat, Number.isNaN(p.kmh) ? 0 : Math.round(p.kmh)]);
+        if (kept !== p) {
+          const sec = s.start !== null && !Number.isNaN(p.t) ? Math.round((p.t - s.start) / 100) / 10 : null;
+          s.track.push([p.lon, p.lat, Number.isNaN(p.kmh) ? 0 : Math.round(p.kmh), sec]);
+        }
         kept = p;
       }
       prev = p;
@@ -158,6 +166,37 @@ export function parseGpx(text: string): GpxSummary {
     s.to = [b[0], b[1]];
   }
   return s;
+}
+
+/** Further than this in time from every track point: no dot (a tunnel, a dropped stretch). */
+const POINT_MAX_S = 10;
+/** Two track points this close, far apart in time: the car stood between them. */
+const STILL_M = 30;
+
+/**
+ * The track point nearest `sec` (seconds from the drive's start) - where the
+ * car was at a moment picked on the charts - or null if no point is within
+ * POINT_MAX_S. Binary search: the track is in time order.
+ */
+export function pointAt(track: TrackPoint[], sec: number): TrackPoint | null {
+  const timed = track.filter((p) => p[3] !== null);
+  let lo = 0, hi = timed.length - 1;
+  if (hi < 0) return null;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (timed[mid][3]! < sec) lo = mid + 1;
+    else hi = mid;
+  }
+  // lo: the first at or after `sec`; the one before may be nearer.
+  const before = lo > 0 ? timed[lo - 1] : null, after = timed[lo];
+  // Between two points close together the car stood still - the track keeps
+  // a point only every THIN_M moved - so it was at the earlier one, however
+  // long ago that is. Far apart, it is a gap (a tunnel): only near a point.
+  if (before && after[3]! > sec && distM(before[1], before[0], after[1], after[0]) < STILL_M) return before;
+  // After the track's end - the car log runs on while parked - it is there.
+  if (sec > after[3]!) return after;
+  const best = before && Math.abs(before[3]! - sec) <= Math.abs(after[3]! - sec) ? before : after;
+  return Math.abs(best[3]! - sec) <= POINT_MAX_S ? best : null;
 }
 
 // ---- CSV -------------------------------------------------------------------
@@ -263,6 +302,30 @@ export function isStub(g?: { distanceM: number; start: number | null; end: numbe
  * each (a card share or a key change starts new files): they pair in order.
  * Undated (numbered) files come last.
  */
+// A log opened before the clock was set is numbered (drive_0001_3082dd.csv)
+// and renamed to its dated name once it is (logger.cpp) - the same file. A
+// phone that synced it before the rename holds both: the numbered copy is
+// the dated file's beginning. Found 2026-10-15: the GPX paired with that
+// 35 KB copy, the whole 1.7 MB drive log stood alone as a second drive.
+const LOG_PARTS = /^(drive|trip|track)_(.+)_([0-9a-f]{6})\.((?:csv|gpx|vbo)(?:\.nge)?)$/;
+
+/**
+ * Numbered logs whose dated namesake - same kind, session and extension -
+ * is at least as big: [numbered, dated] pairs, each to be checked by its
+ * bytes (trip-cache.ts dropStaleCopies) before the numbered one goes.
+ */
+export function staleCopyCandidates(names: string[], size: (n: string) => number): [string, string][] {
+  const parts = names.map((n) => [n, LOG_PARTS.exec(n)] as const).filter((x): x is [string, RegExpExecArray] => !!x[1]);
+  const dated = parts.filter(([, m]) => m[2].includes('-'));
+  const out: [string, string][] = [];
+  for (const [n, m] of parts) {
+    if (!/^\d+$/.test(m[2])) continue;
+    const d = dated.find(([, dm]) => dm[1] === m[1] && dm[3] === m[3] && dm[4] === m[4]);
+    if (d && size(d[0]) >= size(n)) out.push([n, d[0]]);
+  }
+  return out;
+}
+
 export function pairTrips(names: string[]): TripFiles[] {
   const sorted = [...names].sort();
   const csvs = new Map<string, string[]>();

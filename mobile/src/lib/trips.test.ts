@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, isStub, pairTrips, parseCsv, parseGpx, sessionOf, stampOf } from './trips.ts';
+import { distM, isStub, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates } from './trips.ts';
 
 // One line exactly as logger.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -121,6 +121,39 @@ test('gpx: thins 20 Hz points but keeps the end', () => {
   assert.equal(s.track[s.track.length - 1][1], 50.001);
 });
 
+test('gpx: track points keep their seconds from the start', () => {
+  const s = parseGpx(
+    gpx([pt(50.0, 14.0, '2026-10-11T10:00:00Z', 10), pt(50.001, 14.0, '2026-10-11T10:00:10Z', 11), pt(50.002, 14.0, '2026-10-11T10:00:20Z', 10)]),
+  );
+  assert.deepEqual(s.track.map((p) => p[3]), [0, 10, 20]);
+});
+
+test('pointAt: the point nearest a moment; none far from every point', () => {
+  const tr: [number, number, number, number | null][] = [
+    [14.0, 50.0, 10, 0],
+    [14.0, 50.001, 20, null],   // no clock: skipped
+    [14.0, 50.002, 30, 10],
+    [14.0, 50.003, 40, 60],     // after a 50 s gap
+  ];
+  assert.equal(pointAt(tr, 4)?.[1], 50.0);
+  assert.equal(pointAt(tr, 6)?.[1], 50.002);
+  assert.equal(pointAt(tr, 35), null);       // 25 s from both sides, 111 m apart: a gap
+  assert.equal(pointAt(tr, 65)?.[1], 50.003);
+  assert.equal(pointAt([], 5), null);
+});
+
+// 2026-10-15: standing at lights, the 10 m-thinned track has no points for
+// a minute - the car was at the last one, not nowhere.
+test('pointAt: standing still between two close points is the earlier one', () => {
+  const tr: [number, number, number, number | null][] = [
+    [14.0, 50.0, 30, 0],
+    [14.0, 50.00009, 0, 5],     // stopped here, 10 m on
+    [14.0, 50.00018, 5, 70],    // moving again, 10 m on, 65 s later
+  ];
+  assert.equal(pointAt(tr, 40)?.[3], 5);
+  assert.equal(pointAt(tr, 500)?.[3], 70);   // after the end: parked at the last point
+});
+
 test('gpx: points without a clock still count distance', () => {
   const s = parseGpx(gpx([pt(50.0, 14.0, '', 10), pt(50.001, 14.0, '', 10)]));
   assert.equal(s.start, null);
@@ -194,6 +227,25 @@ test('pairing: by session, not by time', () => {
       ['trip_2026-10-12_21-19_bbbbbb.gpx.nge', 'drive_2026-10-12_21-21_bbbbbb.csv.nge'],
       ['trip_2026-10-12_21-18_aaaaaa.gpx.nge', null],
     ],
+  );
+});
+
+// 2026-10-15: a drive log synced before the gauge renamed it - the phone
+// held the numbered copy too, and the GPX paired with it.
+test('stale copies: a numbered log with a bigger dated namesake of its session', () => {
+  const sizes: Record<string, number> = {
+    'drive_0001_3082dd.csv.nge': 35_672,
+    'drive_2026-10-14_17-43_3082dd.csv.nge': 1_701_726,
+    'trip_2026-10-14_17-46_3082dd.gpx.nge': 11_592_047,
+    'drive_0002_aaaaaa.csv': 5_000,                       // no dated namesake: a drive with no clock
+    'drive_0003_bbbbbb.csv': 9_000,
+    'drive_2026-10-14_18-00_bbbbbb.csv': 4_000,           // smaller: not its continuation
+    'drive_0004_cccccc.csv': 100,
+    'trip_2026-10-14_19-00_cccccc.gpx': 9_000,             // another kind: not a copy
+  };
+  assert.deepEqual(
+    staleCopyCandidates(Object.keys(sizes), (n) => sizes[n]),
+    [['drive_0001_3082dd.csv.nge', 'drive_2026-10-14_17-43_3082dd.csv.nge']],
   );
 });
 

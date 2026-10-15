@@ -15,7 +15,7 @@ import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
-import { type CsvSummary, type TrackPoint } from '@/lib/trips';
+import { type CsvSummary, pointAt, type TrackPoint } from '@/lib/trips';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -26,6 +26,13 @@ export default function TripScreen() {
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
   const [series, setSeries] = useState<Series | null>(null);
+  // Where the car was at the charts' cursor: a dot on the map. The chart
+  // gives the moment in UTC, the track its seconds from the GPX's start.
+  const [mark, setMark] = useState<[number, number] | null>(null);
+  const onCursor = (utcMs: number | null) => {
+    const p = utcMs !== null && g?.start && track ? pointAt(track, (utcMs - g.start) / 1000) : null;
+    setMark(p ? [p[0], p[1]] : null);
+  };
   const [busy, setBusy] = useState<string | null>(null);
   const connected = usePod().state === 'connected';
   const sync = useSync();
@@ -164,11 +171,11 @@ export default function TripScreen() {
       {!ready ? trip.gpx ? <MapLoading /> : <Note>{t('Reading the logs…')}</Note> : null}
       {busy ? <Note>{busy === 'save' ? t('Saving…') : t('Preparing the file…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
-      {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} /> : null}
+      {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} mark={mark} /> : null}
 
       {/* The drive's shape first - where (the map), then how (the charts) -
           and the figures after. */}
-      {series ? <DriveChart series={series} /> : null}
+      {series ? <DriveChart series={series} onCursor={onCursor} /> : null}
 
       {g ? (
         <Card title={t('Drive')}>

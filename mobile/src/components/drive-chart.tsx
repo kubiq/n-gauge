@@ -19,6 +19,10 @@ import { type Colors, S, themed, useColors } from '@/theme';
 // Text never wears them.
 
 const PLOT_H = 72;
+// The column right of the plot for its scale ("1.23", "-0.74", "14.9"),
+// and half a scale label's line height, to centre one on its gridline.
+const GUTTER = 40;
+const LABEL_MID = 7;
 const PAD_Y = 6;   // the line's 2 px and the cursor's dots stay inside
 
 type Line_ = { name: string; data: (number | null)[]; color: string };
@@ -92,7 +96,11 @@ function pathOf(data: (number | null)[], x: (i: number) => number, y: (v: number
   return d;
 }
 
-export function DriveChart({ series }: { series: Series }) {
+/**
+ * `onCursor`: the cursor's moment as epoch ms - for the map's dot - or null
+ * with no clock in the log (Series.startUtc).
+ */
+export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (utcMs: number | null) => void }) {
   const C = useColors();
   const styles = useStyles();
   const panels = useMemo(() => PANELS(series, C), [series, C]);
@@ -103,8 +111,14 @@ export function DriveChart({ series }: { series: Series }) {
   // One responder over all the charts: a touch puts the cursor there and a
   // drag moves it. The screen's scroll may still take the touch over - a
   // drag that is mostly vertical scrolls, as anywhere else.
+  // The plot leaves a column on the right for its scale, so a line near the
+  // top or bottom never runs through the numbers.
+  const plotW = Math.max(0, width - GUTTER);
   const pick = (x: number) => {
-    if (width > 0) setAt(Math.max(0, Math.min(n - 1, Math.round((x / width) * (n - 1)))));
+    if (plotW <= 0) return;
+    const i = Math.max(0, Math.min(n - 1, Math.round((Math.min(x, plotW) / plotW) * (n - 1))));
+    setAt(i);
+    onCursor?.(series.startUtc !== null ? series.startUtc + series.t[i] * 1000 : null);
   };
   const responder = {
     onStartShouldSetResponder: () => true,
@@ -114,7 +128,7 @@ export function DriveChart({ series }: { series: Series }) {
   };
 
   if (n < 2 || panels.length === 0) return null;
-  const x = (i: number) => (i / (n - 1)) * width;
+  const x = (i: number) => (i / (n - 1)) * plotW;
 
   return (
     <Card title={t('Over the drive')}>
@@ -160,12 +174,12 @@ export function DriveChart({ series }: { series: Series }) {
                 </View>
               ) : null}
               <View>
-                {width > 0 ? (
-                  <Svg width={width} height={PLOT_H}>
+                {plotW > 0 ? (
+                  <Svg width={plotW} height={PLOT_H}>
                     {/* Recessive frame: the top and bottom of the range, and zero. */}
-                    <Line x1={0} x2={width} y1={y(hi)} y2={y(hi)} stroke={C.border} strokeWidth={1} />
-                    <Line x1={0} x2={width} y1={y(lo)} y2={y(lo)} stroke={C.border} strokeWidth={1} />
-                    {p.zero && lo < 0 ? <Line x1={0} x2={width} y1={y(0)} y2={y(0)} stroke={C.dim} strokeWidth={1} /> : null}
+                    <Line x1={0} x2={plotW} y1={y(hi)} y2={y(hi)} stroke={C.border} strokeWidth={1} />
+                    <Line x1={0} x2={plotW} y1={y(lo)} y2={y(lo)} stroke={C.border} strokeWidth={1} />
+                    {p.zero && lo < 0 ? <Line x1={0} x2={plotW} y1={y(0)} y2={y(0)} stroke={C.dim} strokeWidth={1} /> : null}
                     {p.lines.map((l) => (
                       <Path key={l.name} d={pathOf(l.data, x, y)} stroke={l.color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
                     ))}
@@ -181,14 +195,16 @@ export function DriveChart({ series }: { series: Series }) {
                     ) : null}
                   </Svg>
                 ) : null}
-                {/* The range's ends, so the shape has a scale. */}
-                <Text style={[styles.axis, styles.top]}>{hi.toFixed(p.digits)}</Text>
-                <Text style={[styles.axis, styles.bottom]}>{lo.toFixed(p.digits)}</Text>
+                {/* The range's ends, so the shape has a scale: in the
+                    column right of the plot, each level with its line. */}
+                <Text style={[styles.axis, styles.scale, { top: y(hi) - LABEL_MID }]}>{hi.toFixed(p.digits)}</Text>
+                <Text style={[styles.axis, styles.scale, { top: y(lo) - LABEL_MID }]}>{lo.toFixed(p.digits)}</Text>
               </View>
             </View>
           );
         })}
-        <View style={styles.head}>
+        {/* The time axis spans the plot, not the scale's column. */}
+        <View style={[styles.head, { paddingRight: GUTTER }]}>
           <Text style={styles.axis}>0 min</Text>
           <Text style={styles.axis}>{duration(series.durationS)}</Text>
         </View>
@@ -207,7 +223,7 @@ const useStyles = themed((C) =>
     key: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
     swatch: { width: 14, height: 3, borderRadius: 2 },
     axis: { color: C.dim, fontSize: 11 },
-    top: { position: 'absolute', right: 0, top: 0 },
-    bottom: { position: 'absolute', right: 0, bottom: 0 },
+    // In the GUTTER column; `top` set per label, from its line.
+    scale: { position: 'absolute', right: 0, width: GUTTER - S.xs, textAlign: 'right', lineHeight: 2 * LABEL_MID },
   }),
 );

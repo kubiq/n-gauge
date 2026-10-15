@@ -85,6 +85,7 @@ export const trips: Record<string, string> = {
   // components/track-map.tsx
   'The map did not load ({reason}). It needs internet - not while connected to the gauge.':
     'Mapa se nenačetla ({reason}). Potřebuje internet - ne při připojení k budíku.',
+  'Try again': 'Zkusit znovu',
 
   // components/places-card.tsx
   'Forget {name}?': 'Zapomenout místo {name}?',
