@@ -430,6 +430,10 @@ void loop() {
       ui_boot_anim_end();             // idempotent
     } else if (bench) {
       static uint32_t benchAt = 0;
+      // The text once a second; the share button every pass, so it says
+      // "Stop sharing" the moment the card is lent (ui_boot_show_bench
+      // compares before it redraws anything).
+      static char b[400] = "";
       if (benchAt == 0 || now - benchAt >= 1000) {
         benchAt = now ? now : 1;
         uint32_t sdUsed, sdTotal;
@@ -445,7 +449,6 @@ void loop() {
         if (!gps.linkUp)       snprintf(gnss, sizeof(gnss), "GPS: no module");
         else if (gps.haveFix)  snprintf(gnss, sizeof(gnss), "GPS: fix, %u sats", gps.sats);
         else                   snprintf(gnss, sizeof(gnss), "GPS: no fix, %u sats", gps.sats);
-        char b[400];
         // The separator is a bullet (U+2022): Montserrat 14 as built has no
         // middle dot, which drew as nothing.
         snprintf(b, sizeof(b),
@@ -459,8 +462,8 @@ void loop() {
                  !obd.linkUp ? "driver down" : obd.lastFrameMs ? "talking" : "no car",
                  (unsigned)(ESP.getFreeHeap() / 1024), ESP.getFreePsram() / 1048576.0f,
                  temperatureRead(), (unsigned long)(now / 60000), web_reset_text());
-        ui_boot_show_bench(b);
       }
+      ui_boot_show_bench(b, usbdisk_state() == USBDISK_SHARED);
     }
   }
 #endif

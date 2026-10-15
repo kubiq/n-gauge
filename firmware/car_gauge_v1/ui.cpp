@@ -971,7 +971,14 @@ bool ui_boot_take_touch() {
   return t;
 }
 
-void ui_boot_show_bench(const char *text) {
+// The bench page's own "Share SD card" button: the same tap as the WiFi
+// screen's (shareTapped -> ui_take_share_tap()), so the loop shares or takes
+// the card back in one place. A press on it does not end the page: LVGL
+// gives it to the button, not to bootScr's boot_press_cb.
+static lv_obj_t *benchShareBtn = NULL, *benchShareLbl = NULL;
+static int benchShareState = -1;    // 0 not shared, 1 shared; -1 not drawn yet
+
+void ui_boot_show_bench(const char *text, bool shared) {
   if (!bootScr) return;
   if (!bootBench) {
     // The badge goes up and smaller, the arcs stay as the frame.
@@ -986,9 +993,36 @@ void ui_boot_show_bench(const char *text) {
     lv_obj_set_width(bootBench, 300);                  // the chord, with margin
     lv_obj_align(bootBench, LV_ALIGN_CENTER, 0, 30);
     lv_obj_clear_flag(bootBench, LV_OBJ_FLAG_CLICKABLE);
+
+    // Below the text, styled as the WiFi screen's. 48 px tall: a touch
+    // just off a 34 px button landed on the page and went to the gauges
+    // (2026-10-15). 220 px fits the round panel's chord at its bottom edge
+    // (~272 px at 189 below the centre).
+    benchShareBtn = lv_button_create(bootScr);
+    lv_obj_set_size(benchShareBtn, 220, 48);
+    lv_obj_align(benchShareBtn, LV_ALIGN_CENTER, 0, 165);
+    lv_obj_set_style_radius(benchShareBtn, 24, 0);
+    lv_obj_set_style_bg_color(benchShareBtn, COL_BG, 0);
+    lv_obj_set_style_bg_color(benchShareBtn, COL_LINE, LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(benchShareBtn, 2, 0);
+    lv_obj_set_style_shadow_width(benchShareBtn, 0, 0);
+    lv_obj_clear_flag(benchShareBtn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(benchShareBtn, share_btn_cb, LV_EVENT_CLICKED, NULL);
+    benchShareLbl = lv_label_create(benchShareBtn);
+    lv_obj_set_style_text_font(benchShareLbl, &lv_font_montserrat_14, 0);
+    lv_obj_clear_flag(benchShareLbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_center(benchShareLbl);
   }
   // Compare first: setting the same text still invalidates the label.
   if (strcmp(lv_label_get_text(bootBench), text) != 0) lv_label_set_text(bootBench, text);
+  // The button says what a tap does now - and only changes when that does.
+  if (benchShareState != (int)shared) {
+    benchShareState = shared;
+    const lv_color_t c = shared ? COL_OIL : COL_BLUE;
+    lv_label_set_text(benchShareLbl, shared ? "Stop sharing SD card" : "Share SD card with PC");
+    lv_obj_set_style_text_color(benchShareLbl, c, 0);
+    lv_obj_set_style_border_color(benchShareBtn, c, 0);
+  }
 }
 
 void ui_boot_anim_end() {
@@ -996,6 +1030,8 @@ void ui_boot_anim_end() {
   lv_obj_t *old = bootScr;
   bootScr = NULL;                   // clear first: load triggers a redraw
   bootBench = NULL;
+  benchShareBtn = benchShareLbl = NULL;   // deleted with the screen
+  benchShareState = -1;
   bootTouched = false;
   ui_set_view(ui_current_view());   // back to the remembered screen
   lv_obj_del(old);                  // reclaims the arcs, labels and anims

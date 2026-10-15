@@ -129,6 +129,8 @@ bool ui_boot_anim_done();
 // A press on the held splash, once: the driver wants the gauges now.
 bool ui_boot_take_touch();
 // On the bench (a PC on USB) the held splash becomes a status page: the
-// badge moves up and `text` goes under it. Call again to refresh.
-void ui_boot_show_bench(const char *text);
+// badge moves up, `text` goes under it, and a "Share SD card" button below
+// (its tap is ui_take_share_tap()'s, as the WiFi screen's; `shared` says
+// whether it reads "Stop sharing" instead). Call again to refresh.
+void ui_boot_show_bench(const char *text, bool shared);
 void ui_boot_anim_end();
