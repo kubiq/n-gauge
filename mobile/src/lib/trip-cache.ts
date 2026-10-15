@@ -34,7 +34,8 @@ export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; t
 // 2: bad fixes dropped from the track, ends and top speed (2026-10-13).
 // 3: the bare <speed> of September's files read (2026-10-13).
 // 4: the drive's two ends and the places nearest them, for its name (2026-10-14).
-const VERSION = 4;
+// 5: CSV lines split on CRLF - an empty last column (voltage) was 0 (2026-10-14).
+const VERSION = 5;
 
 function read<T>(f: File, size: number): T | null {
   if (!f.exists) return null;

@@ -178,7 +178,9 @@ export type CsvSummary = {
 // The header has grown over time (logger.cpp), so columns are found by name
 // and a column an older file lacks just yields null.
 export function parseCsv(text: string): CsvSummary {
-  const lines = text.split('\n');
+  // CRLF, as the gauge writes them - see series.ts: "\r" left in the last
+  // column made an empty value 0.
+  const lines = text.split(/\r?\n/);
   const head = (lines[0] ?? '').trim().split(',');
   const col = (n: string) => head.indexOf(n);
   const iMs = col('ms'), iBoost = col('boostBar'), iOil = col('oilC'), iCool = col('coolantC');

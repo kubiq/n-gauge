@@ -34,7 +34,9 @@ const CHANNELS: { key: Exclude<keyof Series, 'durationS' | 't'>; cols: string[];
 const round = (v: number) => Math.round(v * 100) / 100;
 
 export function csvSeries(text: string, points = SERIES_POINTS): Series {
-  const lines = text.split('\n');
+  // CRLF, as the gauge writes them: split on \n alone left "\r" in the last
+  // column, and Number("\r") is 0 - an empty voltage read as 0 V.
+  const lines = text.split(/\r?\n/);
   const head = (lines[0] ?? '').trim().split(',');
   const iMs = head.indexOf('ms');
   const empty: Series = { durationS: 0, t: [], kmh: [], boostBar: [], oilC: [], coolantC: [], volts: [] };

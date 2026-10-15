@@ -33,6 +33,15 @@ test('series: GPS speed for logs without obdKmh, and a restart is left out', () 
   assert.deepEqual(s.volts, [null, null, null]);
 });
 
+// 2026-10-14: the gauge writes CRLF, voltage is the last column, and the
+// first row of a drive has none yet - its "\r" read as 0 V, and the chart's
+// first point (a bucket's mean) said 5.3 V.
+test('series: an empty last column on a CRLF line is no reading, not 0', () => {
+  const s = csvSeries('utc,ms,volts\r\n,0,\r\n,500,10.60\r\n,1000,14.40\r\n', 2);
+  // Bucket 0 holds only the empty row: no reading, not 0 (the bug gave 0).
+  assert.deepEqual(s.volts, [null, 12.5]);
+});
+
 test('series: nothing to chart', () => {
   assert.equal(csvSeries('').t.length, 0);
   assert.equal(csvSeries(HEAD + ',1000,80,85,0,,0,14\n').t.length, 0);
