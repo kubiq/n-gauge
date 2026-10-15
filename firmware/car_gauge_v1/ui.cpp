@@ -640,29 +640,29 @@ void ui_init() {
   lv_qrcode_set_light_color(wifiQr, lv_color_white());
   lv_obj_set_style_border_color(wifiQr, lv_color_white(), 0);
   lv_obj_set_style_border_width(wifiQr, 6, 0);
-  lv_obj_align(wifiQr, LV_ALIGN_CENTER, 0, -78);   // -149..-7 with the border
+  lv_obj_align(wifiQr, LV_ALIGN_CENTER, 0, -58);   // -129..13 with the border
   lv_obj_clear_flag(wifiQr, LV_OBJ_FLAG_CLICKABLE);   // taps still cycle views
 
   // Network name first, then the passphrase: that is the order they are asked
   // for, and the order they read in. Both in text as well as in the code,
   // because scanning fails often enough - dirty lens, sun on an AMOLED - that
   // the fallback has to be readable.
-  wifiSsid = make_tyre_val(scr[VIEW_WIFI], 0, 18);
+  wifiSsid = make_tyre_val(scr[VIEW_WIFI], 0, 38);
   lv_obj_set_style_text_color(wifiSsid, COL_OIL, 0);
-  wifiPass = make_tyre_val(scr[VIEW_WIFI], 0, 50);
+  wifiPass = make_tyre_val(scr[VIEW_WIFI], 0, 70);
   lv_obj_set_style_text_color(wifiPass, COL_INK, 0);
-  wifiIp   = make_name(scr[VIEW_WIFI], "", 80);
+  wifiIp   = make_name(scr[VIEW_WIFI], "", 100);
   lv_obj_set_style_text_color(wifiIp, COL_BLUE, 0);
   // Connected clients, which doubles as confirmation that a phone actually
   // associated - useful when a join silently fails.
-  wifiClients = make_name(scr[VIEW_WIFI], "", 102);
+  wifiClients = make_name(scr[VIEW_WIFI], "", 122);
   lv_obj_set_style_text_color(wifiClients, COL_LINE, 0);
 
   // Lend the SD card to a PC as a USB drive (usbdisk.cpp). Only shown while a
   // PC is connected, i.e. on the bench, and then in the title's place at the
   // top: at the bottom (+140) it sat against the fault notice, which shows
   // "no CAN bus" on the bench and took the taps. As big as fits for a
-  // finger: 190x44 at -171 spans -193..-149, down to the QR's border, with
+  // finger: 190x44 at -171 spans -193..-149, 20 px above the QR, with
   // its rounded ends (r <= 208) inside the countdown arc (r 214..220); the
   // touch area reaches 8 px further, over parts that take no taps.
   shareBtn = lv_button_create(scr[VIEW_WIFI]);
