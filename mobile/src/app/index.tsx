@@ -24,7 +24,7 @@ type Sums = Record<string, GpxStats | CsvSummary>;
 // The summaries live in state, read from the cache once per visit and added
 // to as each is worked out - never read from disk during render: the React
 // Compiler skips re-rendering a row whose props did not change, so a row that
-// read the cache itself stayed on "Reading…" after its summary had landed.
+// read the cache itself stayed unread after its summary had landed.
 export default function TripsScreen() {
   const [trips, setTrips] = useState<TripFiles[]>([]);
   const [sums, setSums] = useState<Sums>({});
@@ -126,20 +126,31 @@ export default function TripsScreen() {
 
   // Rows with their summaries; restart fragments and blips hidden (isStub),
   // with a line saying how many - nothing just disappears.
+  //
+  // A drive is listed once it has been read (or failed to be), not before:
+  // shown unread, a blip vanished when its summary landed and the rows below
+  // jumped up, and a row's week and title moved from the file name's stamp
+  // to the track's - a list that looked shuffled while it filled. The files
+  // are read top to bottom, so it now grows in order, with one "Reading new
+  // drives…" line above it.
   const rows = trips.map((t) => {
     const g = t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined;
+    const c = t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined;
+    const problem = (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined;
     return {
       t,
       g,
-      c: t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined,
-      problem: (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined,
+      c,
+      problem,
+      read: !!problem || ((!t.gpx || !!g) && (!t.csv || !!c)),
       name: tripName(t, g, names),
     };
   });
   const [showShort, setShowShort] = useState(false);
-  const longOnes = rows.filter((r) => r.problem || !isStub(r.g, r.c));
-  const hidden = rows.length - longOnes.length;
-  const shown = showShort ? rows : longOnes;
+  const readOnes = rows.filter((r) => r.read);
+  const longOnes = readOnes.filter((r) => r.problem || !isStub(r.g, r.c));
+  const hidden = readOnes.length - longOnes.length;
+  const shown = showShort ? readOnes : longOnes;
   // By week, each with its totals - of the drives shown, so the hidden
   // blips do not count. The same start and time the rows show.
   const weeks = groupByWeek(shown, (r) => ({
@@ -201,7 +212,6 @@ function TripRow({
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
-  const pending = !problem && ((trip.gpx && !g) || (trip.csv && !c));
   const encrypted = [trip.gpx, trip.csv].some((n) => n && isEncryptedName(n));
   const ui = useUi();
   const styles = useStyles();
@@ -231,7 +241,6 @@ function TripRow({
         {c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
       </View>
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
-      {pending ? <Note>{t('Reading…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );
