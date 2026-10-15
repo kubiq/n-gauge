@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""A made-up track session as a GPX, for the lap timer on a desk.
+"""A made-up track session as a GPX and a drive log, for the gauge on a desk.
 
 The recorded drives are city loops - traffic lights, a different route each
 time - which is not what a track day looks like. This writes one that is: a
-closed, smooth ~2.6 km circuit (made up, not a real one), driven at 25 Hz
+closed, smooth ~2.7 km circuit (made up, not a real one), driven at 25 Hz
 the way the GNSS module logs, with speeds from the corners (grip, braking,
 acceleration), lap after lap:
 
   an out-lap from standstill, timed laps a few percent apart, one with a
   mistake (a corner taken far too slowly), and a slow in-lap to a stop.
 
-  scripts/make_track_gpx.py [out.gpx]     default data/trip_2026-06-06_10-00_track0.gpx
+And the car's side of it, as the gauge logs it (2 Hz, its CSV columns):
+gear and rpm from the speed, pedal, load and boost from accelerating or
+not, oil and coolant warming through the session, tyres heating up, and
+the g-forces of the corners and the braking.
 
-Then: sim/run.sh data/trip_2026-06-06_10-00_track0.gpx (START on the track
-screen), or tests/replay/replay_laps.sh with it.
+  scripts/make_track_gpx.py [out.gpx]     default data/trip_2026-06-06_10-00_track0.gpx
+                                          and its data/drive_..._track0.csv
+
+Then: sim/run.sh data/drive_2026-06-06_10-00_track0.csv
+data/trip_2026-06-06_10-00_track0.gpx (START on the track screen), or
+tests/replay/replay_laps.sh with the GPX.
 """
 import math
 import random
@@ -48,12 +55,18 @@ for d in seg:
 LAP_M = cum[-1]
 
 
-def radius(i):
-    """Radius of curvature at point i, from it and its neighbours 5 apart."""
+def curvature(i):
+    """Signed curvature (1/m, + turning left) at point i, from it and its
+    neighbours 5 apart."""
     a, b, c = pts[(i - 5) % N], pts[i], pts[(i + 5) % N]
     ab, bc, ca = math.dist(a, b), math.dist(b, c), math.dist(c, a)
-    cross = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
-    return float("inf") if cross < 1e-9 else ab * bc * ca / (2 * cross)
+    cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    return 2 * cross / (ab * bc * ca) if ab * bc * ca > 0 else 0.0
+
+
+def radius(i):
+    k = abs(curvature(i))
+    return float("inf") if k < 1e-9 else 1.0 / k
 
 
 # The fastest speed at each point: the corner's limit, then braking into
@@ -68,6 +81,19 @@ for _ in range(2):
     for i in range(2 * N, 0, -1):
         j, k = i % N, (i - 1) % N
         v[k] = min(v[k], math.sqrt(v[j] ** 2 + 2 * BRAKE * seg[k]))
+
+
+def kappa_at(s):
+    """Signed curvature at s metres along the lap."""
+    s %= LAP_M
+    lo, hi = 0, N
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if cum[mid] <= s:
+            lo = mid
+        else:
+            hi = mid
+    return curvature(lo)
 
 
 def at(s):
@@ -89,9 +115,16 @@ def at(s):
 PACE = [0.70, 0.93, 0.96, 0.98, 0.97, 0.99, 0.55]   # out-lap ... in-lap
 MISTAKE_LAP, MISTAKE_AT, MISTAKE_LEN = 4, 0.55, 180.0   # lap 4 (0-based), 55 % in, 180 m at 45 %
 
-samples = []                 # (t seconds, x, y, speed m/s)
+samples = []                 # (t s, x, y, speed m/s, accel m/s^2, curvature 1/m)
 crossings = []               # when the car crossed the line (s = whole laps)
 t, s, speed = 0.0, 0.0, 0.0
+# Standing in the pit lane first, engine running: the gauge zeroes its
+# g-meter on a car that is still - a session starting at full throttle would
+# zero it on the launch.
+x0, y0, _ = at(0.0)
+while t < 20.0:
+    samples.append((t, x0, y0, 0.0, 0.0, 0.0))
+    t += 1.0 / HZ
 end = LAP_M * len(PACE) - 300.0   # the in-lap stops short of the line, in the pits
 while s < end:
     lap = int(s // LAP_M)
@@ -104,11 +137,12 @@ while s < end:
         target = min(target, max(0.0, (end - s) / 150.0) * 20.0)
     # The car follows the target within its limits.
     dt = 1.0 / HZ
+    was = speed
     if target > speed:
         speed = min(target, speed + ACCEL * dt)
     else:
         speed = max(target, speed - BRAKE * dt)
-    samples.append((t, x, y, speed))
+    samples.append((t, x, y, speed, (speed - was) / dt, kappa_at(s)))
     step = max(speed, 0.5) * dt               # never quite standing on the grid
     if int((s + step) // LAP_M) > lap:        # over the line (s = 0) this step
         crossings.append(t + (LAP_M * (lap + 1) - s) / step * dt)
@@ -125,11 +159,13 @@ lines = [
     ' xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v2">',
     "<trk><name>Made-up track session</name><trkseg>",
 ]
-for (ts, x, y, sp) in samples:
+fixes = []                   # (lat, lon) as written, for the drive log
+for (ts, x, y, sp, _, _) in samples:
     nx = 0.98 * nx + random.gauss(0, NOISE_M * 0.2)
     ny = 0.98 * ny + random.gauss(0, NOISE_M * 0.2)
     lat = LAT0 + (y + ny) / M_PER_DEG_LAT
     lon = LON0 + (x + nx) / M_PER_DEG_LON
+    fixes.append((lat, lon))
     when = START + timedelta(seconds=ts)
     stamp = when.strftime("%Y-%m-%dT%H:%M:%S.") + f"{when.microsecond // 10000:02d}Z"
     lines.append(
@@ -141,6 +177,61 @@ lines.append("</trkseg></trk></gpx>")
 
 with open(OUT, "w") as f:
     f.write("\n".join(lines) + "\n")
+
+# ---- the drive log: the car, as the gauge logs it (its CSV, 2 Hz) ----
+# Columns by name, as the gauge writes them; the sim and the app read them by
+# name, so only the ones that mean something here are filled.
+GEAR_TOP_KMH = [0, 50, 85, 120, 160, 200, 250]   # each gear's speed at 6500 rpm
+COLS = ["utc", "ms", "oilC", "coolantC", "boostBar", "gpsFix", "sats", "speedKmh", "lat", "lon",
+        "gx", "gy", "gz", "t0bar", "t1bar", "t2bar", "t3bar", "t0c", "t1c", "t2c", "t3c",
+        "obdKmh", "absLoadPct", "baroKpa", "pedalRaw", "rpm", "timingDeg", "iatC", "gear", "volts"]
+UPTIME_MS = 20000                                  # the gauge booted 20 s before
+total = samples[-1][0]
+rows = [",".join(COLS)]
+for i in range(0, len(samples), HZ // 2):
+    ts, _, _, sp, acc, k = samples[i]
+    lat, lon = fixes[i]
+    kmh = sp * 3.6
+    heat = ts / total                              # 0 -> 1 through the session
+    gear = next((g for g in range(1, 7) if kmh < GEAR_TOP_KMH[g] * 0.92), 6)
+    rpm = max(850.0, kmh / GEAR_TOP_KMH[gear] * 6500.0)
+    if kmh < 1.0:
+        gear = 0                                   # standing: neutral, idling
+    # Accelerating hard: pedal down, boost up with rpm; braking: off it.
+    push = max(0.0, min(1.0, acc / ACCEL)) if acc > 0.05 else (0.25 if abs(acc) <= 0.05 and sp > 1 else 0.0)
+    boost = -0.6 + push * (0.6 + 1.5 * min(1.0, rpm / 4000.0))
+    load = 15.0 + push * 85.0
+    pedal = 37 + int(push * 190)
+    timing = 8.0 + (1.0 - push) * 22.0
+    lateral = sp * sp * k / 9.81                   # + to the left
+    longitudinal = acc / 9.81
+    tyreBar = 2.40 + 0.35 * heat
+    tyreC = 24 + 30 * heat
+    when = START + timedelta(seconds=ts)
+    vals = {
+        "utc": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ms": UPTIME_MS + int(round(ts * 1000)),
+        "oilC": int(round(92 + 20 * heat)), "coolantC": int(round(88 + 8 * heat)),
+        "boostBar": f"{boost:.2f}", "gpsFix": 1, "sats": 14, "speedKmh": f"{kmh:.1f}",
+        "lat": f"{lat:.7f}", "lon": f"{lon:.7f}",
+        # The pod stands with its x axis up (as the real logs show): gravity
+        # on x, the car's longitudinal and lateral g on the other two.
+        "gx": f"{1.0 + random.gauss(0, 0.01):.3f}",
+        "gy": f"{lateral + random.gauss(0, 0.02):.3f}",
+        "gz": f"{longitudinal + random.gauss(0, 0.02):.3f}",
+        "t0bar": f"{tyreBar + 0.02:.2f}", "t1bar": f"{tyreBar + 0.03:.2f}",
+        "t2bar": f"{tyreBar - 0.08:.2f}", "t3bar": f"{tyreBar - 0.07:.2f}",
+        "t0c": int(tyreC + 3), "t1c": int(tyreC + 4), "t2c": int(tyreC), "t3c": int(tyreC),
+        "obdKmh": int(kmh), "absLoadPct": f"{load:.1f}", "baroKpa": 98, "pedalRaw": pedal,
+        "rpm": int(rpm), "timingDeg": f"{timing:.1f}", "iatC": int(28 + 10 * heat), "gear": gear,
+        "volts": f"{14.3 + random.gauss(0, 0.05):.2f}",
+    }
+    rows.append(",".join(str(vals[c]) for c in COLS))
+
+OUT_CSV = OUT.replace("trip_", "drive_").replace(".gpx", ".csv")
+with open(OUT_CSV, "w") as f:
+    f.write("\n".join(rows) + "\n")
+print(f"{OUT_CSV}: {len(rows) - 1} rows")
 
 print(f"{OUT}: lap {LAP_M:.0f} m, {len(PACE)} laps incl. out/in, {t / 60:.1f} min, {len(samples)} fixes")
 # Each lap's true time, line to line, for checking the lap timer against.
