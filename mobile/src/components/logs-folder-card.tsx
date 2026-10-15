@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert } from 'react-native';
 
 import { Button, Card, Note, Row } from '@/components/ui';
+import { t } from '@/i18n';
 import { folderName, pickLogsFolder } from '@/lib/share';
 import { loadLogsFolder, saveLogsFolder } from '@/lib/store';
 
@@ -15,7 +16,7 @@ export function LogsFolderCard() {
       setUri((await pickLogsFolder()).uri);
     } catch (e) {
       // Backing out of the picker keeps the old folder.
-      if (!/cancel/i.test(String((e as Error).message))) Alert.alert('Folder', String((e as Error).message));
+      if (!/cancel/i.test(String((e as Error).message))) Alert.alert(t('Folder'), String((e as Error).message));
     }
   };
 
@@ -25,11 +26,11 @@ export function LogsFolderCard() {
   };
 
   return (
-    <Card title="Logs folder">
-      <Row label="Save to" value={uri ? folderName(uri) : 'ask every time'} tone={uri ? undefined : 'dim'} />
-      <Note>Saved logs are decrypted, under their plain names; files already there are skipped.</Note>
-      <Button title={uri ? 'Change' : 'Choose a folder'} kind="plain" onPress={change} />
-      {uri ? <Button title="Ask every time" kind="plain" onPress={forget} /> : null}
+    <Card title={t('Logs folder')}>
+      <Row label={t('Save to')} value={uri ? folderName(uri) : t('ask every time')} tone={uri ? undefined : 'dim'} />
+      <Note>{t('Saved logs are decrypted, under their plain names; files already there are skipped.')}</Note>
+      <Button title={uri ? t('Change') : t('Choose a folder')} kind="plain" onPress={change} />
+      {uri ? <Button title={t('Ask every time')} kind="plain" onPress={forget} /> : null}
     </Card>
   );
 }

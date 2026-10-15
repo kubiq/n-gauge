@@ -9,6 +9,7 @@ import { UploadCard } from '@/components/upload-card';
 import { UPLOAD_ENABLED } from '@/features';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
+import { N_, t, tn } from '@/i18n';
 import { getLive, type PodLive, setClock, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
 import { pendingBytes, pendingFiles, storedBytes } from '@/lib/store';
@@ -16,6 +17,8 @@ import { pullBytes } from '@/lib/sync-plan';
 
 const LIVE_POLL_MS = 2000;
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
+// "N files, X MB" - in English "files" even for one, as it always was.
+const files = (n: number, bytes: number) => tn(n, '{n} files, {size}', '{n} files, {size}', { size: mb(bytes) });
 
 // Everything about the gauge itself, opened from the gauge in the header
 // (PodChip) - like a watch's page in Garmin Connect. The rest of the app is
@@ -57,17 +60,17 @@ export default function GaugeScreen() {
       }
     };
     tick();
-    const t = setInterval(tick, LIVE_POLL_MS);
+    const timer = setInterval(tick, LIVE_POLL_MS);
     return () => {
       stop = true;
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, [connected, syncing]);
 
   const scan = async () => {
     const r = await scanPodQr();
     if (r.kind === 'ok') await pod.setCreds(r.creds);
-    else if (r.kind === 'wrong') Alert.alert('Not the gauge’s code', 'Scan the QR on the gauge’s WiFi screen.');
+    else if (r.kind === 'wrong') Alert.alert(t('Not the gauge’s code'), t('Scan the QR on the gauge’s WiFi screen.'));
     else if (r.kind === 'unavailable') router.push('/scan');
   };
 
@@ -83,8 +86,8 @@ export default function GaugeScreen() {
           items={
             hasCreds
               ? [
-                  { label: 'Gauge settings', onPress: () => router.push('/gauge-settings') },
-                  { label: 'Scan a different gauge', onPress: scan },
+                  { label: t('Gauge settings'), onPress: () => router.push('/gauge-settings') },
+                  { label: t('Scan a different gauge'), onPress: scan },
                 ]
               : []
           }
@@ -94,15 +97,16 @@ export default function GaugeScreen() {
   }, [navigation, hasCreds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The gauge's answer under the buttons - a quiet line, not an alert to tap
-  // away. Errors still alert.
+  // away. Errors still alert. `what` is English, marked N_, shown through t();
+  // the answer is the gauge's own, in English.
   const [done, setDone] = useState<string | null>(null);
   const run = async (what: string, fn: () => Promise<string>) => {
     setBusy(what);
     setDone(null);
     try {
-      setDone(`${what}: ${await fn()}`);
+      setDone(`${t(what)}: ${await fn()}`);
     } catch (e) {
-      Alert.alert(what, String((e as Error).message));
+      Alert.alert(t(what), String((e as Error).message));
     } finally {
       setBusy(null);
     }
@@ -111,12 +115,13 @@ export default function GaugeScreen() {
   if (pod.ready && !pod.creds) {
     return (
       <Screen>
-        <Card title="Set up">
+        <Card title={t('Set up')}>
           <Note>
-            Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the password,
-            so this is needed once.
+            {t(
+              'Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the password, so this is needed once.',
+            )}
           </Note>
-          <Button title="Scan the gauge’s QR" onPress={scan} />
+          <Button title={t('Scan the gauge’s QR')} onPress={scan} />
         </Card>
       </Screen>
     );
@@ -124,20 +129,20 @@ export default function GaugeScreen() {
 
   return (
     <Screen>
-      <Card title="Connection">
-        <Row label="Network" value={pod.creds?.ssid ?? ''} />
+      <Card title={t('Connection')}>
+        <Row label={t('Network')} value={pod.creds?.ssid ?? ''} />
         {connected ? (
-          <Button title="Disconnect" kind="plain" onPress={pod.disconnect} />
+          <Button title={t('Disconnect')} kind="plain" onPress={pod.disconnect} />
         ) : (
-          <Button title="Connect" busy={pod.state === 'connecting'} onPress={pod.connect} />
+          <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={pod.connect} />
         )}
         {/* What a tap on Connect gets you, and what it costs - the rest of
             this screen only appears once connected. */}
         {!connected && !pod.error ? (
           <Note>
-            Joins the gauge’s WiFi - the gauge must be awake (car on, or a door opened). New drives come over by
-            themselves, and its live readings and system show here. Meanwhile the phone has no internet, so
-            maps will not load.
+            {t(
+              'Joins the gauge’s WiFi - the gauge must be awake (car on, or a door opened). New drives come over by themselves, and its live readings and system show here. Meanwhile the phone has no internet, so maps will not load.',
+            )}
           </Note>
         ) : null}
         {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
@@ -145,37 +150,37 @@ export default function GaugeScreen() {
 
       {/* What the car reads now, right under the connection that brings it. */}
       {connected ? (
-        <Card title="Live">
-          {syncing ? <Note>Paused while the logs sync.</Note> : null}
+        <Card title={t('Live')}>
+          {syncing ? <Note>{t('Paused while the logs sync.')}</Note> : null}
           {liveErr && !syncing ? <Note tone="bad">{liveErr}</Note> : null}
-          {live ? <LiveRows l={live} /> : syncing ? null : <Note>Reading…</Note>}
+          {live ? <LiveRows l={live} /> : syncing ? null : <Note>{t('Reading…')}</Note>}
         </Card>
       ) : null}
 
-      <Card title="Logs">
+      <Card title={t('Logs')}>
         {UPLOAD_ENABLED ? (
-          <Row label="Waiting for upload" value={`${pendingFiles(sync.inbox)} files, ${mb(pendingBytes(sync.inbox))}`} />
+          <Row label={t('Waiting for upload')} value={files(pendingFiles(sync.inbox), pendingBytes(sync.inbox))} />
         ) : (
-          <Row label="On the phone" value={`${Object.keys(sync.inbox).length} files, ${mb(storedBytes(sync.inbox))}`} />
+          <Row label={t('On the phone')} value={files(Object.keys(sync.inbox).length, storedBytes(sync.inbox))} />
         )}
         {connected && sync.plan && sync.podFiles ? (
           <>
-            <Row label="On the gauge" value={`${sync.podFiles.length} files`} />
+            <Row label={t('On the gauge')} value={tn(sync.podFiles.length, '{n} files', '{n} files')} />
             <Row
-              label="To download"
-              value={sync.plan.length ? `${sync.plan.length} files, ${mb(pullBytes(sync.plan))}` : 'up to date'}
+              label={t('To download')}
+              value={sync.plan.length ? files(sync.plan.length, pullBytes(sync.plan)) : t('up to date')}
               tone={sync.plan.length ? undefined : 'good'}
             />
             {sync.plan.some((p) => p.restart) ? (
-              <Note tone="bad">Some files are smaller than the copies here; they will be fetched again whole.</Note>
+              <Note tone="bad">{t('Some files are smaller than the copies here; they will be fetched again whole.')}</Note>
             ) : null}
           </>
         ) : null}
-        {!connected ? <Note>New logs are pulled by themselves whenever the phone connects.</Note> : null}
-        {connected && sync.phase === 'pulling' ? <Button title="Cancel" kind="danger" onPress={sync.cancel} /> : null}
+        {!connected ? <Note>{t('New logs are pulled by themselves whenever the phone connects.')}</Note> : null}
+        {connected && sync.phase === 'pulling' ? <Button title={t('Cancel')} kind="danger" onPress={sync.cancel} /> : null}
         {connected && sync.phase !== 'pulling' ? (
           <Button
-            title={sync.plan?.length ? 'Pull' : 'Check again'}
+            title={sync.plan?.length ? t('Pull') : t('Check again')}
             kind={sync.plan?.length ? undefined : 'plain'}
             busy={sync.phase === 'checking'}
             disabled={syncing}
@@ -189,21 +194,21 @@ export default function GaugeScreen() {
       {connected ? (
         <>
           {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
-          <Card title="Actions">
+          <Card title={t('Actions')}>
             <Button
-              title="Set the gauge’s clock from this phone"
+              title={t('Set the gauge’s clock from this phone')}
               kind="plain"
               busy={busy === 'Clock'}
-              onPress={() => run('Clock', setClock)}
+              onPress={() => run(N_('Clock'), setClock)}
             />
             <Button
-              title="Zero the g-meter here"
+              title={t('Zero the g-meter here')}
               kind="plain"
               busy={busy === 'G-meter'}
               onPress={() =>
-                Alert.alert('Zero the g-meter?', 'Only with the car level and standing still.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Zero', onPress: () => run('G-meter', zeroGmeter) },
+                Alert.alert(t('Zero the g-meter?'), t('Only with the car level and standing still.'), [
+                  { text: t('Cancel'), style: 'cancel' },
+                  { text: t('Zero'), onPress: () => run(N_('G-meter'), zeroGmeter) },
                 ])
               }
             />
@@ -226,9 +231,9 @@ function carTalking(l: PodLive): boolean {
 }
 
 function canText(l: PodLive): string {
-  if (!l.can.linkUp) return 'not connected';
-  if (l.iso.busOff) return 'bus error';
-  return carTalking(l) ? 'answering' : 'not answering';
+  if (!l.can.linkUp) return t('not connected');
+  if (l.iso.busOff) return t('bus error');
+  return carTalking(l) ? t('answering') : t('not answering');
 }
 
 // In a driver's words; the request counters are in the System card.
@@ -236,20 +241,27 @@ function LiveRows({ l }: { l: PodLive }) {
   const yes = (b: boolean): 'good' | 'bad' => (b ? 'good' : 'bad');
   return (
     <>
-      <Row label="Car" value={canText(l)} tone={yes(carTalking(l))} />
-      <Row label="Oil" value={l.can.haveOil ? `${l.can.oilTempC} °C` : '—'} />
-      <Row label="Coolant" value={l.can.haveCoolant ? `${l.can.coolantC} °C` : '—'} />
-      <Row label="Boost" value={l.can.haveBoost ? `${l.can.boostBar.toFixed(2)} bar` : '—'} />
+      <Row label={t('Car')} value={canText(l)} tone={yes(carTalking(l))} />
+      <Row label={t('Oil')} value={l.can.haveOil ? `${l.can.oilTempC} °C` : '—'} />
+      <Row label={t('Coolant')} value={l.can.haveCoolant ? `${l.can.coolantC} °C` : '—'} />
+      <Row label={t('Boost')} value={l.can.haveBoost ? `${l.can.boostBar.toFixed(2)} bar` : '—'} />
       {/* The ECU's supply: the battery engine off, the charging voltage running. */}
       {l.can.volts !== undefined ? (
-        <Row label="Voltage" value={l.can.volts != null ? `${l.can.volts.toFixed(1)} V` : '—'} />
+        <Row label={t('Voltage')} value={l.can.volts != null ? `${l.can.volts.toFixed(1)} V` : '—'} />
       ) : null}
+      {/* "satellites" even for one in English, as it always was. */}
       <Row
         label="GPS"
-        value={!l.gps.linkUp ? 'no module' : l.gps.haveFix ? `fix, ${l.gps.sats} satellites` : `no fix yet (${l.gps.sats} satellites)`}
+        value={
+          !l.gps.linkUp
+            ? t('no module')
+            : l.gps.haveFix
+              ? tn(l.gps.sats, 'fix, {n} satellites', 'fix, {n} satellites')
+              : tn(l.gps.sats, 'no fix yet ({n} satellites)', 'no fix yet ({n} satellites)')
+        }
         tone={yes(l.gps.linkUp && l.gps.haveFix)}
       />
-      <Row label="Clock" value={l.clock.valid ? l.clock.local : 'not set'} tone={yes(l.clock.valid)} />
+      <Row label={t('Clock')} value={l.clock.valid ? l.clock.local : t('not set')} tone={yes(l.clock.valid)} />
     </>
   );
 }

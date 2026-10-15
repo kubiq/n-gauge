@@ -6,8 +6,9 @@ import { ScreenOrderCard } from '@/components/screen-order-card';
 import { Button, Card, Note, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
+import { t, tn } from '@/i18n';
 import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
-import { checkValue, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
+import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
 import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
@@ -48,7 +49,7 @@ export default function GaugeSettingsScreen() {
     if (typeof v === 'number') {
       const p = checkValue(d, v);
       if (p) {
-        problems.push(`${d.label}: ${p}`);
+        problems.push(`${t(d.label)}: ${p}`);
         continue;
       }
     }
@@ -77,7 +78,7 @@ export default function GaugeSettingsScreen() {
       setViews(null);
       await load();
     } catch (e) {
-      Alert.alert('Settings', String((e as Error).message));
+      Alert.alert(t('Settings'), String((e as Error).message));
     } finally {
       setBusy(null);
       sync.sync();
@@ -89,39 +90,43 @@ export default function GaugeSettingsScreen() {
     if (r.canceled) return;
     const bin = r.result;
     if (!bin.name.endsWith('.bin')) {
-      Alert.alert('Firmware', `${bin.name} is not a .bin`);
+      Alert.alert(t('Firmware'), t('{name} is not a .bin', { name: bin.name }));
       return;
     }
-    Alert.alert('Update firmware?', `${bin.name}, ${(bin.size / 1048576).toFixed(2)} MB. Takes ~30 s; the gauge restarts.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Update',
-        onPress: async () => {
-          setBusy('fw');
-          try {
-            // No sync after: the pod restarts, and the reconnect syncs.
-            await sync.cancel();
-            Alert.alert('Firmware', await uploadFirmware(bin));
-          } catch (e) {
-            Alert.alert('Firmware', String((e as Error).message));
-          } finally {
-            setBusy(null);
-          }
+    Alert.alert(
+      t('Update firmware?'),
+      t('{name}, {size} MB. Takes ~30 s; the gauge restarts.', { name: bin.name, size: (bin.size / 1048576).toFixed(2) }),
+      [
+        { text: t('Cancel'), style: 'cancel' },
+        {
+          text: t('Update'),
+          onPress: async () => {
+            setBusy('fw');
+            try {
+              // No sync after: the pod restarts, and the reconnect syncs.
+              await sync.cancel();
+              Alert.alert(t('Firmware'), await uploadFirmware(bin));
+            } catch (e) {
+              Alert.alert(t('Firmware'), String((e as Error).message));
+            } finally {
+              setBusy(null);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (!connected) {
     // The settings live on the gauge: nothing to show until it answers.
     return (
       <Screen>
-        <Card title="Not connected">
-          <Note>The settings are read from the gauge itself. Connect to change them or to update its firmware.</Note>
+        <Card title={t('Not connected')}>
+          <Note>{t('The settings are read from the gauge itself. Connect to change them or to update its firmware.')}</Note>
           {pod.creds ? (
-            <Button title="Connect" busy={pod.state === 'connecting'} onPress={pod.connect} />
+            <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={pod.connect} />
           ) : (
-            <Note>Set the gauge up first, on the Gauge screen.</Note>
+            <Note>{t('Set the gauge up first, on the Gauge screen.')}</Note>
           )}
           {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
         </Card>
@@ -132,10 +137,10 @@ export default function GaugeSettingsScreen() {
   return (
     <Screen>
       {err ? <Note tone="bad">{err}</Note> : null}
-      {orig ? null : err ? null : <Note>Reading the gauge’s settings…</Note>}
+      {orig ? null : err ? null : <Note>{t('Reading the gauge’s settings…')}</Note>}
       {orig
         ? GROUPS.map((g) => (
-            <Card key={g} title={g}>
+            <Card key={g} title={t(GROUP_TITLES[g])}>
               {SETTINGS.filter((d) => d.group === g).map((d) => (
                 <SettingRow
                   key={d.key}
@@ -157,7 +162,7 @@ export default function GaugeSettingsScreen() {
         <>
           {problems.length ? <Note tone="bad">{problems.join('\n')}</Note> : null}
           <Button
-            title={nChanged ? `Save ${nChanged} change${nChanged === 1 ? '' : 's'}` : 'No changes'}
+            title={nChanged ? tn(nChanged, 'Save 1 change', 'Save {n} changes') : t('No changes')}
             disabled={!nChanged || problems.length > 0}
             busy={busy === 'save'}
             onPress={save}
@@ -165,9 +170,9 @@ export default function GaugeSettingsScreen() {
           {saved && !nChanged ? <Note tone={saved.startsWith('Saved') ? 'good' : 'bad'}>{saved}</Note> : null}
         </>
       ) : null}
-      <Card title="Firmware">
-        <Note>Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.</Note>
-        <Button title="Update firmware" kind="plain" busy={busy === 'fw'} onPress={firmware} />
+      <Card title={t('Firmware')}>
+        <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
+        <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
     </Screen>
   );
@@ -193,7 +198,7 @@ function SettingRow({
     const current = value === undefined ? undefined : Number(value);
     return (
       <View style={{ gap: S.sm }}>
-        <Text style={[ui.rowLabel, changed && { color: C.accent }]}>{d.label}</Text>
+        <Text style={[ui.rowLabel, changed && { color: C.accent }]}>{t(d.label)}</Text>
         <View style={ui.options}>
           {d.options.map((o) => {
             const on = o.value === current;
@@ -203,20 +208,20 @@ function SettingRow({
                 onPress={() => onChange(String(o.value))}
                 style={({ pressed }) => [ui.option, on && ui.optionOn, pressed && { opacity: 0.6 }]}>
                 <View style={[ui.radio, on && ui.radioOn]} />
-                <Text style={[ui.rowValue, on && { color: C.accent }]}>{o.label}</Text>
+                <Text style={[ui.rowValue, on && { color: C.accent }]}>{t(o.label)}</Text>
               </Pressable>
             );
           })}
         </View>
-        {d.hint ? <Text style={ui.note}>{d.hint}</Text> : null}
+        {d.hint ? <Text style={ui.note}>{t(d.hint)}</Text> : null}
       </View>
     );
   }
   return (
     <View style={ui.row}>
       <View style={{ flexShrink: 1 }}>
-        <Text style={[ui.rowLabel, changed && { color: C.accent }]}>{d.label}</Text>
-        {d.hint ? <Text style={ui.note}>{d.hint}</Text> : null}
+        <Text style={[ui.rowLabel, changed && { color: C.accent }]}>{t(d.label)}</Text>
+        {d.hint ? <Text style={ui.note}>{t(d.hint)}</Text> : null}
       </View>
       {d.type === 'bool' ? (
         <Switch value={!!value} onValueChange={onChange} trackColor={{ true: C.accent }} />

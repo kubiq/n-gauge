@@ -3,17 +3,19 @@
 // screen left out hidden. The ids are its GaugeView enum (ui.h). WiFi is
 // always in it: the way to the phone.
 
+import { N_ } from '../i18n/index.ts';
+
 export const WIFI = '6';
 
-/** Every screen, in the gauge's default order (config.h VIEW_ORDER_DEFAULT). */
+/** Every screen, in the gauge's default order (config.h VIEW_ORDER_DEFAULT). Names shown through t(). */
 export const SCREENS: { id: string; name: string }[] = [
-  { id: '0', name: 'Oil & coolant' },
-  { id: '2', name: 'Boost' },
-  { id: '4', name: 'Tyres' },
-  { id: '5', name: 'GPS' },
-  { id: '7', name: 'Track' },
-  { id: '3', name: 'G-meter' },
-  { id: WIFI, name: 'WiFi' },
+  { id: '0', name: N_('Oil & coolant') },
+  { id: '2', name: N_('Boost') },
+  { id: '4', name: N_('Tyres') },
+  { id: '5', name: N_('GPS') },
+  { id: '7', name: N_('Track') },
+  { id: '3', name: N_('G-meter') },
+  { id: WIFI, name: N_('WiFi') },
 ];
 
 export type ScreenItem = { id: string; name: string; on: boolean };

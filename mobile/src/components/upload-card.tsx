@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 
 import { Button, Card, Note, Row } from '@/components/ui';
+import { t, tn } from '@/i18n';
 import { type BackendConfig, loadBackend } from '@/lib/backend';
 import { loadInbox, pendingBytes, pendingFiles, uploadInbox } from '@/lib/store';
 
@@ -37,8 +38,8 @@ export function UploadCard() {
       const r = await uploadInbox(cfg, setStatus, ctl.signal);
       setStatus(
         ctl.signal.aborted
-          ? `Cancelled after ${r.files} file${r.files === 1 ? '' : 's'}.`
-          : `Uploaded ${r.files} file${r.files === 1 ? '' : 's'}, ${mb(r.bytes)}.`,
+          ? tn(r.files, 'Cancelled after 1 file.', 'Cancelled after {n} files.')
+          : tn(r.files, 'Uploaded 1 file, {size}.', 'Uploaded {n} files, {size}.', { size: mb(r.bytes) }),
       );
       if (r.problems.length) setErr(r.problems.join('\n'));
     } catch (e) {
@@ -55,19 +56,19 @@ export function UploadCard() {
   const waiting = pendingFiles(inbox);
 
   return (
-    <Card title="Upload">
+    <Card title={t('Upload')}>
       <Row
-        label="Waiting"
-        value={waiting ? `${waiting} file${waiting === 1 ? '' : 's'}, ${mb(pendingBytes(inbox))}` : 'nothing'}
+        label={t('Waiting')}
+        value={waiting ? tn(waiting, '1 file, {size}', '{n} files, {size}', { size: mb(pendingBytes(inbox)) }) : t('nothing')}
         tone={waiting ? undefined : 'good'}
       />
-      <Row label="Server" value={cfg ? cfg.url.replace(/^https?:\/\//, '') : 'not set'} tone={cfg ? undefined : 'dim'} />
+      <Row label={t('Server')} value={cfg ? cfg.url.replace(/^https?:\/\//, '') : t('not set')} tone={cfg ? undefined : 'dim'} />
       {busy ? (
-        <Button title="Cancel" kind="danger" onPress={() => abort.current?.abort()} />
+        <Button title={t('Cancel')} kind="danger" onPress={() => abort.current?.abort()} />
       ) : (
         <>
-          {cfg && waiting ? <Button title="Upload" onPress={upload} /> : null}
-          <Button title={cfg ? 'Change server' : 'Set up the server'} kind="plain" onPress={() => router.push('/server')} />
+          {cfg && waiting ? <Button title={t('Upload')} onPress={upload} /> : null}
+          <Button title={cfg ? t('Change server') : t('Set up the server')} kind="plain" onPress={() => router.push('/server')} />
         </>
       )}
       {status ? <Note>{status}</Note> : null}

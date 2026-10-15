@@ -5,6 +5,7 @@
 
 import { File, UploadType } from 'expo-file-system';
 
+import { t } from '../i18n/index.ts';
 import type { PodSettings } from './settings-schema';
 import type { PodFile } from './sync-plan';
 
@@ -23,16 +24,16 @@ export class PodError extends Error {
 
 async function call(path: string, init: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(POD_BASE + path, { ...init, signal: ctl.signal });
     if (!r.ok) throw new PodError((await r.text()) || `HTTP ${r.status}`, r.status);
     return r;
   } catch (e) {
     if (e instanceof PodError) throw e;
-    throw new PodError(ctl.signal.aborted ? 'The gauge did not answer' : String(e));
+    throw new PodError(ctl.signal.aborted ? t('The gauge did not answer') : String(e));
   } finally {
-    clearTimeout(t);
+    clearTimeout(timer);
   }
 }
 

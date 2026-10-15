@@ -6,6 +6,7 @@ import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Screen, useUi } from '@/components/ui';
+import { t, tn } from '@/i18n';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { loadNames, type Names, tripName } from '@/lib/names';
@@ -73,13 +74,13 @@ export default function TripsScreen() {
       (async () => {
         for (const [i, name] of todo.entries()) {
           // Only while there is something to wait for; nothing once done.
-          setStatus(`Reading new drives… ${i + 1} of ${todo.length}`);
+          setStatus(t('Reading new drives… {i} of {n}', { i: i + 1, n: todo.length }));
           try {
             await summarise(name);
             const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
             if (s) setSums((prev) => ({ ...prev, [name]: s }));
           } catch (e) {
-            const msg = e instanceof LogKeyError ? e.message : `Could not read it: ${String(e)}`;
+            const msg = e instanceof LogKeyError ? e.message : t('Could not read it: {error}', { error: String(e) });
             setProblems((prev) => ({ ...prev, [name]: msg }));
           }
         }
@@ -99,10 +100,10 @@ export default function TripsScreen() {
       const names = trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n);
       const r = await saveLogsToFolder(names, setStatus);
       setStatus(null);
-      Alert.alert('Saved', savedText(r));
+      Alert.alert(t('Saved'), savedText(r));
     } catch (e) {
       setStatus(null);
-      Alert.alert('Save', String((e as Error).message));
+      Alert.alert(t('Save'), String((e as Error).message));
     } finally {
       setSaving(false);
     }
@@ -115,10 +116,10 @@ export default function TripsScreen() {
   const navigation = useNavigation();
   const hasTrips = trips.length > 0;
   useLayoutEffect(() => {
-    const save = { label: saving ? 'Saving…' : 'Save all to a folder', onPress: saveAll, disabled: saving };
+    const save = { label: saving ? t('Saving…') : t('Save all to a folder'), onPress: saveAll, disabled: saving };
     navigation.setOptions({
       headerRight: () => (
-        <HeaderActions items={[{ label: 'Settings', onPress: () => router.push('/settings') }, ...(hasTrips ? [save] : [])]} />
+        <HeaderActions items={[{ label: t('Settings'), onPress: () => router.push('/settings') }, ...(hasTrips ? [save] : [])]} />
       ),
     });
   }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -152,7 +153,7 @@ export default function TripsScreen() {
       {status ? <Note>{status}</Note> : null}
       {trips.length === 0 ? (
         <Card>
-          <Note>No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.</Note>
+          <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>
         </Card>
       ) : (
         weeks.map((w) => (
@@ -160,7 +161,7 @@ export default function TripsScreen() {
             <Text style={styles.weekHead}>
               {weekLabel(w.monday)}
               <Text style={styles.weekTotals}>
-                {`  ·  ${w.drives} ${w.drives === 1 ? 'drive' : 'drives'}`}
+                {`  ·  ${tn(w.drives, '1 drive', '{n} drives')}`}
                 {w.distanceM > 0 ? `  ·  ${km(w.distanceM)}` : ''}
                 {w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
               </Text>
@@ -176,8 +177,8 @@ export default function TripsScreen() {
         <Pressable onPress={() => setShowShort((s) => !s)} hitSlop={8} style={styles.more}>
           <Text style={styles.moreText}>
             {showShort
-              ? `Hide the ${hidden} very short ${hidden === 1 ? 'drive' : 'drives'}`
-              : `Show ${hidden} very short ${hidden === 1 ? 'drive' : 'drives'} (under 200 m)`}
+              ? tn(hidden, 'Hide the 1 very short drive', 'Hide the {n} very short drives')
+              : tn(hidden, 'Show 1 very short drive (under 200 m)', 'Show {n} very short drives (under 200 m)')}
           </Text>
         </Pressable>
       ) : null}
@@ -186,7 +187,7 @@ export default function TripsScreen() {
 }
 
 function TripRow({
-  t,
+  t: trip,
   g,
   c,
   problem,
@@ -198,15 +199,15 @@ function TripRow({
   problem?: string;
   name: string | null;
 }) {
-  const start = g?.start ?? t.start;
+  const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
-  const pending = !problem && ((t.gpx && !g) || (t.csv && !c));
-  const encrypted = [t.gpx, t.csv].some((n) => n && isEncryptedName(n));
+  const pending = !problem && ((trip.gpx && !g) || (trip.csv && !c));
+  const encrypted = [trip.gpx, trip.csv].some((n) => n && isEncryptedName(n));
   const ui = useUi();
   const styles = useStyles();
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/trip/[key]', params: { key: t.key } })}
+      onPress={() => router.push({ pathname: '/trip/[key]', params: { key: trip.key } })}
       style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
       <View style={styles.head}>
         {/* Where it went (names.ts), the date under it; without a track the
@@ -215,7 +216,7 @@ function TripRow({
         <View style={styles.titleCol}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={1}>
-              {name ?? (start ? when(start) : 'Undated drive')}
+              {name ?? (start ? when(start) : t('Undated drive'))}
             </Text>
             {encrypted ? <LockIcon bad={!!problem} /> : null}
           </View>
@@ -224,13 +225,13 @@ function TripRow({
         {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
       </View>
       <View style={styles.facts}>
-        {secs !== null ? <Fact label="time" value={duration(secs)} /> : null}
-        {g ? <Fact label="top" value={`${Math.round(g.maxKmh)} km/h`} /> : null}
-        {c?.maxBoostBar != null ? <Fact label="boost" value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
-        {c?.maxOilC != null ? <Fact label="oil" value={`${Math.round(c.maxOilC)} °C`} /> : null}
+        {secs !== null ? <Fact label={t('time')} value={duration(secs)} /> : null}
+        {g ? <Fact label={t('top')} value={`${Math.round(g.maxKmh)} km/h`} /> : null}
+        {c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
+        {c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
       </View>
-      {!t.gpx ? <Note>No GPS track - car data only.</Note> : null}
-      {pending ? <Note>Reading…</Note> : null}
+      {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
+      {pending ? <Note>{t('Reading…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );

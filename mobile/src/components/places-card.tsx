@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Note, useUi } from '@/components/ui';
+import { t } from '@/i18n';
 import { loadNames, nameOwnPlace, type Names } from '@/lib/names';
 import { S, themed } from '@/theme';
 
@@ -20,31 +21,31 @@ export function PlacesCard() {
     router.push({ pathname: '/name', params: { kind: 'place', lat: String(p.lat), lon: String(p.lon), current: p.name } });
 
   const forget = (p: Names['places'][number]) =>
-    Alert.alert(`Forget ${p.name}?`, 'Drives from and to it go back to the place names from the map.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Forget', style: 'destructive', onPress: () => setNames(nameOwnPlace(p.lat, p.lon, '')) },
+    Alert.alert(t('Forget {name}?', { name: p.name }), t('Drives from and to it go back to the place names from the map.'), [
+      { text: t('Cancel'), style: 'cancel' },
+      { text: t('Forget'), style: 'destructive', onPress: () => setNames(nameOwnPlace(p.lat, p.lon, '')) },
     ]);
 
   const places = [...names.places].sort((a, b) => a.name.localeCompare(b.name));
   return (
-    <Card title="Your places">
+    <Card title={t('Your places')}>
       {places.length === 0 ? (
-        <Note>None yet. On a drive, ⋮ → Name the start place (or the end) - e.g. Home - and every drive from or to there is called by it.</Note>
+        <Note>{t('None yet. On a drive, ⋮ → Name the start place (or the end) - e.g. Home - and every drive from or to there is called by it.')}</Note>
       ) : (
         places.map((p) => (
           <View key={`${p.lat},${p.lon}`} style={styles.row}>
-            <Pressable onPress={() => rename(p)} hitSlop={8} style={styles.name} accessibilityRole="button" accessibilityLabel={`Rename ${p.name}`}>
+            <Pressable onPress={() => rename(p)} hitSlop={8} style={styles.name} accessibilityRole="button" accessibilityLabel={t('Rename {name}', { name: p.name })}>
               <Text style={ui.rowValue} numberOfLines={1}>
                 {p.name}
               </Text>
             </Pressable>
-            <Pressable onPress={() => forget(p)} hitSlop={8} style={styles.action} accessibilityRole="button" accessibilityLabel={`Forget ${p.name}`}>
-              <Text style={styles.link}>Forget</Text>
+            <Pressable onPress={() => forget(p)} hitSlop={8} style={styles.action} accessibilityRole="button" accessibilityLabel={t('Forget {name}', { name: p.name })}>
+              <Text style={styles.link}>{t('Forget')}</Text>
             </Pressable>
           </View>
         ))
       )}
-      {places.length ? <Note>Tap a name to rename it. Drives within 300 m of a place take its name.</Note> : null}
+      {places.length ? <Note>{t('Tap a name to rename it. Drives within 300 m of a place take its name.')}</Note> : null}
     </Card>
   );
 }

@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 
 import { Button, Card, Row } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { t } from '@/i18n';
 import { loadLogKey, type LogKey } from '@/lib/logkey';
 import { getSettings } from '@/lib/pod';
 
@@ -31,16 +32,22 @@ export function LogKeyCard() {
   if (key === undefined) return null;
   const mine = key ? key.fingerprint.replace(/ /g, '') : null;
   return (
-    <Card title="Log encryption">
-      <Row label="This phone’s key" value={key ? key.fingerprint : 'not set up'} tone={key ? undefined : 'dim'} />
+    <Card title={t('Log encryption')}>
+      <Row label={t('This phone’s key')} value={key ? key.fingerprint : t('not set up')} tone={key ? undefined : 'dim'} />
       {connected && podFp !== undefined ? (
         <Row
-          label="Gauge"
-          value={podFp === '' ? 'not encrypted' : podFp === mine ? 'encrypted to this phone' : 'encrypted to another key'}
+          label={t('Gauge')}
+          value={
+            podFp === ''
+              ? t('not encrypted')
+              : podFp === mine
+                ? t('encrypted to this phone')
+                : t('encrypted to another key')
+          }
           tone={podFp === '' ? 'dim' : podFp === mine ? 'good' : 'bad'}
         />
       ) : null}
-      <Button title={key ? 'Manage' : 'Set up'} kind="plain" onPress={() => router.push('/log-key')} />
+      <Button title={key ? t('Manage') : t('Set up')} kind="plain" onPress={() => router.push('/log-key')} />
     </Card>
   );
 }

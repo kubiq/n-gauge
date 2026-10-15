@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Card, Note, useUi } from '@/components/ui';
+import { t } from '@/i18n';
 import { moved, type ScreenItem, screenItems, viewsOf, WIFI } from '@/lib/screens';
 import { S, themed, useColors } from '@/theme';
 
@@ -19,11 +20,11 @@ export function ScreenOrderCard({ views, onChange }: { views: string; onChange: 
   };
 
   return (
-    <Card title="Screens">
-      <Note>The order a swipe goes through on the gauge. WiFi stays: it is the way to the phone.</Note>
+    <Card title={t('Screens')}>
+      <Note>{t('The order a swipe goes through on the gauge. WiFi stays: it is the way to the phone.')}</Note>
       {items.map((s, i) => (
         <View key={s.id} style={styles.row}>
-          <Text style={[ui.rowLabel, styles.name, !s.on && { color: C.border }]}>{s.name}</Text>
+          <Text style={[ui.rowLabel, styles.name, !s.on && { color: C.border }]}>{t(s.name)}</Text>
           <Arrow label="↑" disabled={i === 0} onPress={() => update(moved(items, i, -1))} />
           <Arrow label="↓" disabled={i === items.length - 1} onPress={() => update(moved(items, i, 1))} />
           <Switch
@@ -46,7 +47,7 @@ function Arrow({ label, disabled, onPress }: { label: string; disabled: boolean;
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      accessibilityLabel={label === '↑' ? 'Move up' : 'Move down'}
+      accessibilityLabel={label === '↑' ? t('Move up') : t('Move down')}
       style={({ pressed }) => [styles.arrow, pressed && { opacity: 0.5 }]}>
       <Text style={[styles.arrowText, disabled && { color: C.border }]}>{label}</Text>
     </Pressable>

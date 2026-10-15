@@ -6,6 +6,8 @@ import { Directory, File, Paths, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import { gzipSync } from 'fflate';
 
+import { t } from '../i18n/index.ts';
+
 export type BackendConfig = { url: string; token: string };
 
 const KEY = 'backend';
@@ -32,22 +34,24 @@ export class BackendError extends Error {
 
 async function call(c: BackendConfig, path: string, auth = true, timeoutMs = 15000): Promise<Response> {
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(c.url + path, {
       headers: auth ? { Authorization: `Bearer ${c.token}` } : {},
       signal: ctl.signal,
     });
-    if (r.status === 401) throw new BackendError('The server refused the token', 401);
+    if (r.status === 401) throw new BackendError(t('The server refused the token'), 401);
     if (!r.ok) throw new BackendError(`HTTP ${r.status}`, r.status);
     return r;
   } catch (e) {
     if (e instanceof BackendError) throw e;
     throw new BackendError(
-      ctl.signal.aborted ? 'The server did not answer - is the VPN up?' : `Cannot reach the server: ${String(e)}`,
+      ctl.signal.aborted
+        ? t('The server did not answer - is the VPN up?')
+        : t('Cannot reach the server: {error}', { error: String(e) }),
     );
   } finally {
-    clearTimeout(t);
+    clearTimeout(timer);
   }
 }
 
@@ -91,11 +95,11 @@ export async function putChunk(c: BackendConfig, name: string, offset: number, r
     } catch {}
     if (r.status === 200 && typeof body.size === 'number') return body.size;
     if (r.status === 409) throw new BackendError('Server size changed', 409, body.size);
-    if (r.status === 401) throw new BackendError('The server refused the token', 401);
+    if (r.status === 401) throw new BackendError(t('The server refused the token'), 401);
     throw new BackendError(body.error ?? `HTTP ${r.status}`, r.status);
   } catch (e) {
     if (e instanceof BackendError) throw e;
-    throw new BackendError(`Upload failed - is the VPN up? (${String(e)})`);
+    throw new BackendError(t('Upload failed - is the VPN up? ({error})', { error: String(e) }));
   } finally {
     if (tmp.exists) tmp.delete();
   }

@@ -3,6 +3,7 @@ import { type GestureResponderEvent, StyleSheet, Text, View } from 'react-native
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { Card } from '@/components/ui';
+import { t } from '@/i18n';
 import { duration } from '@/lib/format';
 import type { Series } from '@/lib/series';
 import { type Colors, S, themed, useColors } from '@/theme';
@@ -47,24 +48,24 @@ const peak = (digits: number, unit: string) => (lines: Line_[]) =>
 const PANELS = (s: Series, C: Colors): Panel[] => {
   const BLUE = C.series1, ORANGE = C.series2;
   return [
-    { title: 'Speed', unit: ' km/h', digits: 0, lines: [{ name: 'Speed', data: s.kmh, color: BLUE }], idle: peak(0, ' km/h') },
+    { title: t('Speed'), unit: ' km/h', digits: 0, lines: [{ name: t('Speed'), data: s.kmh, color: BLUE }], idle: peak(0, ' km/h') },
     // The true value, vacuum included, with the zero drawn.
-    { title: 'Boost', unit: ' bar', digits: 2, zero: true, lines: [{ name: 'Boost', data: s.boostBar, color: BLUE }], idle: peak(2, ' bar') },
+    { title: t('Boost'), unit: ' bar', digits: 2, zero: true, lines: [{ name: t('Boost'), data: s.boostBar, color: BLUE }], idle: peak(2, ' bar') },
     {
-      title: 'Oil and coolant',
+      title: t('Oil and coolant'),
       unit: ' °C',
       digits: 0,
       lines: [
-        { name: 'Oil', data: s.oilC, color: ORANGE },
-        { name: 'Coolant', data: s.coolantC, color: BLUE },
+        { name: t('Oil'), data: s.oilC, color: ORANGE },
+        { name: t('Coolant'), data: s.coolantC, color: BLUE },
       ],
       idle: peak(0, ' °C'),
     },
     {
-      title: 'Voltage',
+      title: t('Voltage'),
       unit: ' V',
       digits: 1,
-      lines: [{ name: 'Voltage', data: s.volts, color: BLUE }],
+      lines: [{ name: t('Voltage'), data: s.volts, color: BLUE }],
       idle: (ls: Line_[]) => {
         const v = finite(ls[0].data);
         return `${Math.min(...v).toFixed(1)}–${Math.max(...v).toFixed(1)} V`;
@@ -116,9 +117,11 @@ export function DriveChart({ series }: { series: Series }) {
   const x = (i: number) => (i / (n - 1)) * width;
 
   return (
-    <Card title="Over the drive">
+    <Card title={t('Over the drive')}>
       <Text style={styles.hint}>
-        {at === null ? 'Drag across the charts to read them at any moment.' : `At ${clock(series.t[at])} of ${clock(series.durationS)}`}
+        {at === null
+          ? t('Drag across the charts to read them at any moment.')
+          : t('At {at} of {total}', { at: clock(series.t[at]), total: clock(series.durationS) })}
       </Text>
       <View {...responder} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ gap: S.md }}>
         {panels.map((p) => {

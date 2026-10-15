@@ -10,6 +10,7 @@
 //
 // Pure, so the tests run it on real tracks with node.
 
+import { t } from '../i18n/index.ts';
 import { distM } from './trips.ts';
 
 /**
@@ -108,6 +109,6 @@ export function placeAt(lat: number, lon: number, own: OwnPlace[], atlases: Atla
  */
 export function routeName(a: string | null, b: string | null): string | null {
   if (!a && !b) return null;
-  if (a === b) return `Around ${a}`;
+  if (a === b) return t('Around {place}', { place: a! });
   return `${a ?? '…'} → ${b ?? '…'}`;
 }

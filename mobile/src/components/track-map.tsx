@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { Note } from '@/components/ui';
+import { t } from '@/i18n';
 import type { TrackPoint } from '@/lib/trips';
 import { type Colors, themed, useColors } from '@/theme';
 
@@ -128,10 +129,10 @@ export function TrackMap({ track, bbox }: { track: TrackPoint[]; bbox: [number, 
             else if (m === 'ok') setProblem(null);
             // The real reason, plus the usual one: it is easy to forget that
             // a connection to the pod takes the app's internet with it.
-            else setProblem(`The map did not load (${m.replace(/^error:/, '')}). It needs internet - not while connected to the gauge.`);
+            else setProblem(t('The map did not load ({reason}). It needs internet - not while connected to the gauge.', { reason: m.replace(/^error:/, '') }));
           }}
           onError={(e) =>
-            setProblem(`The map did not load (${e.nativeEvent.description}). It needs internet - not while connected to the gauge.`)
+            setProblem(t('The map did not load ({reason}). It needs internet - not while connected to the gauge.', { reason: e.nativeEvent.description }))
           }
         />
         {!drawn && !problem ? <Spinner /> : null}

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Note, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { t } from '@/i18n';
 import { qrText } from '@/lib/scan-qr';
 import { parseWifiQr } from '@/lib/wifi-qr';
 import { S, themed } from '@/theme';
@@ -26,8 +27,8 @@ export default function Scan() {
   if (!perm.granted) {
     return (
       <Screen>
-        <Note>The camera reads the QR code on the gauge’s WiFi screen. Nothing else is recorded.</Note>
-        <Button title="Allow camera" onPress={requestPerm} />
+        <Note>{t('The camera reads the QR code on the gauge’s WiFi screen. Nothing else is recorded.')}</Note>
+        <Button title={t('Allow camera')} onPress={requestPerm} />
       </Screen>
     );
   }
@@ -50,7 +51,7 @@ export default function Scan() {
       />
       <View style={[styles.hint, { bottom: S.lg + insets.bottom }]}>
         <Note tone={wrong ? 'bad' : undefined}>
-          {wrong ? 'That is not the gauge’s WiFi code.' : 'Point at the QR on the gauge’s WiFi screen.'}
+          {wrong ? t('That is not the gauge’s WiFi code.') : t('Point at the QR on the gauge’s WiFi screen.')}
         </Note>
       </View>
     </View>

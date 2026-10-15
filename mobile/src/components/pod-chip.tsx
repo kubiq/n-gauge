@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { type MenuItem, OverflowMenu } from '@/components/overflow-menu';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
+import { t } from '@/i18n';
 import { shortWhen } from '@/lib/format';
 import { type Colors, S, themed, useColors } from '@/theme';
 
@@ -14,15 +15,20 @@ import { type Colors, S, themed, useColors } from '@/theme';
 type Status = { title: string; detail: string | null; ring: string; busy: boolean; bad?: boolean };
 
 function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>, C: Colors): Status {
-  const synced = sync.lastSync ? `Synced ${shortWhen(sync.lastSync)}` : null;
-  if (!pod.creds) return { title: 'Set up the gauge', detail: null, ring: C.dim, busy: false };
-  if (pod.state === 'connecting') return { title: 'Connecting…', detail: synced, ring: C.dim, busy: true };
-  if (pod.state === 'idle') return { title: 'Not connected', detail: synced, ring: C.dim, busy: false };
+  const synced = sync.lastSync ? t('Synced {when}', { when: shortWhen(sync.lastSync) }) : null;
+  if (!pod.creds) return { title: t('Set up the gauge'), detail: null, ring: C.dim, busy: false };
+  if (pod.state === 'connecting') return { title: t('Connecting…'), detail: synced, ring: C.dim, busy: true };
+  if (pod.state === 'idle') return { title: t('Not connected'), detail: synced, ring: C.dim, busy: false };
   if (sync.progress)
-    return { title: 'Connected', detail: `Syncing ${sync.progress.at}/${sync.progress.of}`, ring: C.good, busy: true };
-  if (sync.phase !== 'idle') return { title: 'Connected', detail: 'Checking…', ring: C.good, busy: true };
-  if (sync.err) return { title: 'Connected', detail: 'Sync failed', ring: C.bad, busy: false, bad: true };
-  return { title: 'Connected', detail: synced, ring: C.good, busy: false };
+    return {
+      title: t('Connected'),
+      detail: t('Syncing {at}/{of}', { at: sync.progress.at, of: sync.progress.of }),
+      ring: C.good,
+      busy: true,
+    };
+  if (sync.phase !== 'idle') return { title: t('Connected'), detail: t('Checking…'), ring: C.good, busy: true };
+  if (sync.err) return { title: t('Connected'), detail: t('Sync failed'), ring: C.bad, busy: false, bad: true };
+  return { title: t('Connected'), detail: synced, ring: C.good, busy: false };
 }
 
 // `compact`: the ring alone, for a header whose title needs the room (a
@@ -45,7 +51,7 @@ export function PodChip({ compact = false }: { compact?: boolean }) {
       onPress={onPress}
       hitSlop={8}
       accessibilityRole="button"
-      accessibilityLabel={`Gauge: ${title}${detail ? `, ${detail}` : ''}`}
+      accessibilityLabel={t('Gauge: {status}', { status: `${title}${detail ? `, ${detail}` : ''}` })}
       style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}>
       <View style={styles.face}>
         {busy ? <ActivityIndicator size="small" color={C.accent} /> : <View style={[styles.ring, { borderColor: ring }]} />}

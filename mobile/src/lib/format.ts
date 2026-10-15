@@ -1,5 +1,7 @@
 // How numbers read on the trip screens.
 
+import { locale } from '../i18n/index.ts';
+
 export function km(m: number): string {
   return m >= 10000 ? `${Math.round(m / 1000)} km` : `${(m / 1000).toFixed(1)} km`;
 }
@@ -14,14 +16,16 @@ export function duration(s: number): string {
 export function shortWhen(ms: number, now = Date.now()): string {
   const d = new Date(ms);
   return d.toDateString() === new Date(now).toDateString()
-    ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    ? d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 }
 
 /** Local date and time of day, e.g. "Sat 11 Oct, 14:45". */
 export function when(ms: number): string {
   const d = new Date(ms);
-  const day = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  // The app's language, not the phone's region: an English UI under Czech
+  // dates read as a mistake.
+  const day = d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   return `${day}, ${time}`;
 }

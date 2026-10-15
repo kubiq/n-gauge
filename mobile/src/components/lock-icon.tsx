@@ -1,5 +1,6 @@
 import { Host, Icon } from '@expo/ui/jetpack-compose';
 
+import { t } from '@/i18n';
 import { useColors } from '@/theme';
 
 /** An encrypted log: dim, or red when this phone cannot read it. */
@@ -11,7 +12,7 @@ export function LockIcon({ bad = false, size = 16 }: { bad?: boolean; size?: num
         source={require('@/assets/icons/lock.xml')}
         tint={bad ? C.bad : C.dim}
         size={size}
-        contentDescription={bad ? 'Encrypted, not readable here' : 'Encrypted'}
+        contentDescription={bad ? t('Encrypted, not readable here') : t('Encrypted')}
       />
     </Host>
   );

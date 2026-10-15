@@ -12,6 +12,7 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
+import { t } from '../i18n/index.ts';
 import { type BackendConfig, BackendError, listServer, putChunk } from './backend';
 import { GPX_TAIL } from './gpx-share';
 import { downloadRange } from './pod';
@@ -94,7 +95,13 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
     e = { uploaded: 0, pending: 0 };
   }
   if (p.from !== e.uploaded + e.pending) {
-    throw new Error(`${p.name}: planned from ${p.from}, but the inbox ends at ${e.uploaded + e.pending}`);
+    throw new Error(
+      t('{name}: planned from {from}, but the inbox ends at {end}', {
+        name: p.name,
+        from: p.from,
+        end: e.uploaded + e.pending,
+      }),
+    );
   }
 
   // A GPX the pod is still writing ends in closing tags that it overwrites
@@ -265,10 +272,21 @@ export async function uploadInbox(
         src.offset = step.offset;
         let offset = step.offset;
         for (let sent = 0; sent < total && !signal.aborted; ) {
-          onProgress(`${i + 1}/${names.length} ${name}: ${mbs(sent)} of ${mbs(total)}`);
+          onProgress(
+            t('{at}/{of} {name}: {got} of {total}', {
+              at: i + 1,
+              of: names.length,
+              name,
+              got: mbs(sent),
+              total: mbs(total),
+            }),
+          );
           const n = Math.min(UPLOAD_CHUNK, total - sent);
           const size = await putChunk(c, name, offset, src.readBytes(n));
-          if (size !== offset + n) throw new BackendError(`${name}: server size ${size}, expected ${offset + n}`);
+          if (size !== offset + n)
+            throw new BackendError(
+              t('{name}: server size {size}, expected {expected}', { name, size, expected: offset + n }),
+            );
           offset = size;
           sent += n;
           res.bytes += n;
@@ -277,7 +295,7 @@ export async function uploadInbox(
       } catch (err) {
         if (err instanceof BackendError && err.status === 409) {
           // Someone else changed it in between; the next upload re-plans.
-          res.problems.push(`${name}: changed on the server meanwhile - try again`);
+          res.problems.push(t('{name}: changed on the server meanwhile - try again', { name }));
           continue;
         }
         throw err;

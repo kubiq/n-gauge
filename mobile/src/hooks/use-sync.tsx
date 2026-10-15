@@ -11,6 +11,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { usePod } from '@/hooks/use-pod';
+import { t, tn } from '@/i18n';
 import { deletePodFile, listFiles } from '@/lib/pod';
 import {
   dropNonLogs,
@@ -113,7 +114,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         setProgress({ at: i + 1, of: todo.length });
         await pull(
           p,
-          (b) => setStatus(`${i + 1}/${todo.length} ${p.name}: ${mb(b)} of ${mb(p.size - p.from)}`),
+          (b) =>
+            setStatus(
+              t('{at}/{of} {name}: {got} of {total}', {
+                at: i + 1,
+                of: todo.length,
+                name: p.name,
+                got: mb(b),
+                total: mb(p.size - p.from),
+              }),
+            ),
           ctl.signal,
         );
         done++;
@@ -124,11 +134,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         setPlan(planPull(files, knownBytes(now), new Set(loadDeleted())));
         setLanded((n) => n + 1);
       }
-      setStatus(`Pulled ${done} file${done === 1 ? '' : 's'}.`);
+      setStatus(tn(done, 'Pulled 1 file.', 'Pulled {n} files.'));
     } catch (e) {
       // Whatever finished is in the inbox; the next check plans the rest.
-      if (ctl.signal.aborted) setStatus(`Cancelled after ${done} of ${todo.length}.`);
-      else setErr(`Stopped after ${done} of ${todo.length}: ${(e as Error).message}`);
+      if (ctl.signal.aborted) setStatus(t('Cancelled after {done} of {total}.', { done, total: todo.length }));
+      else
+        setErr(
+          t('Stopped after {done} of {total}: {error}', { done, total: todo.length, error: (e as Error).message }),
+        );
     } finally {
       abort.current = null;
       setProgress(null);
@@ -163,9 +176,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         const r = await listAndPlan();
         const complete = !r.plan.length || (!stopped.current && (await pullPlan(r.files, r.plan)));
         if (complete) {
-          const t = Date.now();
-          saveLastSync(t);
-          setLastSync(t);
+          const now = Date.now();
+          saveLastSync(now);
+          setLastSync(now);
         }
       }),
     [run],

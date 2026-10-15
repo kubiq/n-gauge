@@ -1,6 +1,7 @@
 import { DropdownMenu, DropdownMenuItem, Host, Icon, IconButton, Text } from '@expo/ui/jetpack-compose';
 import { useState } from 'react';
 
+import { t } from '@/i18n';
 import { useColors } from '@/theme';
 
 export type MenuItem = { label: string; onPress: () => void; disabled?: boolean };
@@ -17,7 +18,7 @@ export function OverflowMenu({ items }: { items: MenuItem[] }) {
       <DropdownMenu expanded={open} onDismissRequest={() => setOpen(false)} color={C.card}>
         <DropdownMenu.Trigger>
           <IconButton onClick={() => setOpen(true)}>
-            <Icon source={require('@/assets/icons/more_vert.xml')} tint={C.text} size={24} contentDescription="More" />
+            <Icon source={require('@/assets/icons/more_vert.xml')} tint={C.text} size={24} contentDescription={t('More')} />
           </IconButton>
         </DropdownMenu.Trigger>
         <DropdownMenu.Items>

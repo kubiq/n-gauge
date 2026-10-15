@@ -3,6 +3,7 @@ import { Alert, TextInput } from 'react-native';
 
 import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { t } from '@/i18n';
 import { keyFromText, toHex } from '@/lib/logcrypt';
 import { copyLogKey, createLogKey, importLogKey, loadLogKey, type LogKey } from '@/lib/logkey';
 import { getSettings, setPodLogKey } from '@/lib/pod';
@@ -42,24 +43,26 @@ export default function LogKeyScreen() {
     const k = await createLogKey();
     setKey(k);
     Alert.alert(
-      'Save the key in KeePass now',
-      'Logs encrypted to this key can only ever be read with it. If the phone is lost and the key is not saved elsewhere, they are lost too.',
+      t('Save the key in KeePass now'),
+      t(
+        'Logs encrypted to this key can only ever be read with it. If the phone is lost and the key is not saved elsewhere, they are lost too.',
+      ),
       [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Copy it', onPress: () => copy(k) },
+        { text: t('Later'), style: 'cancel' },
+        { text: t('Copy it'), onPress: () => copy(k) },
       ],
     );
   };
 
   const copy = async (k: LogKey) => {
     await copyLogKey(k);
-    Alert.alert('Copied', 'Paste it into KeePass now. The clipboard is cleared in a minute.');
+    Alert.alert(t('Copied'), t('Paste it into KeePass now. The clipboard is cleared in a minute.'));
   };
 
   const doImport = async () => {
     const secret = keyFromText(importText);
     if (!secret) {
-      Alert.alert('Not a key', 'Paste the line starting "ngauge-log-key-v1:" from KeePass.');
+      Alert.alert(t('Not a key'), t('Paste the line starting "ngauge-log-key-v1:" from KeePass.'));
       return;
     }
     const apply = async () => {
@@ -69,11 +72,13 @@ export default function LogKeyScreen() {
     };
     if (key && toHex(key.secret) !== toHex(secret)) {
       Alert.alert(
-        'Replace this phone’s key?',
-        'Logs encrypted to the current key will no longer open on this phone - only with that key. Make sure it is saved in KeePass first.',
+        t('Replace this phone’s key?'),
+        t(
+          'Logs encrypted to the current key will no longer open on this phone - only with that key. Make sure it is saved in KeePass first.',
+        ),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: apply },
+          { text: t('Cancel'), style: 'cancel' },
+          { text: t('Replace'), style: 'destructive', onPress: apply },
         ],
       );
     } else {
@@ -87,7 +92,7 @@ export default function LogKeyScreen() {
       await setPodLogKey(value);
       await refreshPod();
     } catch (e) {
-      Alert.alert('Gauge', String((e as Error).message));
+      Alert.alert(t('Gauge'), String((e as Error).message));
     } finally {
       setBusy(null);
     }
@@ -97,20 +102,21 @@ export default function LogKeyScreen() {
 
   return (
     <Screen>
-      <Card title="This phone’s key">
+      <Card title={t('This phone’s key')}>
         {key ? (
           <>
-            <Row label="Fingerprint" value={key.fingerprint} />
-            <Note>The gauge’s settings page shows the same fingerprint when it encrypts to this key.</Note>
-            <Button title="Copy the key for KeePass" kind="plain" onPress={() => copy(key)} />
+            <Row label={t('Fingerprint')} value={key.fingerprint} />
+            <Note>{t('The gauge’s settings page shows the same fingerprint when it encrypts to this key.')}</Note>
+            <Button title={t('Copy the key for KeePass')} kind="plain" onPress={() => copy(key)} />
           </>
         ) : (
           <>
             <Note>
-              With a key, the gauge encrypts its logs so that only this phone can read them - a card taken out of the
-              gauge gives nothing away. The gauge only ever gets the public half.
+              {t(
+                'With a key, the gauge encrypts its logs so that only this phone can read them - a card taken out of the gauge gives nothing away. The gauge only ever gets the public half.',
+              )}
             </Note>
-            <Button title="Create a key" onPress={create} />
+            <Button title={t('Create a key')} onPress={create} />
           </>
         )}
         {importing ? (
@@ -125,53 +131,64 @@ export default function LogKeyScreen() {
               autoCorrect={false}
               secureTextEntry
             />
-            <Button title="Import" onPress={doImport} />
-            <Button title="Cancel" kind="plain" onPress={() => setImporting(false)} />
+            <Button title={t('Import')} onPress={doImport} />
+            <Button title={t('Cancel')} kind="plain" onPress={() => setImporting(false)} />
           </>
         ) : (
           <Button
-            title={key ? 'Replace with a key from KeePass' : 'Import a key from KeePass'}
+            title={key ? t('Replace with a key from KeePass') : t('Import a key from KeePass')}
             kind="plain"
             onPress={() => setImporting(true)}
           />
         )}
       </Card>
 
-      <Card title="The gauge">
+      <Card title={t('The gauge')}>
         {!connected ? (
-          <Note>Connect to the gauge (tap it at the top) to set its key.</Note>
+          <Note>{t('Connect to the gauge (tap it at the top) to set its key.')}</Note>
         ) : podFp === undefined ? (
-          <Note>Reading the gauge’s settings… (older firmware does not know about log keys)</Note>
+          <Note>{t('Reading the gauge’s settings… (older firmware does not know about log keys)')}</Note>
         ) : (
           <>
             <Row
-              label="Logs"
-              value={podFp === '' ? 'not encrypted' : podUsesMine ? 'encrypted to this phone' : 'encrypted to another key'}
+              label={t('Logs')}
+              value={
+                podFp === ''
+                  ? t('not encrypted')
+                  : podUsesMine
+                    ? t('encrypted to this phone')
+                    : t('encrypted to another key')
+              }
               tone={podFp === '' ? 'dim' : podUsesMine ? 'good' : 'bad'}
             />
             {podFp && !podUsesMine ? (
               <Note tone="bad">
-                The gauge encrypts to {podFp.replace(/(.{4})(?=.)/g, '$1 ')} - not this phone’s key. Its logs only open with
-                that key.
+                {t('The gauge encrypts to {fp} - not this phone’s key. Its logs only open with that key.', {
+                  fp: podFp.replace(/(.{4})(?=.)/g, '$1 '),
+                })}
               </Note>
             ) : null}
             {key && !podUsesMine ? (
-              <Button title="Encrypt the gauge’s logs with this key" busy={busy === 'on'} onPress={() => sendToPod(toHex(key.pub))} />
+              <Button title={t('Encrypt the gauge’s logs with this key')} busy={busy === 'on'} onPress={() => sendToPod(toHex(key.pub))} />
             ) : null}
             {podFp ? (
               <Button
-                title="Stop encrypting"
+                title={t('Stop encrypting')}
                 kind="danger"
                 busy={busy === 'off'}
                 onPress={() =>
-                  Alert.alert('Stop encrypting?', 'New logs will be plain again. Logs already encrypted stay encrypted.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Stop', style: 'destructive', onPress: () => sendToPod('off') },
-                  ])
+                  Alert.alert(
+                    t('Stop encrypting?'),
+                    t('New logs will be plain again. Logs already encrypted stay encrypted.'),
+                    [
+                      { text: t('Cancel'), style: 'cancel' },
+                      { text: t('Stop'), style: 'destructive', onPress: () => sendToPod('off') },
+                    ],
+                  )
                 }
               />
             ) : null}
-            <Note>A change applies at once: the gauge closes its open logs and starts new files.</Note>
+            <Note>{t('A change applies at once: the gauge closes its open logs and starts new files.')}</Note>
           </>
         )}
       </Card>

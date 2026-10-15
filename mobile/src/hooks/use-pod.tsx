@@ -4,6 +4,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import PodWifi from '@modules/pod-wifi';
+import { t } from '@/i18n';
 import { loadCreds, saveCreds } from '@/lib/store';
 import type { WifiCreds } from '@/lib/wifi-qr';
 
@@ -37,7 +38,7 @@ export function PodProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
     const sub = PodWifi.addListener('onLost', () => {
       setState('idle');
-      setError('Lost the gauge’s WiFi');
+      setError(t('Lost the gauge’s WiFi'));
     });
     return () => sub.remove();
   }, []);

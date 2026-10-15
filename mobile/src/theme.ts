@@ -11,6 +11,8 @@
 
 import { createContext, useContext, useMemo } from 'react';
 
+import { N_ } from '@/i18n';
+
 export type Colors = {
   bg: string;
   card: string;
@@ -47,12 +49,12 @@ const DARK_BASE = {
 } as const;
 
 export const THEMES = {
-  orange: { label: 'Dark – orange', colors: { ...DARK_BASE, accent: '#E8A33D' } },
-  blue: { label: 'Dark – N blue', colors: { ...DARK_BASE, accent: '#4FA3F0' } },
+  orange: { label: N_('Dark – orange'), colors: { ...DARK_BASE, accent: '#E8A33D' } },
+  blue: { label: N_('Dark – N blue'), colors: { ...DARK_BASE, accent: '#4FA3F0' } },
   // Close to `bad` - an error note always says what is wrong in words.
-  red: { label: 'Dark – red', colors: { ...DARK_BASE, accent: '#F0646E' } },
+  red: { label: N_('Dark – red'), colors: { ...DARK_BASE, accent: '#F0646E' } },
   light: {
-    label: 'Light',
+    label: N_('Light'),
     colors: {
       bg: '#f2f4f7',
       card: '#ffffff',

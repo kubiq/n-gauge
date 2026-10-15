@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, Row, useUi } from '@/components/ui';
+import { t } from '@/i18n';
 import type { PodLive } from '@/lib/pod';
 import { S, themed, useColors } from '@/theme';
 
@@ -9,6 +10,7 @@ type Sys = NonNullable<PodLive['sys']>;
 const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
 const gb = (kbytes: number) => `${(kbytes / 1048576).toFixed(1)} GB`;
+const of = (used: string, total: string) => t('{used} of {total}', { used, total });
 
 // The gauge's own resources, from its live status (/api/live "sys"). Internal
 // RAM is the one to watch. The gauge starts WiFi only with 80 KB free
@@ -18,30 +20,31 @@ const gb = (kbytes: number) => `${(kbytes / 1048576).toFixed(1)} GB`;
 export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso']; uptimeMs: number }) {
   const ramLow = sys.heapMin < 20 * 1024;
   return (
-    <Card title="System">
+    <Card title={t('System')}>
       <Bar
-        label="RAM free"
-        value={`${kb(sys.heap)} of ${kb(sys.heapTotal)}, lowest ${kb(sys.heapMin)}`}
+        label={t('RAM free')}
+        value={t('{free} of {total}, lowest {min}', { free: kb(sys.heap), total: kb(sys.heapTotal), min: kb(sys.heapMin) })}
         used={1 - sys.heap / sys.heapTotal}
         bad={ramLow}
       />
-      <Bar label="PSRAM free" value={`${mb(sys.psram)} of ${mb(sys.psramTotal)}`} used={1 - sys.psram / sys.psramTotal} />
+      <Bar label={t('PSRAM free')} value={of(mb(sys.psram), mb(sys.psramTotal))} used={1 - sys.psram / sys.psramTotal} />
       {sys.sdTotalKb > 0 ? (
         <Bar
-          label="SD card"
-          value={`${gb(sys.sdUsedKb)} of ${gb(sys.sdTotalKb)}`}
+          label={t('SD card')}
+          value={of(gb(sys.sdUsedKb), gb(sys.sdTotalKb))}
           used={sys.sdUsedKb / sys.sdTotalKb}
           bad={sys.sdUsedKb / sys.sdTotalKb > 0.9}
         />
       ) : (
-        <Row label="SD card" value="not available" tone="dim" />
+        <Row label={t('SD card')} value={t('not available')} tone="dim" />
       )}
-      <Bar label="Firmware" value={`${mb(sys.app)} of ${mb(sys.appMax)}`} used={sys.app / sys.appMax} bad={sys.app / sys.appMax > 0.9} />
+      <Bar label={t('Firmware')} value={of(mb(sys.app), mb(sys.appMax))} used={sys.app / sys.appMax} bad={sys.app / sys.appMax > 0.9} />
       {/* The diagnostic requests to the car (ISO-TP): answered / given up. */}
-      <Row label="Car requests ok / failed" value={`${iso.ok} / ${iso.aborts}`} tone={iso.aborts ? 'bad' : 'dim'} />
-      <Row label="Chip temperature" value={`${Math.round(sys.tempC)} °C`} tone={sys.tempC > 80 ? 'bad' : undefined} />
-      <Row label="Started by" value={sys.reset} tone={/crash|watchdog|dip/.test(sys.reset) ? 'bad' : 'dim'} />
-      <Row label="Up" value={`${Math.round(uptimeMs / 60000)} min`} tone="dim" />
+      <Row label={t('Car requests ok / failed')} value={`${iso.ok} / ${iso.aborts}`} tone={iso.aborts ? 'bad' : 'dim'} />
+      <Row label={t('Chip temperature')} value={`${Math.round(sys.tempC)} °C`} tone={sys.tempC > 80 ? 'bad' : undefined} />
+      {/* The reset reason is the gauge's own word, left in English. */}
+      <Row label={t('Started by')} value={sys.reset} tone={/crash|watchdog|dip/.test(sys.reset) ? 'bad' : 'dim'} />
+      <Row label={t('Up')} value={`${Math.round(uptimeMs / 60000)} min`} tone="dim" />
     </Card>
   );
 }

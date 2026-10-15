@@ -2,6 +2,8 @@
 // its totals: "This week · 4 drives · 62 km · 1 h 35 min". Pure, so it is
 // tested with node.
 
+import { locale as appLocale, t } from '../i18n/index.ts';
+
 export type Groupable = {
   /** Epoch ms the drive started, or null (an undated log). */
   start: number | null;
@@ -48,13 +50,13 @@ export function groupByWeek<T>(items: T[], of: (t: T) => Groupable): WeekGroup<T
 
 /**
  * "This week", "Last week", else "29 Sep – 5 Oct" (with the year when not
- * this one). Dates in the phone's locale, as the rows' (format.ts when()).
+ * this one). Dates in the app's language, as the rows' (format.ts when()).
  */
-export function weekLabel(monday: number | null, now = Date.now(), locale?: string): string {
-  if (monday === null) return 'Undated';
+export function weekLabel(monday: number | null, now = Date.now(), locale: string = appLocale()): string {
+  if (monday === null) return t('Undated');
   const thisWeek = mondayOf(now);
-  if (monday === thisWeek) return 'This week';
-  if (monday === mondayOf(thisWeek - 1)) return 'Last week';
+  if (monday === thisWeek) return t('This week');
+  if (monday === mondayOf(thisWeek - 1)) return t('Last week');
   const sunday = new Date(monday);
   sunday.setDate(sunday.getDate() + 6);
   const year = new Date(monday).getFullYear() !== new Date(now).getFullYear();

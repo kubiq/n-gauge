@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
 
 import { Button, Card, Note, Screen } from '@/components/ui';
+import { t } from '@/i18n';
 import { loadNames, nameOwnPlace, setTripTitle } from '@/lib/names';
 import { ownPlaceAt } from '@/lib/places';
 import { S, themed, useColors } from '@/theme';
@@ -31,7 +32,7 @@ export default function NameScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: trip ? 'Rename the drive' : mine ? 'Rename your place' : 'Name this place' }} />
+      <Stack.Screen options={{ title: trip ? t('Rename the drive') : mine ? t('Rename your place') : t('Name this place') }} />
       <Card>
         <TextInput
           style={styles.input}
@@ -39,20 +40,20 @@ export default function NameScreen() {
           onChangeText={setText}
           autoFocus
           selectTextOnFocus
-          placeholder={trip ? 'e.g. Track day' : 'e.g. Home'}
+          placeholder={trip ? t('e.g. Track day') : t('e.g. Home')}
           placeholderTextColor={C.dim}
           returnKeyType="done"
           onSubmitEditing={() => name && save(name)}
         />
         <Note>
           {trip
-            ? 'Only this drive. Without a name of its own it is called after where it started and ended.'
-            : 'Every drive that starts or ends within 300 m of here is called by this name.'}
+            ? t('Only this drive. Without a name of its own it is called after where it started and ended.')
+            : t('Every drive that starts or ends within 300 m of here is called by this name.')}
         </Note>
-        <Button title="Save" disabled={!name} onPress={() => save(name)} />
+        <Button title={t('Save')} disabled={!name} onPress={() => save(name)} />
         {own ? (
           <Button
-            title={trip ? 'Use the automatic name' : 'Forget this place'}
+            title={trip ? t('Use the automatic name') : t('Forget this place')}
             kind="plain"
             onPress={() => save(null)}
           />

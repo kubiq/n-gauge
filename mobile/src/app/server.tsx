@@ -4,6 +4,7 @@ import { Text, TextInput } from 'react-native';
 
 import { Button, Card, Note, Screen, useUi } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
+import { t, tn } from '@/i18n';
 import { loadBackend, saveBackend, testBackend } from '@/lib/backend';
 import { useColors } from '@/theme';
 
@@ -34,7 +35,7 @@ export default function ServerScreen() {
     setMsg(null);
     try {
       const n = await testBackend({ url: url.trim().replace(/\/+$/, ''), token: token.trim() });
-      setMsg({ text: `Works - the server holds ${n} file${n === 1 ? '' : 's'}.` });
+      setMsg({ text: tn(n, 'Works - the server holds 1 file.', 'Works - the server holds {n} files.') });
     } catch (e) {
       setMsg({ text: (e as Error).message, bad: true });
     } finally {
@@ -49,8 +50,8 @@ export default function ServerScreen() {
 
   return (
     <Screen>
-      <Card title="Server">
-        <Text style={ui.rowLabel}>Address</Text>
+      <Card title={t('Server')}>
+        <Text style={ui.rowLabel}>{t('Address')}</Text>
         <TextInput
           style={ui.input}
           value={url}
@@ -61,25 +62,25 @@ export default function ServerScreen() {
           autoCorrect={false}
           keyboardType="url"
         />
-        <Text style={ui.rowLabel}>Token</Text>
+        <Text style={ui.rowLabel}>{t('Token')}</Text>
         <TextInput
           style={ui.input}
           value={token}
           onChangeText={setToken}
-          placeholder="TOKEN from the server's .env"
+          placeholder={t('TOKEN from the server\'s .env')}
           placeholderTextColor={C.dim}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
         />
-        <Note>The server is backend/ in the repo. The phone reaches it over mobile data, so the VPN must be up.</Note>
+        <Note>{t('The server is backend/ in the repo. The phone reaches it over mobile data, so the VPN must be up.')}</Note>
         {pod.state === 'connected' ? (
-          <Note tone="bad">Disconnect from the gauge to test: while connected, the app can only reach the gauge.</Note>
+          <Note tone="bad">{t('Disconnect from the gauge to test: while connected, the app can only reach the gauge.')}</Note>
         ) : (
-          <Button title="Test" kind="plain" busy={busy} disabled={!valid} onPress={test} />
+          <Button title={t('Test')} kind="plain" busy={busy} disabled={!valid} onPress={test} />
         )}
         {msg ? <Note tone={msg.bad ? 'bad' : undefined}>{msg.text}</Note> : null}
-        <Button title="Save" disabled={!valid} onPress={save} />
+        <Button title={t('Save')} disabled={!valid} onPress={save} />
       </Card>
     </Screen>
   );

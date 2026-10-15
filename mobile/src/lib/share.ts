@@ -6,6 +6,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import { t } from '../i18n/index.ts';
 import { cleanGpx } from './gpx-share';
 import { readLogText } from './logtext';
 import { loadLogsFolder, saveLogsFolder } from './store';
@@ -27,24 +28,24 @@ async function readableText(name: string): Promise<string> {
 
 /** One log to another app. A copy is shared, never the inbox file itself. */
 export async function shareLog(name: string): Promise<void> {
-  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device');
+  if (!(await Sharing.isAvailableAsync())) throw new Error(t('Sharing is not available on this device'));
   if (!dir.exists) dir.create({ intermediates: true });
   for (const old of dir.list()) old.delete();
   const out = new File(dir, plainName(name));
   out.write(await readableText(name));
   await Sharing.shareAsync(out.uri, {
     mimeType: mimeOf(name),
-    dialogTitle: isGpxName(name) ? 'Share the track' : 'Share the car data',
+    dialogTitle: isGpxName(name) ? t('Share the track') : t('Share the car data'),
   });
 }
 
 export type SaveResult = { saved: number; skipped: number; failed: string[] };
 
 export function savedText(r: SaveResult): string {
-  const parts = [`${r.saved} saved`];
-  if (r.skipped) parts.push(`${r.skipped} already there`);
+  const parts = [t('{n} saved', { n: r.saved })];
+  if (r.skipped) parts.push(t('{n} already there', { n: r.skipped }));
   let s = parts.join(', ') + '.';
-  if (r.failed.length) s += `\n\nNot saved:\n${r.failed.join('\n')}`;
+  if (r.failed.length) s += `\n\n${t('Not saved:')}\n${r.failed.join('\n')}`;
   return s;
 }
 
@@ -91,7 +92,7 @@ export async function saveLogsToFolder(names: string[], onProgress?: (text: stri
       res.skipped++;
       continue;
     }
-    onProgress?.(`Saving ${i + 1} of ${names.length}: ${plain}`);
+    onProgress?.(t('Saving {at} of {of}: {name}', { at: i + 1, of: names.length, name: plain }));
     try {
       target.createFile(plain, mimeOf(name)).write(await readableText(name));
       res.saved++;
