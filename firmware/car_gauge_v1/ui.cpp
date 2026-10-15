@@ -661,13 +661,15 @@ void ui_init() {
   // Lend the SD card to a PC as a USB drive (usbdisk.cpp). Only shown while a
   // PC is connected, i.e. on the bench, and then in the title's place at the
   // top: at the bottom (+140) it sat against the fault notice, which shows
-  // "no CAN bus" on the bench and took the taps. 180x30 at -168 spans
-  // -183..-153, 4 px over the QR, with its corners (r ~204) inside the
-  // countdown arc (r 214..220).
+  // "no CAN bus" on the bench and took the taps. As big as fits for a
+  // finger: 190x44 at -171 spans -193..-149, down to the QR's border, with
+  // its rounded ends (r <= 208) inside the countdown arc (r 214..220); the
+  // touch area reaches 8 px further, over parts that take no taps.
   shareBtn = lv_button_create(scr[VIEW_WIFI]);
-  lv_obj_set_size(shareBtn, 180, 30);
-  lv_obj_align(shareBtn, LV_ALIGN_CENTER, 0, -168);
-  lv_obj_set_style_radius(shareBtn, 15, 0);
+  lv_obj_set_size(shareBtn, 190, 44);
+  lv_obj_align(shareBtn, LV_ALIGN_CENTER, 0, -171);
+  lv_obj_set_ext_click_area(shareBtn, 8);
+  lv_obj_set_style_radius(shareBtn, 22, 0);
   lv_obj_set_style_bg_color(shareBtn, COL_BG, 0);
   lv_obj_set_style_bg_color(shareBtn, COL_LINE, LV_STATE_PRESSED);
   lv_obj_set_style_border_color(shareBtn, COL_BLUE, 0);
