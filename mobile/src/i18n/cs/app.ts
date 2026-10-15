@@ -33,6 +33,8 @@ export const app: Record<string, string> = {
   App: 'Aplikace',
   'older firmware': 'starší firmware',
   'Place names © GeoNames (geonames.org), CC BY 4.0.': 'Názvy míst © GeoNames (geonames.org), CC BY 4.0.',
+  'City quarter boundaries © ČÚZK (RÚIAN), via ČSÚ open data, CC BY 4.0.':
+    'Hranice městských částí © ČÚZK (RÚIAN), z otevřených dat ČSÚ, CC BY 4.0.',
 
   // Log encryption card (log-key-card.tsx), shared with log-key.tsx
   'This phone’s key': 'Klíč tohoto telefonu',

@@ -29,6 +29,7 @@ export function AboutCard() {
       {connected && fw ? <Row label={t('Gauge')} value={fw} /> : null}
       {/* Required by the licence (CC BY 4.0) of the drives' place names. */}
       <Note>{t('Place names © GeoNames (geonames.org), CC BY 4.0.')}</Note>
+      <Note>{t('City quarter boundaries © ČÚZK (RÚIAN), via ČSÚ open data, CC BY 4.0.')}</Note>
     </Card>
   );
 }

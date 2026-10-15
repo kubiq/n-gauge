@@ -47,6 +47,50 @@ export function parseAtlas(text: string): Atlas {
   return out;
 }
 
+// ---- City quarters, by boundary ---------------------------------------------
+// In a city, a drive's end is named by the cadastral area it lies in
+// (scripts/make-quarters.ts): a quarter is an area, and at the far edge of a
+// large one a smaller one's GeoNames point - even across a river - can be
+// nearer than its own. Outside the cities on that list, the nearest place.
+
+type Ring = [number, number][];
+/** A cadastral area: its name, its box [w, s, e, n], its polygons (outline, then holes). */
+export type Quarter = { name: string; bbox: [number, number, number, number]; polys: Ring[][] };
+
+/** quarters.tsv as shipped: name, "w,s,e,n", rings "lon lat,..." ("|" between, "||" between polygons). */
+export function parseQuarters(text: string): Quarter[] {
+  const out: Quarter[] = [];
+  for (const line of text.split('\n')) {
+    const [name, box, geo] = line.split('\t');
+    if (!geo) continue;
+    out.push({
+      name,
+      bbox: box.split(',').map(Number) as Quarter['bbox'],
+      polys: geo.split('||').map((poly) => poly.split('|').map((ring) => ring.split(',').map((p) => p.split(' ').map(Number) as [number, number]))),
+    });
+  }
+  return out;
+}
+
+function inRing(lon: number, lat: number, r: Ring): boolean {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, yi] = r[i], [xj, yj] = r[j];
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** The quarter the point lies in, or null outside them all. */
+export function quarterAt(lat: number, lon: number, quarters: Quarter[]): string | null {
+  for (const q of quarters) {
+    const [w, s, e, n] = q.bbox;
+    if (lon < w || lon > e || lat < s || lat > n) continue;
+    if (q.polys.some(([outline, ...holes]) => inRing(lon, lat, outline) && !holes.some((h) => inRing(lon, lat, h)))) return q.name;
+  }
+  return null;
+}
+
 /** The countries whose box holds the point: their lists are needed to name it. */
 export function countriesAt(index: AtlasIndex, lat: number, lon: number): string[] {
   return index.filter(({ bbox: [w, s, e, n] }) => lon >= w && lon <= e && lat >= s && lat <= n).map((c) => c.cc);
@@ -98,9 +142,9 @@ export function ownPlaceAt(lat: number, lon: number, own: OwnPlace[]): OwnPlace 
   return best;
 }
 
-/** The name for a point: yours within OWN_M, else the lists'. */
-export function placeAt(lat: number, lon: number, own: OwnPlace[], atlases: Atlas[]): string | null {
-  return ownPlaceAt(lat, lon, own)?.name ?? atlasPlaceAt(lat, lon, atlases);
+/** The name for a point: yours within OWN_M, else its city quarter, else the lists'. */
+export function placeAt(lat: number, lon: number, own: OwnPlace[], atlases: Atlas[], quarters: Quarter[] = []): string | null {
+  return ownPlaceAt(lat, lon, own)?.name ?? quarterAt(lat, lon, quarters) ?? atlasPlaceAt(lat, lon, atlases);
 }
 
 /**

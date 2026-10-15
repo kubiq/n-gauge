@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { type Atlas, countriesAt, parseAtlas, placeAt, routeName } from './places.ts';
+import { type Atlas, countriesAt, parseAtlas, parseQuarters, placeAt, quarterAt, routeName } from './places.ts';
 import { parseGpx } from './trips.ts';
 
 // A made-up country, sorted by latitude as the files are.
@@ -57,6 +57,36 @@ test('places: the countries a point needs', () => {
   assert.deepEqual(countriesAt(index, 49.5, 17), ['AA', 'BB']);   // the boxes overlap
   assert.deepEqual(countriesAt(index, 50.5, 14), ['AA']);
   assert.deepEqual(countriesAt(index, 40, 14), []);
+});
+
+// A made-up quarter: a 2 x 2 km square with a hole, and a smaller one east.
+const QUARTERS = parseQuarters(
+  'Big\t14,50,14.03,50.02\t14 50,14.03 50,14.03 50.02,14 50.02,14 50|14.01 50.005,14.015 50.005,14.015 50.01,14.01 50.01,14.01 50.005\n' +
+    'Small\t14.04,50,14.05,50.01\t14.04 50,14.05 50,14.05 50.01,14.04 50.01,14.04 50\n',
+);
+
+test('quarters: the area a point lies in, not the nearest point', () => {
+  // The far east edge of Big is nearer Small's centre than Big's - still Big.
+  assert.equal(quarterAt(50.001, 14.029, QUARTERS), 'Big');
+  assert.equal(quarterAt(50.005, 14.045, QUARTERS), 'Small');
+  assert.equal(quarterAt(50.0075, 14.0125, QUARTERS), null);   // in Big's hole
+  assert.equal(quarterAt(51, 14, QUARTERS), null);
+});
+
+test('quarters: yours first, then the quarter, then the nearest on the list', () => {
+  const own = [{ name: 'Home', lat: 50.001, lon: 14.029 }];
+  assert.equal(placeAt(50.001, 14.029, own, [atlas], QUARTERS), 'Home');
+  assert.equal(placeAt(50.001, 14.029, [], [atlas], QUARTERS), 'Big');
+  assert.equal(placeAt(50.1, 14.0, [], [atlas], QUARTERS), 'North');   // outside every quarter
+});
+
+// The shipped quarters: whole, and every one a real area.
+test('quarters: the shipped file reads, each quarter with an outline', () => {
+  const qs = parseQuarters(readFileSync('assets/places/quarters.tsv', 'utf8'));
+  assert.ok(qs.length > 200, String(qs.length));
+  for (const q of qs) assert.ok(q.polys[0][0].length >= 4, q.name);
+  // Prague's centre is in Staré Město or Josefov, not nowhere.
+  assert.ok(['Staré Město', 'Josefov'].includes(quarterAt(50.0875, 14.4213, qs) ?? ''));
 });
 
 // The real list, as the app ships it (assets/places).
