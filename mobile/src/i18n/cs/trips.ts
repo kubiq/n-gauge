@@ -67,6 +67,8 @@ export const trips: Record<string, string> = {
     'Jen tato jízda. Bez vlastního jména se jmenuje podle místa, kde začala a skončila.',
   'Every drive that starts or ends within 300 m of here is called by this name.':
     'Každá jízda, která začíná nebo končí do 300 m odsud, ponese toto jméno.',
+  'Every spot of this place is renamed - every drive that starts or ends within 300 m of one.':
+    'Přejmenují se všechna místa s tímto jménem - každá jízda, která u některého z nich do 300 m začíná nebo končí.',
   'Use the automatic name': 'Použít automatické jméno',
   'Forget this place': 'Zapomenout toto místo',
 
@@ -96,6 +98,13 @@ export const trips: Record<string, string> = {
     'Zatím žádná. U jízdy zvolte ⋮ → Pojmenovat místo startu (nebo cíle) - např. Domov - a každá jízda odtud nebo tam ponese toto jméno.',
   'Rename {name}': 'Přejmenovat {name}',
   'Forget {name}': 'Zapomenout {name}',
+  // One place, several spots (places-card.tsx, name.tsx)
+  '1 spot|{n} spots': '{n} bod|{n} body|{n} bodů',
+  '{name} has 1 spot.|{name} has {n} spots.': '{name} má {n} bod.|{name} má {n} body.|{name} má {n} bodů.',
+  'Rename all of them, or just this one?': 'Přejmenovat všechny, nebo jen tento?',
+  'Forget all of them, or just this one?': 'Zapomenout všechny, nebo jen tento?',
+  'Just this one': 'Jen tento',
+  'All 1 spot|All {n} spots': 'Všechen {n} bod|Všechny {n} body|Všech {n} bodů',
   'Tap a name to rename it. Drives within 300 m of a place take its name.':
     'Klepnutím na jméno ho přejmenujete. Jízdy do 300 m od místa ponesou jeho jméno.',
 

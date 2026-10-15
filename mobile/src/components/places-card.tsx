@@ -3,43 +3,49 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Note, useUi } from '@/components/ui';
-import { t } from '@/i18n';
-import { loadNames, nameOwnPlace, type Names } from '@/lib/names';
+import { t, tn } from '@/i18n';
+import { forgetPlaces, loadNames, type Names } from '@/lib/names';
 import { S, themed } from '@/theme';
 
 // The places you named from a drive's ⋮ ("Home", "Work"): every drive
-// starting or ending within 300 m of one is called by it. Here they can be
-// renamed - in the naming screen, as from a drive - or forgotten. Read on
-// every visit, so a rename shows on the way back.
+// starting or ending within 300 m of one of a place's spots is called by
+// it. Here they can be renamed - in the naming screen - or forgotten, each
+// name with all its spots. Read on every visit, so a rename shows on the
+// way back.
 export function PlacesCard() {
   const [names, setNames] = useState<Names>({ places: [], titles: {} });
   const ui = useUi();
   const styles = useStyles();
   useFocusEffect(useCallback(() => setNames(loadNames()), []));
 
-  const rename = (p: Names['places'][number]) =>
-    router.push({ pathname: '/name', params: { kind: 'place', lat: String(p.lat), lon: String(p.lon), current: p.name } });
+  // One row per name: a place can have several spots - "Home" named at
+  // both ends of drives whose first fix landed a few hundred metres apart.
+  // Renaming or forgetting here takes every spot of the name (names.ts).
+  const rename = (name: string) => router.push({ pathname: '/name', params: { kind: 'group', current: name } });
 
-  const forget = (p: Names['places'][number]) =>
-    Alert.alert(t('Forget {name}?', { name: p.name }), t('Drives from and to it go back to the place names from the map.'), [
+  const forget = (name: string) =>
+    Alert.alert(t('Forget {name}?', { name }), t('Drives from and to it go back to the place names from the map.'), [
       { text: t('Cancel'), style: 'cancel' },
-      { text: t('Forget'), style: 'destructive', onPress: () => setNames(nameOwnPlace(p.lat, p.lon, '')) },
+      { text: t('Forget'), style: 'destructive', onPress: () => setNames(forgetPlaces(name)) },
     ]);
 
-  const places = [...names.places].sort((a, b) => a.name.localeCompare(b.name));
+  const spots = new Map<string, number>();
+  for (const p of names.places) spots.set(p.name, (spots.get(p.name) ?? 0) + 1);
+  const places = [...spots].sort(([a], [b]) => a.localeCompare(b));
   return (
     <Card title={t('Your places')}>
       {places.length === 0 ? (
         <Note>{t('None yet. On a drive, ⋮ → Name the start place (or the end) - e.g. Home - and every drive from or to there is called by it.')}</Note>
       ) : (
-        places.map((p) => (
-          <View key={`${p.lat},${p.lon}`} style={styles.row}>
-            <Pressable onPress={() => rename(p)} hitSlop={8} style={styles.name} accessibilityRole="button" accessibilityLabel={t('Rename {name}', { name: p.name })}>
+        places.map(([name, count]) => (
+          <View key={name} style={styles.row}>
+            <Pressable onPress={() => rename(name)} hitSlop={8} style={styles.name} accessibilityRole="button" accessibilityLabel={t('Rename {name}', { name })}>
               <Text style={ui.rowValue} numberOfLines={1}>
-                {p.name}
+                {name}
+                {count > 1 ? <Text style={ui.note}>{`  ·  ${tn(count, '1 spot', '{n} spots')}`}</Text> : null}
               </Text>
             </Pressable>
-            <Pressable onPress={() => forget(p)} hitSlop={8} style={styles.action} accessibilityRole="button" accessibilityLabel={t('Forget {name}', { name: p.name })}>
+            <Pressable onPress={() => forget(name)} hitSlop={8} style={styles.action} accessibilityRole="button" accessibilityLabel={t('Forget {name}', { name })}>
               <Text style={styles.link}>{t('Forget')}</Text>
             </Pressable>
           </View>

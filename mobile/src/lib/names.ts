@@ -52,6 +52,25 @@ export function nameOwnPlace(lat: number, lon: number, name: string): Names {
   return save(n);
 }
 
+// A place can have several spots under one name - "Home" at both ends of
+// drives whose first GPS fix came a few hundred metres apart (named twice,
+// 2026-10-15). Settings shows them as one, and renames or forgets them
+// together; a drive's ⋮ still names its one spot.
+
+/** Every spot called `from` is called `to` now. */
+export function renamePlaces(from: string, to: string): Names {
+  const n = loadNames();
+  n.places = n.places.map((p) => (p.name === from ? { ...p, name: to } : p));
+  return save(n);
+}
+
+/** Every spot called `name` goes. */
+export function forgetPlaces(name: string): Names {
+  const n = loadNames();
+  n.places = n.places.filter((p) => p.name !== name);
+  return save(n);
+}
+
 /** What one end of a drive ([lon, lat]) is called: your place there, else the lists' name. */
 export function endName(pt: [number, number] | null, listName: string | null, n: Names): string | null {
   return (pt && ownPlaceAt(pt[1], pt[0], n.places)?.name) || listName;
