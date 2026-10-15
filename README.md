@@ -22,14 +22,15 @@ someone with the same car or the same board.
 
 <p>
 <img src="mobile/docs/screenshots/01-trips.png" width="32%">
-<img src="mobile/docs/screenshots/03-trip-map.png" width="32%">
+<img src="mobile/docs/screenshots/07-drive-charts.png" width="32%">
 <img src="mobile/docs/screenshots/04-gauge.png" width="32%">
 </p>
 
-*The phone app: every drive, with the gauge in the header - its connection
-and last sync, like a watch in Garmin Connect; a drive's track coloured by
-speed; and a tap on the gauge for the sync and its live readings (on the
-bench, hence "no answer"). More in [mobile/](mobile).*
+*The phone app: every drive, named after where it went and grouped by week,
+with the gauge in the header - its connection and last sync, like a watch in
+Garmin Connect; a drive's speed, boost, temperatures and voltage over time;
+and a tap on the gauge for its live readings in the car. More in
+[mobile/](mobile).*
 
 ## What it does
 
@@ -37,14 +38,22 @@ bench, hence "no answer"). More in [mobile/](mobile).*
   ready" state and over-temperature warnings), boost, a g-meter, the four tyre
   pressures and temperatures, GPS speed and trip distance, a lap timer that
   finds the start/finish line by itself (tap START in the pit, then drive).
-- **Logging:** a CSV of every drive (2 Hz, decoded values plus the raw
-  payloads), a GPX track at 25 Hz, a sleep log.
+- **Logging:** a CSV of every drive (2 Hz, decoded values - battery voltage
+  among them - plus the raw payloads), a GPX track at 25 Hz, a sleep log.
+  Logs can be encrypted to a key only the phone holds, so a card taken out
+  of the gauge gives nothing away.
+- **Waking up:** the N badge until the car answers, so the gauges never
+  show a row of dashes; with a PC on USB, a status page for the desk.
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
   days on the battery); wakes on CAN activity, the button, or the door
   opening (the IMU's wake-on-motion).
 - **Phone:** its own WiFi access point with settings pages, OTA firmware
   updates with rollback, and an Android app ([mobile/](mobile)) that joins it
-  from a QR code on the gauge, syncs the logs, and shows trips on a map.
+  from a QR code on the gauge and syncs the logs by itself. Each drive is
+  named after where it started and ended (offline, from GeoNames - your own
+  places like "Home" win), grouped by week, with its track on a map and its
+  speed, boost, temperatures and voltage as charts. Delete a drive and it
+  goes from the gauge too. English or Czech; dark themes or light.
 
 ## Hardware
 
@@ -76,6 +85,10 @@ the wrong turns, are in [DECISIONS.md](DECISIONS.md).
   there.
 - **Gear** is derived from rpm ÷ speed; the measured ratios are in
   `config.h`.
+- **Battery / charging voltage** is plain Mode 01 PID `0x42`: 14.4-15.0 V
+  running, 9.9-10.6 V cranking, 12.1-12.7 V just after switching off. Then
+  the ECU answers **0.00 V** for a few seconds before going quiet - drop
+  it, it is not the battery.
 
 ## Repository
 
@@ -120,4 +133,6 @@ cd mobile && ./scripts/build-apk.sh install   # release APK onto a phone over ad
 ## Licence
 
 [MIT](LICENSE). Third-party assets keep their own licences - see
-[firmware/assets/README.md](firmware/assets/README.md).
+[firmware/assets/README.md](firmware/assets/README.md). The place names in
+the app (`mobile/assets/places`) are from [GeoNames](https://www.geonames.org),
+CC BY 4.0.

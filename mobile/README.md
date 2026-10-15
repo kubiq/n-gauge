@@ -1,22 +1,24 @@
 # N Gauge — phone app
 
 Expo (SDK 57) app for the gauge: joins its WiFi, pulls the logs off its card
-by itself, shows each drive's stats and track on a map, decrypts encrypted
-logs, shows the gauge's live status, edits its settings and updates its
-firmware. Uploading the logs to [backend/](../backend) is built but switched
-off (`src/features.ts`).
+by itself, and shows every drive - named after where it went, grouped by
+week - with its track on a map and its readings as charts. It decrypts
+encrypted logs, deletes a drive from the phone and the gauge alike, shows
+the gauge's live status, edits its settings and updates its firmware.
+English or Czech; dark themes or light. Uploading the logs to
+[backend/](../backend) is built but switched off (`src/features.ts`).
 
 ## Screenshots
 
-Galaxy S22, 2026-10-13, the gauge on the bench (hence "Car: no answer"); the
-drives are real ones.
+Galaxy S22, 2026-10-14; the drives are real ones, their place names
+swapped for made-up ones and the map zoomed away from both ends.
 
 | | | |
 |---|---|---|
-| <img src="docs/screenshots/01-trips.png" width="240"> | <img src="docs/screenshots/03-trip-map.png" width="240"> | <img src="docs/screenshots/04-gauge.png" width="240"> |
-| Trips, the app's main screen. The gauge sits in the header, like a watch in Garmin Connect: its connection and when it last synced | A drive: the track, coloured by speed, and its stats | Tap the gauge: connection, the log sync (automatic on every connect), live status |
-| <img src="docs/screenshots/02-trips-menu.png" width="240"> | <img src="docs/screenshots/05-settings.png" width="240"> | <img src="docs/screenshots/06-settings-logging.png" width="240"> |
-| ⋮: Settings, and saving every log decrypted to a folder | Settings: log encryption, then the gauge's own settings | Log level, warnings, tyres, firmware upload |
+| <img src="docs/screenshots/01-trips.png" width="240"> | <img src="docs/screenshots/03-trip-map.png" width="240"> | <img src="docs/screenshots/07-drive-charts.png" width="240"> |
+| The main screen: every drive, named after where it went, by week. The gauge sits in the header, like a watch in Garmin Connect | A drive: the track, coloured by speed | Its readings over the drive - drag to read them at any moment |
+| <img src="docs/screenshots/04-gauge.png" width="240"> | <img src="docs/screenshots/02-settings.png" width="240"> | <img src="docs/screenshots/05-gauge-settings.png" width="240"> |
+| Tap the gauge: connection, live readings in the car, the log sync | Settings: language, theme, log encryption, your places | The gauge's own settings (an older shot, from before they had a screen of their own) |
 
 Android only. Joining the gauge's AP from an app needs `WifiNetworkSpecifier`,
 which is what the local module `modules/pod-wifi` wraps; iOS has no equivalent
@@ -37,7 +39,12 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
 - **Endpoints used:** `/api/live`, `/api/settings`, `/save` (form-encoded,
   keyed by the form names - see `src/lib/settings-schema.ts`), `/api/clock`,
   `/update`, `/api/files` (the card, paged JSON), `/dl` (with `Range`, for
-  a log that grew since the last sync).
+  a log that grew since the last sync), `/api/delete` (a drive's logs, from
+  the app's Delete).
+- **Deleting:** a drive deleted on the phone goes on a delete-on-gauge list;
+  every sync deletes those on the gauge first and never pulls them back
+  meanwhile - so deleting while not connected just waits for the next
+  connect.
 - **Sync:** on every connect, from any screen (`src/hooks/use-sync.tsx`):
   list the card, pull what is new or grew. The gauge serves one request at a
   time, so the live readout pauses meanwhile, and saving settings or a
@@ -50,19 +57,39 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
 
 | Path | What |
 |---|---|
-| `src/app/index.tsx` | Trips: every drive on the phone - the main screen, no tabs |
-| `src/app/trip/[key].tsx` | A drive: map, stats, share or save its logs |
-| `src/app/gauge.tsx` | The gauge: connect, the log sync, live status, clock, g-meter zero |
-| `src/app/settings.tsx` | Log encryption; the gauge's settings table, firmware upload |
+| `src/app/index.tsx` | N Gauge: every drive on the phone, by week - the main screen, no tabs |
+| `src/app/trip/[key].tsx` | A drive: map, charts, stats; rename, share, save or delete it |
+| `src/app/name.tsx` | Naming a drive, or one of its ends as a place of yours |
+| `src/app/gauge.tsx` | The gauge: connect, live status, the log sync, clock, g-meter zero |
+| `src/app/gauge-settings.tsx` | The gauge's settings table, its screens' order, firmware upload |
+| `src/app/settings.tsx` | The phone's: language, theme, log encryption, logs folder, your places |
 | `src/app/scan.tsx` | QR scan for the WiFi credentials |
 | `src/components/pod-chip.tsx` | The gauge in the header: connection and sync at a glance |
+| `src/components/drive-chart.tsx` | Speed, boost, temperatures, voltage over a drive (react-native-svg) |
 | `src/hooks/use-sync.tsx` | The sync, run by itself on every connect |
 | `src/lib/pod.ts` | HTTP client for the gauge |
-| `src/lib/store.ts` | Credentials and the inbox (the pulled logs) |
+| `src/lib/store.ts` | Credentials, the inbox (the pulled logs), the delete-on-gauge list |
+| `src/lib/trip-cache.ts` | Each log's summary, thinned track and chart series, cached by size |
 | `src/lib/trips.ts` | Parsing GPX / CSV, pairing a drive's files by session - pure, tested |
+| `src/lib/series.ts`, `weeks.ts` | A drive's readings for the charts; the list's weeks - pure, tested |
+| `src/lib/places.ts`, `names.ts` | Naming a drive from the place lists and your own places |
+| `assets/places/` | GeoNames place lists, CZ and neighbours (`scripts/make-places.ts`) |
 | `src/lib/sync-plan.ts` | What to pull, by `{name, size}` - pure, tested |
 | `src/lib/settings-schema.ts` | ⚠ Copy of the firmware's `settings_table` - change both |
+| `src/i18n/` | The app's words: English as the key, Czech in `cs/` |
+| `src/theme.ts` | The themes' colours; `useColors()` and `themed()` styles |
 | `modules/pod-wifi` | Kotlin: WifiNetworkSpecifier + process binding |
+
+## Words and colours
+
+- **Text** goes through `t('English text')` (`src/i18n`): the English is the
+  key, the Czech lives in `src/i18n/cs/`. Counts are `tn(n, '1 drive',
+  '{n} drives')` - Czech has three forms. Text in a table built at load time
+  is marked `N_('...')` and shown with `t()`. `npm test` fails on any text
+  without its Czech, or with placeholders that differ.
+- **Colours** come from `useColors()`, styles from `themed((C) =>
+  StyleSheet.create(...))` - never a StyleSheet with colours made at import,
+  which would keep the first theme's.
 
 ## Run
 
@@ -95,7 +122,7 @@ After changing anything under `modules/` rebuild; JS changes hot-reload.
 ## Check
 
 ```sh
-npm test            # node:test on src/lib (no React Native needed)
+npm test            # node:test on src/lib and src/i18n (no React Native needed)
 npm run typecheck
 npm run lint
 ```
