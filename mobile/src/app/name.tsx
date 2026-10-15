@@ -1,5 +1,5 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
 
 import { Button, Card, Note, Screen } from '@/components/ui';
@@ -20,6 +20,30 @@ export default function NameScreen() {
   const mine = trip ? null : ownPlaceAt(lat, lon, loadNames().places);
   const own = trip ? !!(p.key && loadNames().titles[p.key]) : !!mine;
   const [text, setText] = useState(p.current ?? '');
+  // The keyboard up without a tap on the field - focused once the modal has
+  // slid in, not during: autoFocus asked while it still moved, and Android
+  // ignored it at times (2026-10-15). The end of the slide is the
+  // navigation's transitionEnd; a timer covers it not coming.
+  const input = useRef<TextInput>(null);
+  const navigation = useNavigation();
+  useEffect(() => {
+    // Afresh - blurred first: a field focused before its window was active
+    // stays focused with no keyboard, and focusing it again did nothing
+    // (seen 2026-10-15: focused=true, mInputShown=false).
+    const focus = () => {
+      const el = input.current;
+      if (!el) return;
+      if (el.isFocused()) el.blur();
+      el.focus();
+    };
+    const later = () => setTimeout(focus, 50);
+    const off = navigation.addListener('transitionEnd' as never, later);
+    const timer = setTimeout(focus, 500);
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, [navigation]);
   const C = useColors();
   const styles = useStyles();
   const name = text.trim();
@@ -35,10 +59,10 @@ export default function NameScreen() {
       <Stack.Screen options={{ title: trip ? t('Rename the drive') : mine ? t('Rename your place') : t('Name this place') }} />
       <Card>
         <TextInput
+          ref={input}
           style={styles.input}
           value={text}
           onChangeText={setText}
-          autoFocus
           selectTextOnFocus
           placeholder={trip ? t('e.g. Track day') : t('e.g. Home')}
           placeholderTextColor={C.dim}

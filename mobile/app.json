@@ -9,6 +9,7 @@
     "backgroundColor": "#0d1116",
     "android": {
       "package": "dev.ngauge.pod",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#0d1116",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
