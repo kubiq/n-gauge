@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { Note, useHoldScroll } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { t } from '@/i18n';
+import { speedStops } from '@/lib/speed-scale';
 import type { TrackPoint } from '@/lib/trips';
 import { type Colors, S, themed, useColors } from '@/theme';
 
@@ -17,33 +18,44 @@ const MAPLIBRE = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist';
 // The theme picks the style: 'dark', or 'positron' for the light theme.
 const STYLES = 'https://tiles.openfreemap.org/styles/';
 
-// Speed bands of this width become one line each, so the colour follows the
-// speed without a feature per point.
-const BAND_KMH = 10;
+// The five colours of the speed scale, slow to fast; their km/h stops are
+// fitted to each drive (speedStops: 0 to just over its top speed).
+const SPEED_COLOURS = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
-/** The track as GeoJSON lines, one per run of points in the same speed band. */
-export function speedLines(track: TrackPoint[]) {
+/** A drive's speed stops, from its track's top speed. */
+const stopsOf = (track: TrackPoint[]) => speedStops(track.reduce((m, p) => Math.max(m, p[2]), 0));
+
+/**
+ * The track as GeoJSON lines, one per run of points in the same speed band
+ * - so the colour follows the speed without a feature per point. A band is
+ * a fifth of a scale step: five shades between two colours, on a slow
+ * drive's 5 km/h steps as on a fast one's 35.
+ */
+export function speedLines(track: TrackPoint[], bandKmh: number) {
   const features = [];
   let run: [number, number][] = [];
   let band = -1;
   for (const [lon, lat, kmh] of track) {
-    const b = Math.floor(kmh / BAND_KMH);
+    const b = Math.floor(kmh / bandKmh);
     if (b !== band && run.length) {
       run.push([lon, lat]);   // share the point, so the line has no gaps
-      features.push({ type: 'Feature', properties: { kmh: band * BAND_KMH + BAND_KMH / 2 }, geometry: { type: 'LineString', coordinates: run } });
+      features.push({ type: 'Feature', properties: { kmh: band * bandKmh + bandKmh / 2 }, geometry: { type: 'LineString', coordinates: run } });
       run = [];
     }
     band = b;
     run.push([lon, lat]);
   }
   if (run.length > 1) {
-    features.push({ type: 'Feature', properties: { kmh: band * BAND_KMH + BAND_KMH / 2 }, geometry: { type: 'LineString', coordinates: run } });
+    features.push({ type: 'Feature', properties: { kmh: band * bandKmh + bandKmh / 2 }, geometry: { type: 'LineString', coordinates: run } });
   }
   return { type: 'FeatureCollection', features };
 }
 
 function html(track: TrackPoint[], bbox: [number, number, number, number], C: Colors) {
-  const lines = JSON.stringify(speedLines(track));
+  const stops = stopsOf(track);
+  const lines = JSON.stringify(speedLines(track, stops[1] / 5));
+  // MapLibre's interpolate: stop, colour, stop, colour...
+  const ramp = JSON.stringify(stops.flatMap((s, i) => [s, SPEED_COLOURS[i]]));
   const ends = JSON.stringify({
     type: 'FeatureCollection',
     features: [track[0], track[track.length - 1]].map((p, i) => ({
@@ -83,8 +95,7 @@ else {
       paint: { 'line-color': '#000', 'line-width': 7, 'line-opacity': 0.5 } });
     map.addLayer({ id: 'speed', type: 'line', source: 't',
       layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-width': 4, 'line-color': ['interpolate', ['linear'], ['get', 'kmh'],
-        0, '#3b82f6', 50, '#22c55e', 90, '#eab308', 130, '#f97316', 170, '#ef4444'] } });
+      paint: { 'line-width': 4, 'line-color': ['interpolate', ['linear'], ['get', 'kmh'], ...${ramp}] } });
     map.addSource('e', { type: 'geojson', data: ${ends} });
     map.addLayer({ id: 'ends', type: 'circle', source: 'e',
       paint: { 'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff',
@@ -205,17 +216,12 @@ export function TrackMap({
           </Pressable>
         </View>
       ) : null}
+      {/* This drive's own scale: 0 to just over its top speed. */}
       <View style={styles.legend}>
-        {[
-          ['#3b82f6', '0'],
-          ['#22c55e', '50'],
-          ['#eab308', '90'],
-          ['#f97316', '130'],
-          ['#ef4444', '170+ km/h'],
-        ].map(([c, t]) => (
-          <View key={t} style={styles.legendItem}>
-            <View style={[styles.swatch, { backgroundColor: c }]} />
-            <Note>{t}</Note>
+        {stopsOf(track).map((kmh, i, all) => (
+          <View key={kmh} style={styles.legendItem}>
+            <View style={[styles.swatch, { backgroundColor: SPEED_COLOURS[i] }]} />
+            <Note>{i === all.length - 1 ? `${kmh} km/h` : String(kmh)}</Note>
           </View>
         ))}
       </View>
