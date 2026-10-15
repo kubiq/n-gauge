@@ -117,9 +117,14 @@ static void notice_tap_cb(lv_event_t *e);
 // which has none. Vertical swipes are ignored, so they stay free for later use.
 static void screen_gesture_cb(lv_event_t *e) {
   (void)e;
-  const lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
-  if (dir == LV_DIR_LEFT)       ui_step_view(+1);
-  else if (dir == LV_DIR_RIGHT) ui_step_view(-1);
+  lv_indev_t *indev = lv_indev_active();
+  const lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+  if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
+  ui_step_view(dir == LV_DIR_LEFT ? +1 : -1);
+  // One swipe, one screen: the finger is still down, and on the new screen
+  // LVGL takes what is under it for a fresh press - the rest of the same
+  // swipe would be a second gesture, and a third. Ignored until it lifts.
+  lv_indev_wait_release(indev);
 }
 
 // For button handlers: was the touch that just ended actually a swipe?
@@ -585,10 +590,10 @@ void ui_init() {
   // also narrows too fast for two 130 px buttons side by side.
   scr[VIEW_TRACK] = make_screen();
   // How far the line is, against the best lap's length: an arc round the
-  // edge emptying towards it, as the WiFi screen's countdown. First, so it
+  // edge filling up towards it - full at the line. First, so it
   // is under everything - and not clickable (make_arc_sized), so the
   // buttons above it still take every tap.
-  trkLeft = make_arc_sized(scr[VIEW_TRACK], COL_GOOD, 0, TRACK_ARC_STEPS, 440, 6);
+  trkLeft = make_arc_sized(scr[VIEW_TRACK], COL_BLUE, 0, TRACK_ARC_STEPS, 440, 12);
   lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
   // Chequered flag in place of the "LAP TIMER" caption (Material Symbols
   // "sports_score", Apache 2.0 - see firmware/assets/). Coloured by session
@@ -1685,12 +1690,15 @@ void ui_update_track(const LapInfo *li) {
   }
 
   // The arc: hidden with no reference or not timing; otherwise the part of
-  // the best lap still to drive. Shown or hidden only on a change - clearing
-  // HIDDEN invalidates the whole object (the WiFi screen's 7 Hz lesson).
+  // the best lap driven so far, filling up to the line. Shown or hidden only
+  // on a change - clearing HIDDEN invalidates the whole object (the WiFi
+  // screen's 7 Hz lesson).
   static int lastArc = -2;
   int arc = -1;
   if (li->state == LAP_TIMING && li->refM > 0.0f) {
-    arc = (int)ceilf(calc_lap_left_m(li->refM, li->lapM) / li->refM * TRACK_ARC_STEPS);
+    const float left = calc_lap_left_m(li->refM, li->lapM);
+    arc = (int)floorf((li->refM - left) / li->refM * TRACK_ARC_STEPS);
+    if (arc < 0) arc = 0;
     if (arc > TRACK_ARC_STEPS) arc = TRACK_ARC_STEPS;
   }
   if (arc != lastArc) {
