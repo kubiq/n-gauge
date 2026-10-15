@@ -2,6 +2,8 @@
 // its own screens (ui.cpp) in an SDL window, fed a recorded drive.
 //
 //   sim/run.sh [drive_....csv] [trip_....gpx]
+//   gauge-sim --shots DIR ...   screenshots of every screen, then quit
+//                               (sim/screenshots.sh, sim_shots.cpp)
 //
 // Keys in the window:
 //   space      pause / go on          1 2 3   1x, 5x, 20x speed
@@ -21,6 +23,9 @@
 #include "sim_replay.h"
 void setup();
 void loop();
+void shots_init(const char *dir);   // sim_shots.cpp
+bool shots_on();
+void shots_step(double replayMs);
 extern bool simUsbHost;
 
 // ---- the simulation's clock -------------------------------------------------
@@ -79,6 +84,7 @@ static bool endsWith(const std::string &s, const char *suffix) {
 int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     const std::string a = argv[i];
+    if (a == "--shots" && i + 1 < argc) { shots_init(argv[++i]); continue; }
     const bool ok = endsWith(a, ".csv") ? replay.loadCsv(a) : endsWith(a, ".gpx") ? replay.loadGpx(a) : false;
     std::printf("[sim] %s: %s\n", a.c_str(), ok ? "loaded" : "could not read (a plain .csv or .gpx?)");
   }
@@ -91,9 +97,11 @@ int main(int argc, char **argv) {
 
   setup();
   SDL_AddEventWatch(onEvent, nullptr);
+  if (shots_on()) { rebase(); speed = 20.0; }   // nobody watching: no need to wait
   for (;;) {
     const double t = simNowMs() - replayOffsetMs;
     if (t >= 0) replay_feed((uint32_t)t);
     loop();
+    shots_step(t);
   }
 }

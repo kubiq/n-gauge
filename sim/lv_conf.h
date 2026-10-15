@@ -12,3 +12,7 @@
 #define LV_SDL_FULLSCREEN 0
 #define LV_SDL_DIRECT_EXIT 1
 #define LV_SDL_MOUSEWHEEL_MODE LV_SDL_MOUSEWHEEL_MODE_ENCODER
+
+// Screenshots of a screen, rendered straight from its objects (sim_shots.cpp).
+#undef LV_USE_SNAPSHOT
+#define LV_USE_SNAPSHOT 1

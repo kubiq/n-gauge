@@ -136,8 +136,15 @@ static size_t nextRow = 0, nextFix = 0;
 static uint32_t lastFixT = 0;
 float simImu[3] = {0.0f, 0.0f, 1.0f};
 
+// The trip so far, as the logger keeps it on the gauge: the fixes' path.
+static double tripM = 0.0;
+static bool tripFrom = false;   // a previous fix to measure from
+float sim_trip_km() { return (float)(tripM / 1000.0); }
+
 void replay_rewind() {
   nextRow = nextFix = 0;
+  tripM = 0.0;
+  tripFrom = false;
 }
 
 static void apply(const ReplayRow &r) {
@@ -177,6 +184,11 @@ void replay_feed(uint32_t t) {
   bool moved = false;
   while (nextFix < replay.fixes.size() && replay.fixes[nextFix].t <= t) {
     const ReplayFix &x = replay.fixes[nextFix++];
+    if (tripFrom) {   // metres from the previous fix, flat-earth: fine at 40 ms apart
+      const double dy = (x.lat1e7 - currentFix.lat1e7) * 0.0111319;
+      const double dx = (x.lon1e7 - currentFix.lon1e7) * 0.0111319 * std::cos(x.lat1e7 * 1e-7 * M_PI / 180.0);
+      tripM += std::sqrt(dx * dx + dy * dy);
+    }
     gps.lat1e7 = x.lat1e7;
     gps.lon1e7 = x.lon1e7;
     gps.altM = x.altM;
@@ -185,6 +197,7 @@ void replay_feed(uint32_t t) {
     if (!std::isnan(x.kmh)) gps.speedKmh = x.kmh;
     currentFix = GpsFix{x.lat1e7, x.lon1e7, x.altM, x.msOfDay, true, (uint32_t)nextFix};
     haveCurrent = true;
+    tripFrom = true;
     lastFixT = x.t;
     moved = true;
   }

@@ -90,7 +90,8 @@ void logger_sd_unlock() {}
 bool logger_card_ok() { return true; }
 void logger_dump_tail(size_t) {}
 void logger_close() {}
-float logger_trip_km() { return 0.0f; }
+float sim_trip_km();
+float logger_trip_km() { return sim_trip_km(); }
 void logger_note_g(float, float) {}
 void logger_note_raw_g(float, float, float) {}
 void logger_note_loop_us(uint32_t) {}

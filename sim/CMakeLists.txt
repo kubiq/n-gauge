@@ -30,6 +30,7 @@ add_executable(gauge-sim
   sim_main.cpp
   sim_hw.cpp
   sim_replay.cpp
+  sim_shots.cpp
   gauge_firmware.cpp
   ${FW}/ui.cpp
   ${FW}/laps.cpp
