@@ -97,7 +97,11 @@ export default function TripsScreen() {
   const saveAll = async () => {
     setSaving(true);
     try {
-      const names = [...trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n), ...trackLogNames()];
+      // Read now, not from `trips`: the header's ⋮ keeps the function it was
+      // given when it last updated (the effect below), and so its list - drives
+      // synced since were missing, and "Save all" said all was already there.
+      const now = tripFiles();
+      const names = [...now.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n), ...trackLogNames()];
       const r = await saveLogsToFolder(names, setStatus);
       setStatus(null);
       Alert.alert(t('Saved'), savedText(r));
@@ -122,7 +126,7 @@ export default function TripsScreen() {
         <HeaderActions items={[{ label: t('Settings'), onPress: () => router.push('/settings') }, ...(hasTrips ? [save] : [])]} />
       ),
     });
-  }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [navigation, hasTrips, saving]);
 
   // Rows with their summaries; restart fragments and blips hidden (isStub),
   // with a line saying how many - nothing just disappears.
