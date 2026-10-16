@@ -118,5 +118,8 @@ export const trips: Record<string, string> = {
   // lib/weeks.ts - the drives list's week headings
   'Undated': 'Bez data',
   'This week': 'Tento týden',
+  // A drive's date and time (lib/format.ts when())
+  Today: 'Dnes',
+  Yesterday: 'Včera',
   'Last week': 'Minulý týden',
 };
