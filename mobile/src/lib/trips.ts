@@ -283,6 +283,18 @@ export const sessionOf = (n: string) => /_([0-9a-f]{6})\.(?:gpx|csv|vbo)(?:\.nge
 export type TripFiles = { key: string; gpx?: string; csv?: string; start: number | null };
 
 /**
+ * The names you gave drives (keyed by a file's name: the GPX, or the CSV
+ * without one) that no file on the phone answers to any more - drives
+ * deleted, and a test's leftover "zz-test". Only those: a key whose file is
+ * still here keeps its name, even when the drive's key has moved on (its
+ * CSV came first and was named, the GPX after).
+ */
+export function staleTitleKeys(titles: Record<string, string>, trips: TripFiles[]): string[] {
+  const files = new Set(trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n));
+  return Object.keys(titles).filter((k) => !files.has(k));
+}
+
+/**
  * Not a drive worth a row: a restart fragment or the engine on for a moment
  * (2026-10-12: "21:18, 0.0 km, 1 min, top 2 km/h"). With a track: under
  * 200 m and 3 minutes. Car data only: under a minute. Without a summary yet,

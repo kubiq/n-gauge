@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, isStub, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates } from './trips.ts';
+import { distM, isStub, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates, staleTitleKeys } from './trips.ts';
 
 // One line exactly as logger.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -268,3 +268,19 @@ test('pairing: leftovers on their own, numbered last, a second csv of a session 
   );
 });
 
+
+test('names: only those no file answers to any more are stale', () => {
+  const trips = [
+    { key: 'trip_2026-10-14_12-42_9a94e1.gpx', gpx: 'trip_2026-10-14_12-42_9a94e1.gpx', csv: 'drive_2026-10-14_12-42_9a94e1.csv', start: 1 },
+    { key: 'drive_0279_eeeeee.csv', csv: 'drive_0279_eeeeee.csv', start: null },
+  ];
+  const titles = {
+    'trip_2026-10-14_12-42_9a94e1.gpx': 'To work', // its drive
+    'drive_2026-10-14_12-42_9a94e1.csv': 'Named before the GPX came', // a file still here: kept
+    'drive_0279_eeeeee.csv': 'Car data only',
+    'trip_2026-10-01_08-00_aaaaaa.gpx': 'Deleted', // gone
+    'zz-test': 'A test leftover', // never a file
+  };
+  assert.deepEqual(staleTitleKeys(titles, trips), ['trip_2026-10-01_08-00_aaaaaa.gpx', 'zz-test']);
+  assert.deepEqual(staleTitleKeys({}, trips), []);
+});

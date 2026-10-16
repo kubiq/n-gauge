@@ -8,7 +8,7 @@ import { File, Paths } from 'expo-file-system';
 
 import { type OwnPlace, ownPlaceAt, routeName } from './places';
 import type { GpxStats } from './trip-cache';
-import type { TripFiles } from './trips';
+import { staleTitleKeys, type TripFiles } from './trips';
 
 export type Names = {
   places: OwnPlace[];
@@ -32,12 +32,37 @@ function save(n: Names): Names {
   return n;
 }
 
-/** The drive's own name, or null to go back to the automatic one. */
-export function setTripTitle(key: string, title: string | null): Names {
+/**
+ * Forgets the names of drives the phone no longer has (staleTitleKeys) -
+ * deleted ones, a test's leftover. Written only when something goes, and
+ * never with no drives listed: an empty list is more likely a folder not
+ * read than every drive deleted.
+ */
+export function forgetStaleTitles(trips: TripFiles[]): Names {
   const n = loadNames();
-  if (title) n.titles[key] = title;
-  else delete n.titles[key];
+  if (!trips.length) return n;
+  const stale = staleTitleKeys(n.titles, trips);
+  if (!stale.length) return n;
+  for (const k of stale) delete n.titles[k];
   return save(n);
+}
+
+/**
+ * The drive's own name, or null to go back to the automatic one. Kept under
+ * its key; a name it was given under its CSV, before its GPX came, goes - or
+ * that one would still show after going back to automatic.
+ */
+export function setTripTitle(t: Pick<TripFiles, 'key' | 'csv'>, title: string | null): Names {
+  const n = loadNames();
+  if (t.csv && t.csv !== t.key) delete n.titles[t.csv];
+  if (title) n.titles[t.key] = title;
+  else delete n.titles[t.key];
+  return save(n);
+}
+
+/** Has the drive a name you gave it (under its key, or its CSV's)? */
+export function hasTripTitle(t: Pick<TripFiles, 'key' | 'csv'>, n: Names): boolean {
+  return !!(n.titles[t.key] || (t.csv && n.titles[t.csv]));
 }
 
 /**
@@ -79,6 +104,8 @@ export function endName(pt: [number, number] | null, listName: string | null, n:
 /** What a drive is called: your name for it, else where it went, else null (the date then). */
 export function tripName(t: TripFiles, g: GpxStats | undefined | null, n: Names): string | null {
   if (n.titles[t.key]) return n.titles[t.key];
+  // Named while only its CSV was here, the key then: the GPX came after.
+  if (t.csv && n.titles[t.csv]) return n.titles[t.csv];
   if (!g) return null;
   return routeName(endName(g.from, g.fromPlace, n), endName(g.to, g.toPlace, n));
 }

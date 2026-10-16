@@ -4,8 +4,9 @@ import { Alert, StyleSheet, TextInput } from 'react-native';
 
 import { Button, Card, Note, Screen } from '@/components/ui';
 import { t, tn } from '@/i18n';
-import { forgetPlaces, loadNames, nameOwnPlace, renamePlaces, setTripTitle } from '@/lib/names';
+import { forgetPlaces, hasTripTitle, loadNames, nameOwnPlace, renamePlaces, setTripTitle } from '@/lib/names';
 import { ownPlaceAt } from '@/lib/places';
+import { tripFiles } from '@/lib/trip-cache';
 import { S, themed, useColors } from '@/theme';
 
 // Naming, from a drive's ⋮ (Alert.prompt is iOS only):
@@ -27,7 +28,9 @@ export default function NameScreen() {
   const group = p.kind === 'group' ? (p.current ?? '') : null;
   const lat = Number(p.lat), lon = Number(p.lon);
   const mine = trip || group !== null ? null : ownPlaceAt(lat, lon, loadNames().places);
-  const own = trip ? !!(p.key && loadNames().titles[p.key]) : group !== null || !!mine;
+  // The drive's files: a name it had under its CSV counts as its own too.
+  const drive = trip && p.key ? (tripFiles().find((x) => x.key === p.key) ?? { key: p.key }) : null;
+  const own = drive ? hasTripTitle(drive, loadNames()) : group !== null || !!mine;
   const [text, setText] = useState(p.current ?? '');
   // The keyboard up without a tap on the field - focused once the modal has
   // slid in, not during: autoFocus asked while it still moved, and Android
@@ -59,7 +62,7 @@ export default function NameScreen() {
 
   const done = () => router.back();
   const save = (value: string | null) => {
-    if (trip) setTripTitle(p.key!, value);
+    if (drive) setTripTitle(drive, value);
     else if (group !== null) {
       if (value) renamePlaces(group, value);
       else forgetPlaces(group);

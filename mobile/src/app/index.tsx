@@ -9,7 +9,7 @@ import { Card, Note, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
-import { loadNames, type Names, tripName } from '@/lib/names';
+import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, weekLabel } from '@/lib/weeks';
 import { saveLogsToFolder, savedText } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
@@ -60,7 +60,7 @@ export default function TripsScreen() {
         }
       }
       setTrips(list);
-      setNames(loadNames());
+      setNames(forgetStaleTitles(list));
       setSums(have);
       setProblems({});
       // Says plainly whether the cache is doing its job.
