@@ -292,6 +292,19 @@ The probe and the link benchmark were then **removed** (2026-10-09), not left
 switched off: every engine reply still went through their hooks, and they
 were 563 lines and 4 KB of flash for questions already answered.
 
+**No oil pressure: the engine has a switch, not a sender.** (2026-10-16.)
+The parts catalogues list only an on/off switch for the i30 N's G4KH
+(94750-37100: 0.3 bar, one wire) - it lights the dash lamp and has no value
+behind it. Mode 01 has no oil pressure PID. A forum claim that a workshop
+tool and a Car Scanner profile for another Hyundai engine show it came with
+no request, byte or values. In the logged E001 payload (14 drives, 27k rows)
+the one pressure-like value, bytes 31-32 little-endian, rises with rpm and
+levels off at ~505 from 4000 rpm, and falls as the oil warms - but it trails
+rpm by ~1 s more than E001's own rpm byte (byte 8, rpm / 65.6) and reads
+280-510 with the engine off, where a sensor reads zero: modelled, not
+measured. The test for any future candidate: it follows rpm at once, falls
+as the oil warms, and is zero with the engine stopped.
+
 **Boost shows 0.00 below atmospheric, and its zero is the car's baro.**
 Negative boost is real — on a petrol engine the throttle holds the manifold
 in vacuum at part throttle even with the turbo spinning (~−0.5 bar idle,
