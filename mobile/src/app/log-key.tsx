@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, TextInput } from 'react-native';
 
 import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
-import { usePod } from '@/hooks/use-pod';
+import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { t } from '@/i18n';
 import { keyFromText, toHex } from '@/lib/logcrypt';
 import { copyLogKey, createLogKey, importLogKey, loadLogKey, type LogKey } from '@/lib/logkey';
@@ -15,6 +15,7 @@ export default function LogKeyScreen() {
   const C = useColors();
   const ui = useUi();
   const pod = usePod();
+  useHoldPod();   // telling the gauge the key needs it: no disconnect after syncing
   const connected = pod.state === 'connected';
   const [key, setKey] = useState<LogKey | null | undefined>(undefined);
   // The pod's key fingerprint: undefined = not known (yet), '' = plain logs.

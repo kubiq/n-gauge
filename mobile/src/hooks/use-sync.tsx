@@ -9,6 +9,7 @@
 // firmware upload cancels it first.
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { ToastAndroid } from 'react-native';
 
 import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
@@ -18,6 +19,7 @@ import {
   type Inbox,
   knownBytes,
   loadDeleted,
+  loadDisconnectAfterSync,
   loadInbox,
   loadLastSync,
   pull,
@@ -82,6 +84,17 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [landed, setLanded] = useState(0);
   const [progress, setProgress] = useState<{ at: number; of: number } | null>(null);
   const [lastSync, setLastSync] = useState(loadLastSync);
+  // The connection (pod.session) a sync last finished on with nothing left
+  // to pull. Per connection, so a new one is not taken as synced before its
+  // own sync has begun.
+  const [syncedSession, setSyncedSession] = useState(-1);
+  const session = useRef(pod.session);
+  // Files pulled since this connection began, for the message on leaving it.
+  const pulledThisSession = useRef(0);
+  useEffect(() => {
+    session.current = pod.session;
+    pulledThisSession.current = 0;
+  }, [pod.session]);
   // One check or pull at a time - the pod serves one request at a time anyway.
   const running = useRef<Promise<void> | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -134,6 +147,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           ctl.signal,
         );
         done++;
+        pulledThisSession.current++;
         // Per file, so "On the phone", the count of what is left and the
         // Trips list move as each one lands.
         const now = loadInbox();
@@ -192,6 +206,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           const now = Date.now();
           saveLastSync(now);
           setLastSync(now);
+          setSyncedSession(session.current);
         }
       }),
     [run],
@@ -214,6 +229,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     stopped.current = true;
     abort.current?.abort();
   }, [connected, sync]);
+
+  // Synced, nothing left on the gauge: off its WiFi, so the phone is back on
+  // the internet - maps, place names - without a trip to Android's settings.
+  // Not while a screen that needs the gauge is open (its settings, the log
+  // key): then once it closes. A sync that stopped short stays connected, to
+  // be tried again. Switched off in Settings ("Disconnect after syncing").
+  // Said in a toast, so it does not just look like the WiFi dropping: what
+  // came over this connection, and that the phone let go of the gauge.
+  const { holders, disconnect } = pod;
+  const synced = syncedSession === pod.session;
+  useEffect(() => {
+    if (!(connected && synced && phase === 'idle' && holders === 0 && loadDisconnectAfterSync())) return;
+    const n = pulledThisSession.current;
+    disconnect();
+    ToastAndroid.show(
+      n
+        ? tn(n, '1 new file from the gauge - disconnected.', '{n} new files from the gauge - disconnected.')
+        : t('Nothing new on the gauge - disconnected.'),
+      ToastAndroid.LONG,
+    );
+  }, [connected, synced, phase, holders, disconnect]);
 
   return (
     <SyncContext.Provider

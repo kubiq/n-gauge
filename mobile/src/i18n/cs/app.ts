@@ -45,6 +45,12 @@ export const app: Record<string, string> = {
   Manage: 'Spravovat',
   'Set up': 'Nastavit',
 
+  // Gauge connection (connection-card.tsx)
+  'Gauge connection': 'Připojení k budíku',
+  'Disconnect after syncing': 'Po synchronizaci odpojit',
+  'Once the new logs are on the phone, it leaves the gauge’s WiFi and is back on the internet. Not while the gauge’s settings or the log key are open.':
+    'Jakmile jsou nové záznamy v telefonu, odpojí se od WiFi budíku a je zase na internetu. Ne, dokud jsou otevřená nastavení budíku nebo klíč záznamů.',
+
   // Logs folder (logs-folder-card.tsx)
   Folder: 'Složka',
   'Logs folder': 'Složka pro záznamy',

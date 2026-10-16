@@ -4,7 +4,7 @@ import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'rea
 
 import { ScreenOrderCard } from '@/components/screen-order-card';
 import { Button, Card, Note, Screen, useUi } from '@/components/ui';
-import { usePod } from '@/hooks/use-pod';
+import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { t, tn } from '@/i18n';
 import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
@@ -17,6 +17,7 @@ const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
 // the Gauge screen, and linked from Settings, which holds the phone's.
 export default function GaugeSettingsScreen() {
   const pod = usePod();
+  useHoldPod();   // its settings and firmware need it: no disconnect after syncing
   const connected = pod.state === 'connected';
   const [orig, setOrig] = useState<PodSettings | null>(null);
   // Edits as typed: text for numbers (so "2." survives), booleans as is.

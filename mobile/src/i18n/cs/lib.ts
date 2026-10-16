@@ -5,6 +5,10 @@ export const lib: Record<string, string> = {
   'Pulled 1 file.|Pulled {n} files.': 'Stažen {n} soubor.|Staženy {n} soubory.|Staženo {n} souborů.',
   'Cancelled after {done} of {total}.': 'Zrušeno po {done} z {total}.',
   'Stopped after {done} of {total}: {error}': 'Zastaveno po {done} z {total}: {error}',
+  // Leaving the gauge's WiFi after a sync (a toast)
+  '1 new file from the gauge - disconnected.|{n} new files from the gauge - disconnected.':
+    '{n} nový soubor z budíku - odpojeno.|{n} nové soubory z budíku - odpojeno.|{n} nových souborů z budíku - odpojeno.',
+  'Nothing new on the gauge - disconnected.': 'Na budíku nic nového - odpojeno.',
 
   // The connection (hooks/use-pod.tsx)
   'Lost the gauge’s WiFi': 'Spojení s Wi-Fi budíku ztraceno',

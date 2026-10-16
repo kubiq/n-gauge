@@ -48,6 +48,21 @@ export function saveLastSync(t: number): void {
   lastSyncFile.write(String(t));
 }
 
+// Leave the gauge's WiFi once a sync is done, so the phone is back on the
+// internet (maps, place names) - unless a gauge screen is open. On unless
+// switched off: the file exists only for "off".
+const keepConnectedFile = new File(Paths.document, 'keep-connected.txt');
+
+export function loadDisconnectAfterSync(): boolean {
+  return !keepConnectedFile.exists;
+}
+
+export function saveDisconnectAfterSync(on: boolean): void {
+  if (on) {
+    if (keepConnectedFile.exists) keepConnectedFile.delete();
+  } else keepConnectedFile.write('1');
+}
+
 // Where "Save to a folder" writes: the URI Android's folder picker returned.
 // The picker took a persistable permission on it, so it stays usable across
 // restarts - until the folder is deleted or the permission revoked.
