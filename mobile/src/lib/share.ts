@@ -9,12 +9,25 @@ import * as Sharing from 'expo-sharing';
 import { t } from '../i18n/index.ts';
 import { cleanGpx } from './gpx-share';
 import { readLogText } from './logtext';
-import { loadLogsFolder, saveLogsFolder } from './store';
-import { isGpxName, plainName } from './trips';
+import { inboxFile, loadInbox, loadLogsFolder, saveLogsFolder } from './store';
+import { isGpxName, isVboName, plainName } from './trips';
+
+/**
+ * The track sessions' .vbo files the phone holds. Not drives, so not in the
+ * list (tripFiles), but "Save all to a folder" takes them too - they are
+ * what Circuit Tools and other lap analysers open.
+ */
+export function trackLogNames(): string[] {
+  return Object.keys(loadInbox()).filter((n) => isVboName(n) && inboxFile(n).exists).sort();
+}
 
 const dir = new Directory(Paths.cache, 'share');
 
-const mimeOf = (name: string) => (isGpxName(name) ? 'application/gpx+xml' : 'text/csv');
+// A track session's .vbo has no type of its own; octet-stream, because the
+// folder picker gives a name a type's extension when it lacks one -
+// "track_....vbo.txt" as text/plain.
+const mimeOf = (name: string) =>
+  isGpxName(name) ? 'application/gpx+xml' : isVboName(name) ? 'application/octet-stream' : 'text/csv';
 
 /**
  * A log as other software should get it: decrypted, under its plain name,

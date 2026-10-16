@@ -11,7 +11,7 @@ import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, weekLabel } from '@/lib/weeks';
-import { saveLogsToFolder, savedText } from '@/lib/share';
+import { saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
 import { S, themed } from '@/theme';
@@ -97,7 +97,7 @@ export default function TripsScreen() {
   const saveAll = async () => {
     setSaving(true);
     try {
-      const names = trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n);
+      const names = [...trips.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n), ...trackLogNames()];
       const r = await saveLogsToFolder(names, setStatus);
       setStatus(null);
       Alert.alert(t('Saved'), savedText(r));

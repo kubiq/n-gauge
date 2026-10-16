@@ -278,6 +278,7 @@ export const isEncryptedName = (n: string) => n.endsWith('.nge');
 export const plainName = (n: string) => (isEncryptedName(n) ? n.slice(0, -4) : n);
 export const isGpxName = (n: string) => /^trip_.+\.gpx(?:\.nge)?$/.test(n);
 export const isCsvName = (n: string) => /^drive_.+\.csv(?:\.nge)?$/.test(n);
+export const isVboName = (n: string) => /^track_.+\.vbo(?:\.nge)?$/.test(n);
 export const sessionOf = (n: string) => /_([0-9a-f]{6})\.(?:gpx|csv|vbo)(?:\.nge)?$/.exec(n)?.[1] ?? null;
 
 export type TripFiles = { key: string; gpx?: string; csv?: string; start: number | null };
