@@ -205,7 +205,10 @@
 // ECU does not answer too. Six is the most Mode 01 allows per request.
 // RPM took baro's place (2026-10-08): baro, the zero for boost, changes only
 // with weather and altitude, so it has its own slow entry (BARO_POLL_MS).
-#define OBD_MULTI_PIDS      { 0x0B, 0x05, 0x0D, 0x43, 0x0C, 0x49 }
+// 0x5E engine fuel rate took 0x05's (2026-10-16): the raw coolant sensor is
+// only logged - the screen shows the dashboard's (E001) - so it went to the
+// once-a-second request, and fuel rate, which moves with the pedal, is fast.
+#define OBD_MULTI_PIDS      { 0x0B, 0x5E, 0x0D, 0x43, 0x0C, 0x49 }
 #define BARO_POLL_MS        60000
 // For the track log (2026-10-09): 0x0E timing advance - where the ECU pulls
 // ignition timing (knock, heat), which is also when the torque estimate
@@ -217,8 +220,19 @@
 // PID 0x42, control module voltage (2026-10-14): the ECU's own supply - the
 // battery with the engine off, the charging voltage running. Its own request:
 // added to OBD_SLOW_PIDS its 2 bytes would push that reply past one frame.
-// Once a second is plenty for a voltage.
+// Once a second is plenty for a voltage. 0x59 fuel rail pressure (the direct
+// injection's high-pressure pump) rides along since 2026-10-16: the two still
+// answer in one frame.
+#define OBD_VOLTS_PIDS      { 0x42, 0x59 }
 #define VOLTS_POLL_MS       1000
+// Once a second, for the logs (2026-10-16), all in the ECU's supported list
+// (the 2026-10-03 probe) but not yet seen answering: 0x05 the raw coolant
+// sensor (from the fast request), 0x34 lambda measured by the wideband O2
+// sensor and 0x44 the lambda the ECU asks for (rich under full throttle),
+// 0x46 outside air, 0x2F the fuel tank, 0x3C the catalyst. Six, the most a
+// request takes; the reply is multi-frame.
+#define OBD_HZ1_PIDS        { 0x05, 0x34, 0x44, 0x46, 0x2F, 0x3C }
+#define OBD_HZ1_POLL_MS     1000
 // Below this a 0x42 answer is not a voltage: the ECU says 0.00 V while it
 // shuts down. Cranking, the lowest real reading, was 9.9 V (2026-10-14).
 #define VOLTS_MIN_V         5.0f

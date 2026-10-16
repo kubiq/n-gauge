@@ -715,7 +715,8 @@ static bool driveOpen() {
                                "t0bar,t1bar,t2bar,t3bar,t0c,t1c,t2c,t3c,tpmsRaw,"
                                "oilRawPayload,apUp,obdKmh,coolantPid05C,"
                                "absLoadPct,baroKpa,pedalRaw,rpm,timingDeg,iatC,gear,"
-                               "logMaxMs,loopMaxMs,volts\r\n";
+                               "logMaxMs,loopMaxMs,volts,"
+                               "fuelLh,lambda,lambdaCmd,ambientC,fuelPct,catC,railBar\r\n";
   sinkBegin(logFile, csvSink);
   csvLen = 0;
   csvPut(HEADER, sizeof(HEADER) - 1);
@@ -765,7 +766,7 @@ static void driveRenameDated() {
 // things neither the GPX nor the CSV can feed them. Only in track mode: the
 // file opens once the lap gate is set AND its direction learned (so the
 // start/finish line can go into the header), and closes on STOP or sleep.
-// One row per GNSS fix, 25 Hz, ~330 bytes: ~30 MB an hour.
+// One row per GNSS fix, 25 Hz, ~430 bytes: ~39 MB an hour.
 //
 // Format per Racelogic's .VBO page and real VBOX files (researched
 // 2026-10-05): CRLF lines; lat/long in TOTAL arc-minutes with longitude
@@ -869,11 +870,14 @@ static void vboOpen() {
          "Ignition Timing\r\nIntake Air Temperature\r\nLap Number\r\n"
          "Tyre Pressure FL\r\nTyre Pressure FR\r\nTyre Pressure RL\r\nTyre Pressure RR\r\n"
          "Tyre Temperature FL\r\nTyre Temperature FR\r\n"
-         "Tyre Temperature RL\r\nTyre Temperature RR\r\nGear\r\n\r\n"
+         "Tyre Temperature RL\r\nTyre Temperature RR\r\nGear\r\n"
+         "Fuel Rate\r\nLambda\r\nLambda Target\r\nAmbient Temperature\r\n"
+         "Fuel Level\r\nCatalyst Temperature\r\nFuel Rail Pressure\r\n\r\n"
          "[channel units]\r\nbar\r\nC\r\nC\r\n%\r\nNm\r\ng\r\ng\r\nrpm\r\n"
          // A blank unit line would end the section, so the unitless
          // channels get a word instead.
-         "deg\r\nC\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n\r\n"
+         "deg\r\nC\r\ncount\r\nbar\r\nbar\r\nbar\r\nbar\r\nC\r\nC\r\nC\r\nC\r\ngear\r\n"
+         "l/h\r\nlambda\r\nlambda\r\nC\r\n%\r\nC\r\nbar\r\n\r\n"
          // No brackets in comments: they hang Circuit Tools.
          "[comments]\r\ni30 N gauge pod, ESP32-S3 with u-blox M9N\r\n"
          "Log Rate (Hz) : 25.00\r\n"
@@ -898,7 +902,9 @@ static void vboOpen() {
          "Ignition_Timing Intake_Air_Temperature Lap_Number "
          "Tyre_Pressure_FL Tyre_Pressure_FR Tyre_Pressure_RL Tyre_Pressure_RR "
          "Tyre_Temperature_FL Tyre_Temperature_FR "
-         "Tyre_Temperature_RL Tyre_Temperature_RR Gear\r\n\r\n"
+         "Tyre_Temperature_RL Tyre_Temperature_RR Gear "
+         "Fuel_Rate Lambda Lambda_Target Ambient_Temperature "
+         "Fuel_Level Catalyst_Temperature Fuel_Rail_Pressure\r\n\r\n"
          "[data]\r\n");
   vboCommit();
   vboActive = true;
@@ -956,16 +962,27 @@ static void vboTask() {
       tyreBar[w] = ok ? obd.tyreBar[w] : 0.0f;
       tyreC[w]   = ok ? (float)obd.tyreTempC[w] : 0.0f;
     }
+    // 2026-10-16 (OBD_HZ1_PIDS): fuel rate at the fast request's rate, the
+    // rest once a second.
+    const float fuelLh = obd_fuel_lh_fresh()    ? obd.fuelLh : 0.0f;
+    const float lam    = obd_lambda_fresh()     ? obd.lambda : 0.0f;
+    const float lamCmd = obd_lambda_cmd_fresh() ? obd.lambdaCmd : 0.0f;
+    const float amb    = obd_ambient_fresh()    ? (float)obd.ambientC : 0.0f;
+    const float fuelPc = obd_fuel_pct_fresh()   ? obd.fuelPct : 0.0f;
+    const float cat    = obd_cat_fresh()        ? obd.catC : 0.0f;
+    const float rail   = obd_rail_fresh()       ? obd.railBar : 0.0f;
     const int room = (int)sizeof(vboBuf) - (int)vboLen;
     const int wrote = snprintf(vboBuf + vboLen, room > 0 ? room : 0,
         "%03u %s %s %s %07.3f %06.2f %+09.2f %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
-        " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E\r\n",
+        " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
+        " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E\r\n",
         gps.sats, t, lat, lon, gps.speedKmh, gps.courseDeg, f.altM,
         boost, oil, cool, pedal, torque, gLateral, -gLongitudinal, rpm,
         timing, iat, lap,
         tyreBar[0], tyreBar[1], tyreBar[2], tyreBar[3],
         tyreC[0], tyreC[1], tyreC[2], tyreC[3],
-        (float)(gear > 0 ? gear : 0));   // 0 = none or not current
+        (float)(gear > 0 ? gear : 0),    // 0 = none or not current
+        fuelLh, lam, lamCmd, amb, fuelPc, cat, rail);
     if (wrote > 0 && wrote < room) vboLen += (uint16_t)wrote;
     else vboCommit();                   // full: drain, drop this row
   }
@@ -1203,6 +1220,22 @@ static void loggerTask() {
   // PID 0x42: the ECU's supply - last, so the columns before keep their place.
   if (obd_volts_fresh())   row.printf(",%.2f", obd.volts);
   else                     row.print(',');
+  // 2026-10-16, after it for the same reason - see OBD_HZ1_PIDS. Fuel rate
+  // from the fast request; the rest once a second, so most rows repeat.
+  if (obd_fuel_lh_fresh())    row.printf(",%.2f", obd.fuelLh);
+  else                        row.print(',');
+  if (obd_lambda_fresh())     row.printf(",%.3f", obd.lambda);
+  else                        row.print(',');
+  if (obd_lambda_cmd_fresh()) row.printf(",%.3f", obd.lambdaCmd);
+  else                        row.print(',');
+  if (obd_ambient_fresh())    row.printf(",%d", obd.ambientC);
+  else                        row.print(',');
+  if (obd_fuel_pct_fresh())   row.printf(",%.1f", obd.fuelPct);
+  else                        row.print(',');
+  if (obd_cat_fresh())        row.printf(",%.0f", obd.catC);
+  else                        row.print(',');
+  if (obd_rail_fresh())       row.printf(",%.1f", obd.railBar);
+  else                        row.print(',');
   // CRLF, as println() wrote it. The +2 is always free: printf() stops at
   // sizeof(b) - 1, and a row is far shorter anyway.
   if (row.n > sizeof(row.b) - 3) row.n = sizeof(row.b) - 3;

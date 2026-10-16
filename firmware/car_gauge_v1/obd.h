@@ -54,6 +54,28 @@ struct ObdState {
   bool     haveVolts     = false;
   float    volts         = 0;       // PID 0x42, the ECU's supply (VOLTS_POLL_MS)
   uint32_t voltsMs       = 0;
+  // For the logs, CSV and track log (2026-10-16) - see OBD_HZ1_PIDS.
+  bool     haveFuelLh    = false;
+  float    fuelLh        = 0;       // PID 0x5E, engine fuel rate, L/h (fast)
+  uint32_t fuelLhMs      = 0;
+  bool     haveLambda    = false;
+  float    lambda        = 0;       // PID 0x34, measured (wideband O2, B1S1)
+  uint32_t lambdaMs      = 0;
+  bool     haveLambdaCmd = false;
+  float    lambdaCmd     = 0;       // PID 0x44, what the ECU asks for
+  uint32_t lambdaCmdMs   = 0;
+  bool     haveAmbient   = false;
+  int      ambientC      = 0;       // PID 0x46, outside air
+  uint32_t ambientMs     = 0;
+  bool     haveFuelPct   = false;
+  float    fuelPct       = 0;       // PID 0x2F, fuel tank level
+  uint32_t fuelPctMs     = 0;
+  bool     haveCat       = false;
+  float    catC          = 0;       // PID 0x3C, catalyst, bank 1 sensor 1
+  uint32_t catMs         = 0;
+  bool     haveRail      = false;
+  float    railBar       = 0;       // PID 0x59, fuel rail, absolute
+  uint32_t railMs        = 0;
   bool     havePedal     = false;
   uint8_t  pedalRaw      = 0;       // PID 0x49, raw: 37 (14.5 %) = foot off
   uint32_t pedalMs       = 0;
@@ -119,6 +141,13 @@ bool obd_pedal_fresh();
 bool obd_rpm_fresh();
 bool obd_timing_fresh();
 bool obd_iat_fresh();
+bool obd_fuel_lh_fresh();
+bool obd_lambda_fresh();
+bool obd_lambda_cmd_fresh();
+bool obd_ambient_fresh();
+bool obd_fuel_pct_fresh();
+bool obd_cat_fresh();
+bool obd_rail_fresh();
 bool obd_tyre_fresh(int wheel);
 
 // Put the transceiver into (or out of) low-current standby by driving its Rs

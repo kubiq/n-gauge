@@ -85,6 +85,13 @@ bool obd_pedal_fresh()   { return fresh(obd.havePedal,   obd.pedalMs,   OBD_STAL
 bool obd_rpm_fresh()     { return fresh(obd.haveRpm,     obd.rpmMs,     OBD_STALE_MS); }
 bool obd_timing_fresh()  { return fresh(obd.haveTiming,  obd.timingMs,  OBD_STALE_MS); }
 bool obd_iat_fresh()     { return fresh(obd.haveIat,     obd.iatMs,     OBD_STALE_MS); }
+bool obd_fuel_lh_fresh() { return fresh(obd.haveFuelLh,  obd.fuelLhMs,  OBD_STALE_MS); }
+bool obd_lambda_fresh()  { return fresh(obd.haveLambda,  obd.lambdaMs,  OBD_STALE_MS); }
+bool obd_lambda_cmd_fresh() { return fresh(obd.haveLambdaCmd, obd.lambdaCmdMs, OBD_STALE_MS); }
+bool obd_ambient_fresh() { return fresh(obd.haveAmbient, obd.ambientMs, OBD_STALE_MS); }
+bool obd_fuel_pct_fresh() { return fresh(obd.haveFuelPct, obd.fuelPctMs, OBD_STALE_MS); }
+bool obd_cat_fresh()     { return fresh(obd.haveCat,     obd.catMs,     OBD_STALE_MS); }
+bool obd_rail_fresh()    { return fresh(obd.haveRail,    obd.railMs,    OBD_STALE_MS); }
 bool obd_tyre_fresh(int i) {
   if (i < 0 || i >= 4) return false;
   return fresh(obd.haveTyre[i], obd.tyreMs[i], TPMS_STALE_MS);
@@ -205,14 +212,23 @@ static void askSlow() {
   sendMode01Multi(pids, sizeof(pids));
 }
 static void askBaro() { sendMode01(0x33); }   // the zero for boost
-static void askVolts() { sendMode01(0x42); }  // control module voltage
+static void askVolts() {                      // control module voltage, fuel rail
+  static const uint8_t pids[] = OBD_VOLTS_PIDS;
+  sendMode01Multi(pids, sizeof(pids));
+}
+static void askHz1() {
+  static const uint8_t pids[] = OBD_HZ1_PIDS;
+  static_assert(sizeof(pids) <= 6, "Mode 01 takes at most 6 PIDs per request");
+  sendMode01Multi(pids, sizeof(pids));
+}
 
 static ScheduledRequest schedule[] = {
   //  ask        every             car on only
   { askTyres,  TPMS_POLL_MS,     true  },   // TPMS module: pressures, temps
   { askOil,    OIL_POLL_MS,      false },   // DID 0xE001: oil, dash coolant
   { askBaro,   BARO_POLL_MS,     false },   // PID 0x33: barometric pressure
-  { askVolts,  VOLTS_POLL_MS,    false },   // PID 0x42: battery / charging
+  { askVolts,  VOLTS_POLL_MS,    false },   // PIDs 0x42, 0x59: battery, fuel rail
+  { askHz1,    OBD_HZ1_POLL_MS,  false },   // lambda, outside air, fuel tank, ...
   { askSlow,   OBD_SLOW_POLL_MS, false },   // timing advance, intake air temp
   { askFast,   0,                false },   // 6 PIDs: boost, speed, load, ...
 };
@@ -264,10 +280,12 @@ static void isoSendFlowControl(uint16_t reqId) {
 static uint8_t pidDataLen(uint8_t pid) {
   switch (pid) {
     case 0x00: case 0x20: case 0x40: case 0x60: case 0x80: return 4;   // bitmaps
-    case 0x0C: case 0x43: case 0x42: case 0x3C: case 0x3E: case 0x5E: case 0x63: return 2;
+    case 0x34: return 4;
+    case 0x0C: case 0x43: case 0x42: case 0x3C: case 0x3E: case 0x44: case 0x59:
+    case 0x5E: case 0x63: return 2;
     case 0x04: case 0x05: case 0x0B: case 0x0D: case 0x0E: case 0x0F: case 0x11:
-    case 0x33: case 0x45: case 0x46: case 0x47: case 0x49: case 0x4A: case 0x4C:
-    case 0x5C: return 1;
+    case 0x2F: case 0x33: case 0x45: case 0x46: case 0x47: case 0x49: case 0x4A:
+    case 0x4C: case 0x5C: return 1;
     default: return 0;
   }
 }
@@ -313,6 +331,29 @@ static void handlePid(uint8_t pid, const uint8_t *d, uint16_t dl) {
   }
   else if (pid == 0x0F) {                        // A - 40 °C
     obd.iatC = d[0] - 40; obd.iatMs = millis(); obd.haveIat = true;
+  }
+  // For the logs (2026-10-16) - formulas per SAE J1979.
+  else if (pid == 0x5E && dl >= 2) {             // (256A + B) / 20 L/h
+    obd.fuelLh = (d[0] << 8 | d[1]) / 20.0f; obd.fuelLhMs = millis(); obd.haveFuelLh = true;
+  }
+  else if (pid == 0x34 && dl >= 2) {             // (256A + B) * 2 / 65536; C, D: current
+    obd.lambda = (d[0] << 8 | d[1]) * 2.0f / 65536.0f; obd.lambdaMs = millis(); obd.haveLambda = true;
+  }
+  else if (pid == 0x44 && dl >= 2) {             // the same scale, commanded
+    obd.lambdaCmd = (d[0] << 8 | d[1]) * 2.0f / 65536.0f;
+    obd.lambdaCmdMs = millis(); obd.haveLambdaCmd = true;
+  }
+  else if (pid == 0x46) {                        // A - 40 °C
+    obd.ambientC = d[0] - 40; obd.ambientMs = millis(); obd.haveAmbient = true;
+  }
+  else if (pid == 0x2F) {                        // A * 100 / 255 %
+    obd.fuelPct = d[0] * 100.0f / 255.0f; obd.fuelPctMs = millis(); obd.haveFuelPct = true;
+  }
+  else if (pid == 0x3C && dl >= 2) {             // (256A + B) / 10 - 40 °C, bank 1 sensor 1
+    obd.catC = (d[0] << 8 | d[1]) / 10.0f - 40.0f; obd.catMs = millis(); obd.haveCat = true;
+  }
+  else if (pid == 0x59 && dl >= 2) {             // (256A + B) * 10 kPa, absolute
+    obd.railBar = (d[0] << 8 | d[1]) / 10.0f; obd.railMs = millis(); obd.haveRail = true;
   }
 }
 
