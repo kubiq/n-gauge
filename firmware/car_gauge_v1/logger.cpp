@@ -773,7 +773,10 @@ static void driveRenameDated() {
 // positive WEST (calc_vbo_minutes); time HHMMSS.SS UTC; velocity km/h;
 // extra channels named in [header], unit in [channel units] (extras only, as
 // VBOX HD2 files do), underscored in [column names], values in exponent form.
-// ⚠ Not yet opened in Circuit Tools - do that before trusting a session.
+// Opened 2026-10-16 (a session with laps): Circuit Tools 3.2 reads it, as
+// does HackTheTrack (laps found). Circuit Tools takes no [laptiming] line for
+// a circuit it does not know - a real Racelogic file's neither - and asks for
+// one; lapvisor 0.3 misreads that section in both.
 static File     vboFile;
 static char     vboPath[48] = "";
 static bool     vboActive = false, vboFailed = false;
