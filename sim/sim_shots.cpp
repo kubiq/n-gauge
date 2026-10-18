@@ -15,6 +15,7 @@
 #include "laps.h"
 #include "lvgl.h"
 #include "obd.h"
+#include "settings.h"
 #include "sim_replay.h"
 #include "ui.h"
 
@@ -31,40 +32,60 @@ static uint32_t viewAt = 0;     // when it was switched to (millis)
 static bool anytime() { return true; }
 static bool boosting() { return obd.haveBoost && obd.boostBar > 1.0f; }
 static bool cornering() { return std::fabs(simImu[1]) > 0.8f; }
-struct Shot { const char *name; GaugeView view; bool (*ready)(); };
+// The over-temperature warning, on the track screen: the made-up session's
+// oil passes the gauge's warning in its last laps, so this one waits longer.
+static bool oilHot() { return obd.haveOil && obd.oilTempC >= settings.oilWarnC + 2; }
+struct Shot { const char *name; GaugeView view; bool (*ready)(); uint32_t giveUpMs; };
 static const Shot SHOTS[] = {
-    {"oil", VIEW_OIL, anytime},    {"boost", VIEW_BOOST, boosting}, {"gmeter", VIEW_GMETER, cornering},
-    {"tyres", VIEW_TPMS, anytime}, {"gps", VIEW_GPS, anytime},      {"track", VIEW_TRACK, anytime},
+    {"oil", VIEW_OIL, anytime, 30000},       {"boost", VIEW_BOOST, boosting, 30000},
+    {"gmeter", VIEW_GMETER, cornering, 30000}, {"tyres", VIEW_TPMS, anytime, 30000},
+    {"gps", VIEW_GPS, anytime, 30000},       {"track", VIEW_TRACK, anytime, 30000},
+    {"oilhot", VIEW_TRACK, oilHot, 300000},
 };
 static const uint32_t SETTLE_MS = 1500;    // after switching: values, the g-meter's trail
-static const uint32_t GIVE_UP_MS = 30000;  // waiting for a moment
 
-// The active screen as a PPM (RGB): enough for ImageMagick to take on.
-// Into a buffer of its own: a 466x466 snapshot is 870 KB, far more than
-// LVGL's pool (the gauge's 128 KB, kept as it is so the sim runs out where
-// the gauge would).
+// One object rendered into a buffer of its own: a 466x466 snapshot is
+// 870 KB, far more than LVGL's pool (the gauge's 128 KB, kept as it is so the
+// sim runs out where the gauge would). ARGB, BGRA in memory.
+struct Snap {
+  std::vector<uint8_t> mem;
+  lv_draw_buf_t buf;
+  bool take(lv_obj_t *obj, uint32_t w, uint32_t h) {
+    const uint32_t stride = lv_draw_buf_width_to_stride(w, LV_COLOR_FORMAT_ARGB8888);
+    mem.assign(stride * h + LV_DRAW_BUF_ALIGN, 0);
+    uint8_t *data = (uint8_t *)lv_draw_buf_align(mem.data(), LV_COLOR_FORMAT_ARGB8888);
+    lv_draw_buf_init(&buf, w, h, LV_COLOR_FORMAT_ARGB8888, stride, data, stride * h);
+    return lv_snapshot_take_to_draw_buf(obj, LV_COLOR_FORMAT_ARGB8888, &buf) == LV_RESULT_OK;
+  }
+  const uint8_t *px(uint32_t x, uint32_t y) const { return buf.data + y * buf.header.stride + x * 4; }
+};
+
+// The active screen as a PPM (RGB), enough for ImageMagick to take on - with
+// the top layer over it, as the panel shows them: the warning rim and its
+// line live there, over every screen.
 static void save(const char *name) {
   lv_obj_t *scr = lv_screen_active();
   const uint32_t w = lv_obj_get_width(scr), h = lv_obj_get_height(scr);
-  const uint32_t stride = lv_draw_buf_width_to_stride(w, LV_COLOR_FORMAT_ARGB8888);
-  std::vector<uint8_t> mem(stride * h + LV_DRAW_BUF_ALIGN);
-  lv_draw_buf_t buf;
-  uint8_t *data = (uint8_t *)lv_draw_buf_align(mem.data(), LV_COLOR_FORMAT_ARGB8888);
-  lv_draw_buf_init(&buf, w, h, LV_COLOR_FORMAT_ARGB8888, stride, data, stride * h);
-  lv_draw_buf_t *b = &buf;
-  if (lv_snapshot_take_to_draw_buf(scr, LV_COLOR_FORMAT_ARGB8888, b) != LV_RESULT_OK) {
+  Snap base, top;
+  if (!base.take(scr, w, h)) {
     std::printf("[shots] %s: no snapshot\n", name);
     return;
   }
+  const bool haveTop = top.take(lv_layer_top(), w, h);
   const std::string path = dir + "/" + name + ".ppm";
   FILE *f = std::fopen(path.c_str(), "wb");
   if (f) {
     std::fprintf(f, "P6\n%u %u\n255\n", (unsigned)w, (unsigned)h);
     for (uint32_t y = 0; y < h; y++) {
-      const uint8_t *row = b->data + y * b->header.stride;
       for (uint32_t x = 0; x < w; x++) {
-        const uint8_t px[3] = {row[x * 4 + 2], row[x * 4 + 1], row[x * 4 + 0]};   // BGRA -> RGB
-        std::fwrite(px, 1, 3, f);
+        const uint8_t *b = base.px(x, y);
+        uint8_t out[3] = {b[2], b[1], b[0]};   // BGRA -> RGB
+        if (haveTop) {
+          const uint8_t *t = top.px(x, y);
+          const unsigned a = t[3];
+          for (int c = 0; c < 3; c++) out[c] = (uint8_t)((t[2 - c] * a + out[c] * (255 - a)) / 255);
+        }
+        std::fwrite(out, 1, 3, f);
       }
     }
     std::fclose(f);
@@ -110,7 +131,7 @@ void shots_step(double replayMs) {
     }
     case 3:
       if (now - viewAt < SETTLE_MS) break;
-      if (!SHOTS[next].ready() && now - viewAt < GIVE_UP_MS) break;
+      if (!SHOTS[next].ready() && now - viewAt < SHOTS[next].giveUpMs) break;
       save(SHOTS[next].name);
       if (++next == sizeof(SHOTS) / sizeof(SHOTS[0])) {
         std::printf("[shots] done\n");

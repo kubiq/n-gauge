@@ -23,7 +23,7 @@ trap 'rm -rf "$RAW"' EXIT
 
 mkdir -p "$OUT"
 n=0
-for name in wake oil boost gmeter tyres gps track; do
+for name in wake oil boost gmeter tyres gps track oilhot; do
   [ -f "$RAW/$name.ppm" ] || continue
   # Round, as the panel: everything outside the circle transparent.
   magick "$RAW/$name.ppm" -alpha set \

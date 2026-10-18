@@ -211,7 +211,9 @@ for i in range(0, len(samples), HZ // 2):
     vals = {
         "utc": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "ms": UPTIME_MS + int(round(ts * 1000)),
-        "oilC": int(round(92 + 20 * heat)), "coolantC": int(round(88 + 8 * heat)),
+        # Oil past the gauge's 120 C warning by the last laps, as on a real
+        # track day (2026-10-17: 132 C) - the over-temperature screenshot.
+        "oilC": int(round(92 + 34 * heat)), "coolantC": int(round(88 + 8 * heat)),
         "boostBar": f"{boost:.2f}", "gpsFix": 1, "sats": 14, "speedKmh": f"{kmh:.1f}",
         "lat": f"{lat:.7f}", "lon": f"{lon:.7f}",
         # The pod stands with its x axis up (as the real logs show): gravity
