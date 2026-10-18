@@ -9,6 +9,7 @@
 // ============================================================================
 #include <Arduino.h>
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"   // the 'h' bench command
 #include "lvgl.h"
 #include "config.h"
 #include "bsp.h"
@@ -331,6 +332,15 @@ void loop() {
     Serial.println(F("[..] bench: fake readings injected, stale in ~3-5 s"));
   }
   if (dbgCmd == 'd') logger_dump_tail(6000);
+  // 'h': internal RAM now, the least it has been since boot, and the largest
+  // block - against AP_MIN_INTERNAL_HEAP, what decides whether the AP starts.
+  if (dbgCmd == 'h') {
+    Serial.printf("[..] internal RAM: %u KB free, %u KB at the least, largest block %u KB; AP %s, refused %lu\n",
+                  (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+                  (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+                  (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+                  web_is_up() ? "up" : "down", (unsigned long)web_ap_refused());
+  }
   // 'v<kmh>' fakes the speed the AP-while-driving logic sees (v0 = no fix,
   // v-1 = back to the real GNSS). See apDriveTask for why it cannot simply
   // write gps.speedKmh.
