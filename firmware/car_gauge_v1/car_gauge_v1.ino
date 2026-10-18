@@ -81,10 +81,19 @@ static void apDriveTask(uint32_t now) {
                                          AP_DRIVE_ON_KMH, AP_DRIVE_ON_MS,
                                          AP_DRIVE_OFF_KMH, AP_DRIVE_OFF_MS);
   if (!driving) {
-    if (apDroppedForDrive) {
-      apDroppedForDrive = false;
-      Serial.println(F("[..] stopped - WiFi AP back up"));
+    // Until it is really up: web_start() declines when internal RAM is short
+    // (AP_MIN_INTERNAL_HEAP), and with the flag cleared before trying, one
+    // refusal left the AP down until a reboot (2026-10-12..17, every drive).
+    // So try again every AP_RETRY_MS - safe, as it checks before it allocates.
+    static uint32_t lastTryMs = 0;
+    if (apDroppedForDrive && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {
+      lastTryMs = now ? now : 1;
       web_start();
+      if (web_is_up()) {
+        apDroppedForDrive = false;
+        lastTryMs = 0;
+        Serial.println(F("[..] stopped - WiFi AP back up"));
+      }
     }
     return;
   }

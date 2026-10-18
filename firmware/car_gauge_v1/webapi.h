@@ -24,6 +24,8 @@
 void web_start();           // bring it up (no-op if already up)
 void web_stop();            // bring it down; called before deep sleep
 bool web_is_up();
+// Times since boot web_start() declined: under AP_MIN_INTERNAL_HEAP free.
+uint32_t web_ap_refused();
 // How many stations are associated. Used by power.cpp to hold off sleep while
 // someone is actually on the settings page, rather than merely because the AP
 // is up - which, now that it is always up, would mean never sleeping.

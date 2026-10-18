@@ -10,6 +10,8 @@
 #include "FS.h"
 #include "SD_MMC.h"
 #include <Preferences.h>     // the hash of the last SD file acted on
+#include <memory>
+#include <new>
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
 #include "esp_app_format.h"
@@ -186,13 +188,20 @@ void ota_check_sd() {
                 OTA_SD_PATH, fileShort, (unsigned)size);
   ui_show_notice("Updating firmware\nfrom the SD card...");
 
-  bool ok = ota_begin(size);
-  static uint8_t buf[4096];
+  // Borrowed for the install and given back, not a static array: that held
+  // 4 KB of internal RAM for good, from every boot, for an update that is
+  // almost never there - RAM the WiFi AP is short of (AP_MIN_INTERNAL_HEAP).
+  // Internal, as the card reads into it by DMA.
+  constexpr size_t BUF_N = 4096;
+  std::unique_ptr<uint8_t[]> buf(new (std::nothrow) uint8_t[BUF_N]);
+  if (!buf) snprintf(lastError, sizeof(lastError), "no RAM for the copy buffer");
+  bool ok = buf && ota_begin(size);
   while (ok && f.available()) {
-    const size_t n = f.read(buf, sizeof(buf));
+    const size_t n = f.read(buf.get(), BUF_N);
     if (n == 0) break;
-    ok = ota_write(buf, n);
+    ok = ota_write(buf.get(), n);
   }
+  buf.reset();
   f.close();
   if (ok) ok = ota_end();
   else    ota_abort();

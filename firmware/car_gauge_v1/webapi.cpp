@@ -1017,6 +1017,11 @@ void web_stop() {
   Serial.println(F("[..] settings AP stopped"));
 }
 
+// Times web_start() declined for want of internal RAM, since boot - in the
+// drive log, where the serial console's "[ERR] not starting AP" never is.
+static uint32_t apRefused = 0;
+uint32_t web_ap_refused() { return apRefused; }
+
 void web_start() {
   if (up) return;
 
@@ -1029,19 +1034,26 @@ void web_start() {
   const size_t freeInternal =
       heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (freeInternal < AP_MIN_INTERNAL_HEAP) {
+    apRefused++;
     Serial.printf("[ERR] not starting AP: %u B internal RAM free, need %u\n",
                   (unsigned)freeInternal, (unsigned)AP_MIN_INTERNAL_HEAP);
     return;
   }
 
   // Report associations and DHCP leases, so "the phone never joined" can be
-  // told apart from "it joined and then asked nothing".
-  WiFi.onEvent([](arduino_event_id_t e, arduino_event_info_t info) {
-    (void)info;
-    if (e == ARDUINO_EVENT_WIFI_AP_STACONNECTED)         Serial.println(F("[AP] station connected"));
-    else if (e == ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED)   Serial.println(F("[AP] lease handed out"));
-    else if (e == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) Serial.println(F("[AP] station left"));
-  });
+  // told apart from "it joined and then asked nothing". Once per boot: the AP
+  // restarts after every drive (AP_DRIVE_OFF), and each onEvent() adds a
+  // handler - a day of drives piled them up, each printing every event.
+  static bool eventsHooked = false;
+  if (!eventsHooked) {
+    eventsHooked = true;
+    WiFi.onEvent([](arduino_event_id_t e, arduino_event_info_t info) {
+      (void)info;
+      if (e == ARDUINO_EVENT_WIFI_AP_STACONNECTED)         Serial.println(F("[AP] station connected"));
+      else if (e == ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED)   Serial.println(F("[AP] lease handed out"));
+      else if (e == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) Serial.println(F("[AP] station left"));
+    });
+  }
 
   WiFi.mode(WIFI_AP);
   // Before softAP(): puts the AP outside RFC1918 so Android will actually send

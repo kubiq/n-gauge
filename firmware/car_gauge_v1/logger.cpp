@@ -10,6 +10,7 @@
 #include "logcrypt.h"   // the encrypted log format
 #include <Arduino.h>
 #include <esp_random.h>
+#include <esp_heap_caps.h>
 #include "FS.h"
 #include "SD_MMC.h"
 #include <time.h>
@@ -125,9 +126,31 @@ struct Sink {
   bool        enc = false;
 };
 static Sink csvSink, gpxSink, vboSink;
-// One sealed record at a time, for every writer: they all run on the logger
-// task or under the SD lock. Sized for the largest batch, the GPX's.
-static uint8_t sealOut[12288 + LOGCRYPT_OVERHEAD];
+// Where the logs' RAM is, and why (2026-10-17). The batch buffers below
+// (csvBuf, gpxBuf, vboBuf) are only ever filled and read by the CPU, so they
+// are in PSRAM, allocated by logger_init(). Everything that goes to the card
+// passes through ioBuf, the one buffer in internal RAM: the SD driver DMAs
+// only from internal memory, and from PSRAM it falls back to copying one
+// 512-byte sector per command - each batch would turn into a string of single
+// sector writes.
+//
+// Before, the batches and a 12 KB sealing buffer were static arrays, 32 KB of
+// internal RAM held for good. That left the WiFi AP short of the
+// AP_MIN_INTERNAL_HEAP it needs to come back after a drive: from log
+// encryption (2026-10-12) on it never did, on any drive, until a reboot.
+//
+// Encrypted, each ioBuf's worth is one record (LOGCRYPT_OVERHEAD extra per
+// 4 KB; a reader takes any record length). All writers run on the logger
+// task or under the SD lock, so one buffer serves them all.
+static constexpr size_t IO_CHUNK = 4096;
+alignas(4) static uint8_t ioBuf[IO_CHUNK + LOGCRYPT_OVERHEAD];
+// The batches, in PSRAM. The CSV's ~2 KB of rows per flush (one record when
+// encrypted); the GPX's 25 Hz points between writes; the .vbo's rows.
+static constexpr size_t CSV_BUF_N = 4096;
+static constexpr size_t GPX_BUF_N = 12288;
+static constexpr size_t VBO_BUF_N = 4096;
+static char *csvBuf = nullptr, *gpxBuf = nullptr, *vboBuf = nullptr;
+static bool  bufsOk = false;   // all three exist: logging may start
 
 // Opening a file, or reopening one: a new segment with a fresh key.
 static void sinkBegin(File &f, Sink &s) {
@@ -139,11 +162,15 @@ static void sinkBegin(File &f, Sink &s) {
   f.write(head, sizeof(head));
 }
 
+// A batch to the card, IO_CHUNK at a time through ioBuf: sealed into it, or
+// copied - the copy is what keeps each write one multi-sector DMA transfer.
 static void sinkWrite(File &f, Sink &s, const uint8_t *p, size_t n) {
-  if (!s.enc) { f.write(p, n); return; }
   while (n) {
-    const size_t k = n < sizeof(sealOut) - LOGCRYPT_OVERHEAD ? n : sizeof(sealOut) - LOGCRYPT_OVERHEAD;
-    f.write(sealOut, logcrypt_seal(&s.seg, p, k, sealOut));
+    const size_t k = n < IO_CHUNK ? n : IO_CHUNK;
+    size_t len = k;
+    if (s.enc) len = logcrypt_seal(&s.seg, p, k, ioBuf);
+    else       memcpy(ioBuf, p, k);
+    f.write(ioBuf, len);
     p += k;
     n -= k;
   }
@@ -158,7 +185,6 @@ static void sinkEnd(Sink &s) {
 // LOG_FLUSH_INTERVAL_MS) - so that, encrypted, one flush is one record rather
 // than one record per row. ~2 KB of rows per 2 s; a full buffer is written
 // early.
-static char   csvBuf[4096];
 static size_t csvLen = 0;
 
 static void csvWriteStaged() {
@@ -172,8 +198,8 @@ static void csvCommit() {
 }
 
 static void csvPut(const char *p, size_t n) {
-  if (csvLen + n > sizeof(csvBuf)) csvWriteStaged();
-  if (n > sizeof(csvBuf)) n = sizeof(csvBuf);
+  if (csvLen + n > CSV_BUF_N) csvWriteStaged();
+  if (n > CSV_BUF_N) n = CSV_BUF_N;
   memcpy(csvBuf + csvLen, p, n);
   csvLen += n;
 }
@@ -202,12 +228,12 @@ static bool logIdle() {
 // Points accumulate here and go to the card in batches. At 25 Hz a write plus
 // seek() per point would be 25 SD operations a second, which stalls the render
 // loop; batching keeps every sample with far fewer saves.
-// 12 KB, so the batch goes out on GPX_FLUSH_MS (2 s) as intended. At 2 KB it
+// gpxBuf, declared with the other batches at ioBuf: GPX_BUF_N is 12 KB, so the
+// batch goes out on GPX_FLUSH_MS (2 s) as intended. At 2 KB it
 // filled every ~0.4 s at ~4.5 KB/s, and every save (data, tail, flush) cost
 // the card ~13-20 ms: the logger's ~20 ms in most half-seconds on every drive
 // of 2026-10-10/11 (logMaxMs), confirmed by a bench test of the card - writes
 // into the file buffer ~0 ms, each flush 13 ms settled, 40-130 ms early.
-static char     gpxBuf[12288];
 
 // ---- trip distance ---------------------------------------------------------
 // RTC_DATA_ATTR, so it survives deep sleep.
@@ -399,7 +425,7 @@ static void gpxOpen() {
     // it is sealed like the points when encrypting, and followed by the tail
     // when not.
     sinkBegin(gpxFile, gpxSink);
-    const int w = snprintf(gpxBuf, sizeof(gpxBuf),
+    const int w = snprintf(gpxBuf, GPX_BUF_N,
                            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                            "<gpx version=\"1.1\" creator=\"i30N-gauge\" "
                            "xmlns=\"http://www.topografix.com/GPX/1/1\" "
@@ -562,7 +588,7 @@ static void gpxTask() {
   // loop iteration, thousands of empty segments and kilobytes a second of
   // nothing, with SD flushes to match.
   if (gapSinceLast) {
-    const int room = (int)sizeof(gpxBuf) - (int)gpxBufLen;
+    const int room = (int)GPX_BUF_N - (int)gpxBufLen;
     const int wrote = snprintf(gpxBuf + gpxBufLen, room > 0 ? room : 0,
                                "</trkseg><trkseg>\n");
     if (wrote > 0 && wrote < room) gpxBufLen += (uint16_t)wrote;
@@ -570,7 +596,7 @@ static void gpxTask() {
       // Full: drain, then the break goes first into the empty buffer - not
       // straight to the file, which would bypass the encryption.
       gpxCommit();
-      gpxBufLen = (uint16_t)strlcpy(gpxBuf, "</trkseg><trkseg>\n", sizeof(gpxBuf));
+      gpxBufLen = (uint16_t)strlcpy(gpxBuf, "</trkseg><trkseg>\n", GPX_BUF_N);
     }
   }
 
@@ -591,7 +617,7 @@ static void gpxTask() {
   calc_fmt_deg(latS, sizeof(latS), posLat);
   calc_fmt_deg(lonS, sizeof(lonS), posLon);
 
-  const int room = (int)sizeof(gpxBuf) - (int)gpxBufLen;
+  const int room = (int)GPX_BUF_N - (int)gpxBufLen;
   const int wrote = snprintf(gpxBuf + gpxBufLen, room > 0 ? room : 0,
       "<trkpt lat=\"%s\" lon=\"%s\"><ele>%.1f</ele>"
       "<time>%s</time><sat>%u</sat><hdop>%.1f</hdop>"
@@ -605,7 +631,7 @@ static void gpxTask() {
   else gpxCommit();                     // didn't fit: drain and drop this one
 
   // Commit on size or on time, whichever comes first.
-  if (gpxBufLen > sizeof(gpxBuf) - 256 || now - gpxLastWriteMs >= GPX_FLUSH_MS) {
+  if (gpxBufLen > GPX_BUF_N - 256 || now - gpxLastWriteMs >= GPX_FLUSH_MS) {
     gpxLastWriteMs = now;
     gpxCommit();
   }
@@ -635,6 +661,18 @@ static volatile bool stopped = false;
 
 void logger_init() {
   if (!sdLock) sdLock = xSemaphoreCreateRecursiveMutex();
+  // The batch buffers in PSRAM (see ioBuf), once, before any writer runs. No
+  // fallback to internal RAM: that would quietly take back what the WiFi AP
+  // needs. Without PSRAM the board is faulty anyway - logging stays off, and
+  // the "no SD card" fault says nothing is being logged.
+  if (!csvBuf) csvBuf = (char *)heap_caps_malloc(CSV_BUF_N, MALLOC_CAP_SPIRAM);
+  if (!gpxBuf) gpxBuf = (char *)heap_caps_malloc(GPX_BUF_N, MALLOC_CAP_SPIRAM);
+  if (!vboBuf) vboBuf = (char *)heap_caps_malloc(VBO_BUF_N, MALLOC_CAP_SPIRAM);
+  bufsOk = csvBuf && gpxBuf && vboBuf;
+  if (!bufsOk) {
+    Serial.println(F("[ERR] no PSRAM for the log buffers - drive logging disabled"));
+    return;
+  }
   // A new session per boot and per wake: every file it writes carries the id.
   snprintf(session, sizeof(session), "%06lx", (unsigned long)(esp_random() & 0xFFFFFF));
   if (!SD_MMC.setPins(SD_CLK, SD_CMD, SD_D0)) {
@@ -673,7 +711,7 @@ void logger_suspend() {
 void logger_resume() {
   LoggerSdLock lock;
   sharedWithPc = false;
-  cardOk = true;
+  cardOk = bufsOk;   // never without the buffers to write through
   gpxOpenFailed = false;
   Serial.println(F("[OK] SD card back"));
 }
@@ -716,7 +754,8 @@ static bool driveOpen() {
                                "oilRawPayload,apUp,obdKmh,coolantPid05C,"
                                "absLoadPct,baroKpa,pedalRaw,rpm,timingDeg,iatC,gear,"
                                "logMaxMs,loopMaxMs,volts,"
-                               "fuelLh,lambda,lambdaCmd,ambientC,fuelPct,catC,railBar\r\n";
+                               "fuelLh,lambda,lambdaCmd,ambientC,fuelPct,catC,railBar,"
+                               "ramKb,apRefused\r\n";
   sinkBegin(logFile, csvSink);
   csvLen = 0;
   csvPut(HEADER, sizeof(HEADER) - 1);
@@ -780,7 +819,6 @@ static void driveRenameDated() {
 static File     vboFile;
 static char     vboPath[48] = "";
 static bool     vboActive = false, vboFailed = false;
-static char     vboBuf[4096];
 static uint16_t vboLen = 0;
 static uint32_t vboLastWriteMs = 0, vboLastSeq = 0, vboLastFixMs = UINT32_MAX;
 RTC_DATA_ATTR static int nextTrackN = 0;
@@ -816,8 +854,8 @@ static void vboCommit() {
 // encrypting; a buffer that fills is committed first.
 static void vboPut(const char *s) {
   const size_t n = strlen(s);
-  if (vboLen + n > sizeof(vboBuf)) vboCommit();
-  if (n > sizeof(vboBuf)) return;
+  if (vboLen + n > VBO_BUF_N) vboCommit();
+  if (n > VBO_BUF_N) return;
   memcpy(vboBuf + vboLen, s, n);
   vboLen += (uint16_t)n;
 }
@@ -974,7 +1012,7 @@ static void vboTask() {
     const float fuelPc = obd_fuel_pct_fresh()   ? obd.fuelPct : 0.0f;
     const float cat    = obd_cat_fresh()        ? obd.catC : 0.0f;
     const float rail   = obd_rail_fresh()       ? obd.railBar : 0.0f;
-    const int room = (int)sizeof(vboBuf) - (int)vboLen;
+    const int room = (int)VBO_BUF_N - (int)vboLen;
     const int wrote = snprintf(vboBuf + vboLen, room > 0 ? room : 0,
         "%03u %s %s %s %07.3f %06.2f %+09.2f %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
         " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
@@ -989,7 +1027,7 @@ static void vboTask() {
     if (wrote > 0 && wrote < room) vboLen += (uint16_t)wrote;
     else vboCommit();                   // full: drain, drop this row
   }
-  if (vboLen > sizeof(vboBuf) - 512 || now - vboLastWriteMs >= 1000) {
+  if (vboLen > VBO_BUF_N - 512 || now - vboLastWriteMs >= 1000) {
     vboLastWriteMs = now;
     vboCommit();
   }
@@ -1239,6 +1277,11 @@ static void loggerTask() {
   else                        row.print(',');
   if (obd_rail_fresh())       row.printf(",%.1f", obd.railBar);
   else                        row.print(',');
+  // Free internal RAM and the WiFi AP's refusals for want of it (2026-10-17:
+  // after every drive the AP stayed down, unseen - see ioBuf). Against
+  // AP_MIN_INTERNAL_HEAP, this says how close a drive runs to it.
+  row.printf(",%u,%lu", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+             (unsigned long)web_ap_refused());
   // CRLF, as println() wrote it. The +2 is always free: printf() stops at
   // sizeof(b) - 1, and a row is far shorter anyway.
   if (row.n > sizeof(row.b) - 3) row.n = sizeof(row.b) - 3;

@@ -766,12 +766,18 @@
 #define AP_DRIVE_OFF       1
 // "Driving" = fix and >= ON_KMH held for ON_MS. "Stopped" = < OFF_KMH or no
 // fix, held for OFF_MS. OFF_MS is long so a red light does not restart the AP:
-// each start costs ~46 KB of internal RAM (AP_MIN_INTERNAL_HEAP) and esp_wifi
-// panics rather than failing cleanly if it is not there, so it must not flap.
+// each start costs ~46 KB of internal RAM and esp_wifi panics rather than
+// failing cleanly if it is not there, so it must not flap. It also needs
+// AP_MIN_INTERNAL_HEAP (80 KB) free, or it does not start at all: a log
+// writer holding internal RAM kept it down after every drive (2026-10-12..17,
+// see logger.cpp's ioBuf) - the drive CSV's ramKb and apRefused show it now.
 #define AP_DRIVE_ON_KMH    20.0f
 #define AP_DRIVE_ON_MS     5000
 #define AP_DRIVE_OFF_KMH   5.0f
 #define AP_DRIVE_OFF_MS    60000
+// Stopped, but the AP did not start (too little internal RAM): try again this
+// often. Each try only checks the heap and returns, so it costs nothing.
+#define AP_RETRY_MS        10000
 
 // ⚠ The AP address is deliberately NOT in 192.168.x.x, and that is the whole
 // reason the captive portal works.
