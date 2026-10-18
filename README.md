@@ -41,24 +41,30 @@ and a tap on the gauge for its live readings in the car. More in
 <p>
 <img src="docs/gauge/05-gps.png" alt="GPS speed and trip" width="24%">
 <img src="docs/gauge/06-track.png" alt="The lap timer, with the delta to the best lap" width="24%">
+<img src="docs/gauge/07-oilhot.png" alt="The lap timer with the oil over-temperature warning around it" width="24%">
 <img src="docs/gauge/00-wake.png" alt="Waking up: the N badge until the car answers" width="24%">
 </p>
 
 *The gauge's screens - oil and coolant, boost, the g-meter, tyres, GPS, and
-the lap timer 1.8 s up on the best lap - and the N badge it wakes up with.
-Swiped through on the gauge; these are from the [simulator](sim) on a
-made-up track session (`sim/screenshots.sh`).*
+the lap timer 1.8 s up on the best lap, the arc filling up to the line - then
+the oil over its warning on the in-lap, a red rim over whichever screen is
+up, and the N badge it wakes up with. Swiped through on the gauge; these are
+from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
 
 ## What it does
 
 - **Gauges:** oil and coolant (concentric arcs, with a cold-engine "not
-  ready" state and over-temperature warnings), boost, a g-meter, the four tyre
-  pressures and temperatures, GPS speed and trip distance, a lap timer that
-  finds the start/finish line by itself (tap START in the pit, then drive).
-- **Logging:** a CSV of every drive (2 Hz, decoded values - battery voltage
-  among them - plus the raw payloads), a GPX track at 25 Hz, a sleep log.
-  Logs can be encrypted to a key only the phone holds, so a card taken out
-  of the gauge gives nothing away.
+  ready" state, and over-temperature warnings on every screen), boost, a
+  g-meter, the four tyre pressures and temperatures, GPS speed and trip
+  distance, a lap timer that finds the start/finish line by itself (tap START
+  in the pit, then drive), with how far the line is and the live delta to the
+  best lap.
+- **Logging:** a CSV of every drive (2 Hz, decoded values - battery voltage,
+  fuel rate, lambda, catalyst and fuel rail among them - plus the raw
+  payloads), a GPX track at 25 Hz, a sleep log, and for each track session a
+  Racelogic `.vbo` with every channel, which lap analysers open (HackTheTrack,
+  Circuit Tools). Logs can be encrypted to a key only the phone holds, so a
+  card taken out of the gauge gives nothing away.
 - **Waking up:** the N badge until the car answers, so the gauges never
   show a row of dashes; with a PC on USB, a status page for the desk.
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
@@ -66,7 +72,8 @@ made-up track session (`sim/screenshots.sh`).*
   opening (the IMU's wake-on-motion).
 - **Phone:** its own WiFi access point with settings pages, OTA firmware
   updates with rollback, and an Android app ([mobile/](mobile)) that joins it
-  from a QR code on the gauge and syncs the logs by itself. Each drive is
+  from a QR code on the gauge, syncs the logs by itself and then lets go of
+  the gauge's WiFi, so the phone is back on the internet. Each drive is
   named after where it started and ended (offline, from GeoNames - your own
   places like "Home" win), grouped by week, with its track on a map and its
   speed, boost, temperatures and voltage as charts. Delete a drive and it
