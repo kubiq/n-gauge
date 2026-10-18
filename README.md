@@ -22,15 +22,15 @@ someone with the same car or the same board.
 
 <p>
 <img src="mobile/docs/screenshots/01-trips.png" width="32%">
+<img src="mobile/docs/screenshots/03-trip-map.png" width="32%">
 <img src="mobile/docs/screenshots/07-drive-charts.png" width="32%">
-<img src="mobile/docs/screenshots/04-gauge.png" width="32%">
 </p>
 
 *The phone app: every drive, named after where it went and grouped by week,
-with the gauge in the header - its connection and last sync, like a watch in
-Garmin Connect; a drive's speed, boost, temperatures and voltage over time;
-and a tap on the gauge for its live readings in the car. More in
-[mobile/](mobile).*
+with the gauge in the header - its last sync, like a watch in Garmin
+Connect; a tap on it syncs, then the phone is back on the internet. A drive
+on the map, coloured by speed, and its speed, boost, temperatures and
+voltage over time. More in [mobile/](mobile).*
 
 <p>
 <img src="docs/gauge/01-oil.png" alt="Oil and coolant" width="24%">
@@ -120,7 +120,6 @@ the wrong turns, are in [DECISIONS.md](DECISIONS.md).
 |---|---|
 | [firmware/car_gauge_v1](firmware/car_gauge_v1) | the gauge firmware (Arduino, ESP32 core 3.x, LVGL 9) |
 | [mobile](mobile) | the Android app (Expo / React Native) |
-| [backend](backend) | a small log store the app can upload to (Node, Docker) - optional |
 | [sim](sim) | the gauge firmware on a PC: its screens in a window, fed a recorded drive |
 | [tests](tests) | host tests of the firmware's pure logic |
 | [hardware](hardware), [mechanical](mechanical) | carrier PCB, 3D-printed parts |

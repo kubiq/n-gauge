@@ -11,7 +11,7 @@ import { type Colors, S, themed, useColors } from '@/theme';
 // The gauge in the header of Trips and Settings, the way Garmin Connect shows its watch:
 // the connection and the sync at a glance, from any screen. The ring is the
 // gauge's round face, its colour the state; a spinner while something is
-// going on. A tap connects, or - connected - opens the Gauge screen.
+// going on. A tap syncs - see onPress.
 type Status = { title: string; detail: string | null; ring: string; busy: boolean; bad?: boolean };
 
 function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>, C: Colors): Status {
@@ -37,13 +37,23 @@ export function PodChip({ compact = false }: { compact?: boolean }) {
   const pod = usePod();
   const C = useColors();
   const styles = useStyles();
-  const { title, detail, ring, busy, bad } = status(pod, useSync(), C);
+  const sync = useSync();
+  const { title, detail, ring, busy, bad } = status(pod, sync, C);
 
-  // Not connected: connect and stay put - often the connection is all that
-  // was wanted (a setting to save, firmware to send). Otherwise the Gauge screen.
+  // A tap syncs, where it is: connecting starts the sync, and the phone
+  // leaves the gauge's WiFi once it is done (use-sync.tsx). So:
+  // - no gauge yet: Gauge settings, which sets one up;
+  // - not connected: connect;
+  // - connected, the last sync failed: try it again;
+  // - connected and synced (staying on, "Disconnect after syncing" off):
+  //   Gauge settings, the gauge's own screen;
+  // - connecting or syncing: nothing - the spinner says it is on its way.
   const onPress = () => {
-    if (pod.creds && pod.state === 'idle') pod.connect();
-    else router.push('/gauge');
+    if (!pod.creds) router.push('/gauge-settings');
+    else if (pod.state === 'idle') pod.connect();
+    else if (pod.state !== 'connected' || sync.phase !== 'idle') return;
+    else if (sync.err) sync.sync();
+    else router.push('/gauge-settings');
   };
 
   return (

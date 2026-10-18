@@ -5,7 +5,6 @@ export const app: Record<string, string> = {
   Gauge: 'Budík',
   'Gauge settings': 'Nastavení budíku',
   'Scan the gauge’s QR': 'Načíst QR kód budíku',
-  'Upload server': 'Server pro nahrávání',
   Drive: 'Jízda',
   Name: 'Název',
   'Log encryption': 'Šifrování záznamů',
@@ -32,6 +31,7 @@ export const app: Record<string, string> = {
   About: 'O aplikaci',
   App: 'Aplikace',
   'older firmware': 'starší firmware',
+  '{build}, read {when}': '{build}, zjištěno {when}',
   'Place names © GeoNames (geonames.org), CC BY 4.0.': 'Názvy míst © GeoNames (geonames.org), CC BY 4.0.',
   'City quarter boundaries © ČÚZK (RÚIAN), via ČSÚ open data, CC BY 4.0.':
     'Hranice městských částí © ČÚZK (RÚIAN), z otevřených dat ČSÚ, CC BY 4.0.',

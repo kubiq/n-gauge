@@ -1,6 +1,6 @@
 // Czech for the gauge part - see ../index.ts. English text -> Czech.
 export const gauge: Record<string, string> = {
-  // gauge.tsx
+  // gauge-settings.tsx: setting the gauge up, connecting, its actions
   'Not the gauge’s code': 'Toto není kód budíku',
   'Scan the QR on the gauge’s WiFi screen.': 'Načtěte QR kód na obrazovce Wi-Fi budíku.',
   'Gauge settings': 'Nastavení budíku',
@@ -10,30 +10,11 @@ export const gauge: Record<string, string> = {
   'Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the password, so this is needed once.':
     'Proklikejte se na budíku k obrazovce Wi-Fi a načtěte její QR kód. Aplikace si heslo zapamatuje, takže to stačí jednou.',
   'Scan the gauge’s QR': 'Načíst QR kód budíku',
-  Connection: 'Připojení',
   Network: 'Síť',
   Disconnect: 'Odpojit',
   Connect: 'Připojit',
-  'Joins the gauge’s WiFi - the gauge must be awake (car on, or a door opened). New drives come over by themselves, and its live readings and system show here. Meanwhile the phone has no internet, so maps will not load.':
-    'Připojí se k Wi-Fi budíku - budík musí být vzhůru (auto zapnuté nebo otevřené dveře). Nové jízdy se přenesou samy a zobrazí se tu živé hodnoty a systém. Telefon mezitím nemá internet, takže se nenačtou mapy.',
-  Live: 'Živě',
-  'Paused while the logs sync.': 'Pozastaveno během synchronizace záznamů.',
-  'Reading…': 'Načítám…',
   Logs: 'Záznamy',
-  'Waiting for upload': 'Čeká na nahrání',
-  'On the phone': 'V telefonu',
-  'On the gauge': 'V budíku',
-  '{n} files|{n} files': '{n} soubor|{n} soubory|{n} souborů',
-  '{n} files, {size}|{n} files, {size}': '{n} soubor, {size}|{n} soubory, {size}|{n} souborů, {size}',
-  'To download': 'Ke stažení',
-  'up to date': 'aktuální',
-  'Some files are smaller than the copies here; they will be fetched again whole.':
-    'Některé soubory jsou menší než kopie v telefonu; stáhnou se znovu celé.',
-  'New logs are pulled by themselves whenever the phone connects.':
-    'Nové záznamy se stáhnou samy, kdykoli se telefon připojí.',
   Cancel: 'Zrušit',
-  Pull: 'Stáhnout',
-  'Check again': 'Zkontrolovat znovu',
   Actions: 'Akce',
   'Set the gauge’s clock from this phone': 'Nastavit hodiny budíku podle telefonu',
   Clock: 'Hodiny',
@@ -42,23 +23,14 @@ export const gauge: Record<string, string> = {
   'Zero the g-meter?': 'Vynulovat g-metr?',
   'Only with the car level and standing still.': 'Jen když auto stojí na rovině a v klidu.',
   Zero: 'Vynulovat',
-  'not connected': 'nepřipojeno',
-  'bus error': 'chyba sběrnice',
-  answering: 'odpovídá',
-  'not answering': 'neodpovídá',
   Car: 'Auto',
   Oil: 'Olej',
   Coolant: 'Chladicí kapalina',
   // "Boost" in Czech too - what drivers call it ("plnicí tlak" read oddly).
   Boost: 'Boost',
   Voltage: 'Napětí',
-  'no module': 'bez modulu',
-  'fix, {n} satellites|fix, {n} satellites': 'poloha, {n} satelit|poloha, {n} satelity|poloha, {n} satelitů',
-  'no fix yet ({n} satellites)|no fix yet ({n} satellites)':
-    'zatím bez polohy ({n} satelit)|zatím bez polohy ({n} satelity)|zatím bez polohy ({n} satelitů)',
-  'not set': 'nenastaveno',
 
-  // gauge-settings.tsx
+  // gauge-settings.tsx: the settings and firmware
   Settings: 'Nastavení',
   Firmware: 'Firmware',
   '{name} is not a .bin': '{name} není soubor .bin',
@@ -66,9 +38,8 @@ export const gauge: Record<string, string> = {
   '{name}, {size} MB. Takes ~30 s; the gauge restarts.': '{name}, {size} MB. Trvá ~30 s; budík se restartuje.',
   Update: 'Aktualizovat',
   'Not connected': 'Nepřipojeno',
-  'The settings are read from the gauge itself. Connect to change them or to update its firmware.':
-    'Nastavení se čte přímo z budíku. Připojte se, chcete-li ho změnit nebo aktualizovat firmware.',
-  'Set the gauge up first, on the Gauge screen.': 'Nejdřív budík nastavte, na obrazovce Budík.',
+  'The settings are read from the gauge itself - it must be awake (car on, or a door opened). Meanwhile the phone has no internet.':
+    'Nastavení se čte přímo z budíku - ten musí být vzhůru (auto nastartované, nebo otevřené dveře). Telefon mezitím nemá internet.',
   'Reading the gauge’s settings…': 'Načítám nastavení budíku…',
   'Save 1 change|Save {n} changes': 'Uložit {n} změnu|Uložit {n} změny|Uložit {n} změn',
   'No changes': 'Žádné změny',
@@ -124,18 +95,6 @@ export const gauge: Record<string, string> = {
   'That is not the gauge’s WiFi code.': 'Toto není kód Wi-Fi budíku.',
   'Point at the QR on the gauge’s WiFi screen.': 'Namiřte na QR kód na obrazovce Wi-Fi budíku.',
 
-  // server.tsx
-  'Works - the server holds 1 file.|Works - the server holds {n} files.':
-    'Funguje - na serveru je {n} soubor.|Funguje - na serveru jsou {n} soubory.|Funguje - na serveru je {n} souborů.',
-  Server: 'Server',
-  Address: 'Adresa',
-  Token: 'Token',
-  "TOKEN from the server's .env": 'TOKEN ze souboru .env serveru',
-  'The server is backend/ in the repo. The phone reaches it over mobile data, so the VPN must be up.':
-    'Server je backend/ v repozitáři. Telefon se k němu dostane přes mobilní data, takže musí běžet VPN.',
-  'Disconnect from the gauge to test: while connected, the app can only reach the gauge.':
-    'Pro test se od budíku odpojte: dokud je připojený, aplikace se dostane jen k budíku.',
-  Test: 'Otestovat',
   Save: 'Uložit',
 
   // system-card.tsx
@@ -159,17 +118,6 @@ export const gauge: Record<string, string> = {
   'Syncing {at}/{of}': 'Synchronizace {at}/{of}',
   'Checking…': 'Kontrola…',
   'Sync failed': 'Synchronizace selhala',
+  'Sync failed: {error}': 'Synchronizace selhala: {error}',
   'Gauge: {status}': 'Budík: {status}',
-
-  // upload-card.tsx
-  'Cancelled after 1 file.|Cancelled after {n} files.':
-    'Zrušeno po {n} souboru.|Zrušeno po {n} souborech.|Zrušeno po {n} souborech.',
-  'Uploaded 1 file, {size}.|Uploaded {n} files, {size}.':
-    'Nahrán {n} soubor, {size}.|Nahrány {n} soubory, {size}.|Nahráno {n} souborů, {size}.',
-  Upload: 'Nahrát',
-  Waiting: 'Čeká',
-  '1 file, {size}|{n} files, {size}': '{n} soubor, {size}|{n} soubory, {size}|{n} souborů, {size}',
-  nothing: 'nic',
-  'Change server': 'Změnit server',
-  'Set up the server': 'Nastavit server',
 };

@@ -113,17 +113,24 @@ export default function TripsScreen() {
     }
   };
 
-  // The app's one main screen: in the header the gauge (PodChip) and ⋮ with
-  // Settings and "Save all to a folder" - decrypted, under plain names, the
-  // way logs reach the PC now that they are encrypted on the card; already-
-  // saved files are skipped. Disabled while a save runs.
+  // The app's one main screen: in the header the gauge (PodChip, a tap
+  // syncs) and ⋮ with Settings - the phone's -, Gauge settings - the gauge's,
+  // and how to set one up - and "Save all to a folder": decrypted, under
+  // plain names, the way logs reach the PC now that they are encrypted on the
+  // card; already-saved files are skipped. Disabled while a save runs.
   const navigation = useNavigation();
   const hasTrips = trips.length > 0;
   useLayoutEffect(() => {
     const save = { label: saving ? t('Saving…') : t('Save all to a folder'), onPress: saveAll, disabled: saving };
     navigation.setOptions({
       headerRight: () => (
-        <HeaderActions items={[{ label: t('Settings'), onPress: () => router.push('/settings') }, ...(hasTrips ? [save] : [])]} />
+        <HeaderActions
+          items={[
+            { label: t('Settings'), onPress: () => router.push('/settings') },
+            { label: t('Gauge settings'), onPress: () => router.push('/gauge-settings') },
+            ...(hasTrips ? [save] : []),
+          ]}
+        />
       ),
     });
   }, [navigation, hasTrips, saving]);

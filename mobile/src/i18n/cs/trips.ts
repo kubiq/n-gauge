@@ -22,7 +22,6 @@ export const trips: Record<string, string> = {
   'boost': 'boost',
   'oil': 'olej',
   'No GPS track - car data only.': 'Bez trasy GPS - jen data z auta.',
-  'Reading…': 'Načítám…',
 
   // app/trip/[key].tsx - one drive
   'Files': 'Soubory',

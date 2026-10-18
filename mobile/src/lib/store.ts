@@ -3,21 +3,16 @@
 // - The pod's WiFi credentials, from scanning its QR (SecureStore: the
 //   passphrase is the only thing keeping strangers off the pod's settings).
 // - The inbox: the phone's copy of the pod's logs, each file whole from
-//   byte 0 - the trips read them, so they stay after an upload. Per file,
-//   the first `uploaded` bytes are on the backend and the `pending` bytes
-//   after them are not yet; inbox/<name> is uploaded + pending bytes long.
-//   That sum is what planPull() is told we already have, so a sync at the
-//   car needs no internet to know what is new.
+//   byte 0, and per file how many bytes of it the phone has - what planPull()
+//   is told we already have, so a sync knows what is new.
 
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { t } from '../i18n/index.ts';
-import { type BackendConfig, BackendError, listServer, putChunk } from './backend';
 import { GPX_TAIL } from './gpx-share';
 import { downloadRange } from './pod';
 import { isPodLog, type Known, type Pull } from './sync-plan';
-import { type InboxEntry, planUpload } from './upload-plan';
 import type { WifiCreds } from './wifi-qr';
 
 const CREDS_KEY = 'podWifi';
@@ -31,7 +26,8 @@ export async function saveCreds(c: WifiCreds): Promise<void> {
   await SecureStore.setItemAsync(CREDS_KEY, JSON.stringify(c));
 }
 
-export type { InboxEntry };
+/** One inbox file: inbox/<name> is `bytes` long, from byte 0 of the pod's. */
+export type InboxEntry = { bytes: number };
 export type Inbox = Record<string, InboxEntry>;
 
 const inboxDir = new Directory(Paths.document, 'inbox');
@@ -63,6 +59,24 @@ export function saveDisconnectAfterSync(on: boolean): void {
   } else keepConnectedFile.write('1');
 }
 
+// The gauge's firmware build as last read from it, and when - kept, since the
+// app is on the gauge's WiFi only for a sync (Settings, About shows it).
+const gaugeFwFile = new File(Paths.document, 'gauge-fw.json');
+
+export type GaugeFw = { build: string; at: number };
+
+export function loadGaugeFw(): GaugeFw | null {
+  try {
+    return gaugeFwFile.exists ? JSON.parse(gaugeFwFile.textSync()) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveGaugeFw(build: string): void {
+  gaugeFwFile.write(JSON.stringify({ build, at: Date.now() } satisfies GaugeFw));
+}
+
 // Where "Save to a folder" writes: the URI Android's folder picker returned.
 // The picker took a persistable permission on it, so it stays usable across
 // restarts - until the folder is deleted or the permission revoked.
@@ -81,8 +95,23 @@ function ensureDir() {
   if (!inboxDir.exists) inboxDir.create({ intermediates: true });
 }
 
+// Until 2026-10-18 an entry split its bytes into `uploaded` (to the log
+// server, since removed) and `pending`. Read as their sum, and written back
+// in the new form once, so a phone that has synced keeps its files - none is
+// pulled again.
+type OldInboxEntry = { uploaded?: number; pending?: number; bytes?: number };
+
 export function loadInbox(): Inbox {
-  return stateFile.exists ? JSON.parse(stateFile.textSync()) : {};
+  if (!stateFile.exists) return {};
+  const raw: Record<string, OldInboxEntry> = JSON.parse(stateFile.textSync());
+  const inbox: Inbox = {};
+  let old = false;
+  for (const [name, e] of Object.entries(raw)) {
+    if (e.bytes === undefined) old = true;
+    inbox[name] = { bytes: e.bytes ?? (e.uploaded ?? 0) + (e.pending ?? 0) };
+  }
+  if (old) saveInbox(inbox);
+  return inbox;
 }
 
 function saveInbox(s: Inbox) {
@@ -91,7 +120,7 @@ function saveInbox(s: Inbox) {
 
 export function knownBytes(s: Inbox): Known {
   const k: Known = {};
-  for (const [name, e] of Object.entries(s)) k[name] = e.uploaded + e.pending;
+  for (const [name, e] of Object.entries(s)) k[name] = e.bytes;
   return k;
 }
 
@@ -104,19 +133,10 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   ensureDir();
   const state = loadInbox();
   const dest = inboxFile(p.name);
-  let e = state[p.name] ?? { uploaded: 0, pending: 0 };
-  if (p.restart) {
-    if (dest.exists) dest.delete();
-    e = { uploaded: 0, pending: 0 };
-  }
-  if (p.from !== e.uploaded + e.pending) {
-    throw new Error(
-      t('{name}: planned from {from}, but the inbox ends at {end}', {
-        name: p.name,
-        from: p.from,
-        end: e.uploaded + e.pending,
-      }),
-    );
+  const had = p.restart ? 0 : (state[p.name]?.bytes ?? 0);
+  if (p.restart && dest.exists) dest.delete();
+  if (p.from !== had) {
+    throw new Error(t('{name}: planned from {from}, but the inbox ends at {end}', { name: p.name, from: p.from, end: had }));
   }
 
   // A GPX the pod is still writing ends in closing tags that it overwrites
@@ -154,10 +174,7 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
     tmp.delete();
   }
 
-  // The server's copy past `from` is stale too, if it got that far.
-  e.uploaded = Math.min(e.uploaded, from);
-  e.pending = from + got - e.uploaded;
-  state[p.name] = e;
+  state[p.name] = { bytes: from + got };
   saveInbox(state);
 }
 
@@ -237,94 +254,3 @@ export function dropNonLogs(): Inbox {
   return state;
 }
 
-/** Bytes waiting in the inbox for an upload. */
-export function pendingBytes(s: Inbox): number {
-  return Object.values(s).reduce((n, e) => n + e.pending, 0);
-}
-
-/** Bytes the phone holds of the pod's logs, uploaded or not. */
-export function storedBytes(s: Inbox): number {
-  return Object.values(s).reduce((n, e) => n + e.uploaded + e.pending, 0);
-}
-
-/** Files with bytes waiting for an upload. */
-export function pendingFiles(s: Inbox): number {
-  return Object.values(s).filter((e) => e.pending > 0).length;
-}
-
-// Raw bytes per PUT: small enough to gzip without stalling the UI for long
-// and to show progress on a 17 MB GPX, large enough that requests are few.
-const UPLOAD_CHUNK = 4 * 1024 * 1024;
-
-export type UploadResult = { files: number; bytes: number; problems: string[] };
-
-/**
- * Sends everything waiting in the inbox to the server, smallest first; the
- * files stay on the phone. A file cut off part way keeps its inbox entry as
- * it was: the next upload sees the server ahead of it and continues from
- * there (planUpload sends from the server's size).
- */
-export async function uploadInbox(
-  c: BackendConfig,
-  onProgress: (text: string) => void,
-  signal: AbortSignal,
-): Promise<UploadResult> {
-  const server = await listServer(c);
-  const state = loadInbox();
-  const names = Object.keys(state)
-    .filter((n) => state[n].pending > 0)
-    .sort((a, b) => state[a].pending - state[b].pending);
-  const res: UploadResult = { files: 0, bytes: 0, problems: [] };
-
-  for (const [i, name] of names.entries()) {
-    if (signal.aborted) break;
-    const e = state[name];
-    const step = planUpload(e, server[name], !name.endsWith('.gpx'));
-    if (step.kind === 'send') {
-      const total = e.uploaded + e.pending - step.offset;
-      const src = inboxFile(name).open(FileMode.ReadOnly);
-      try {
-        src.offset = step.offset;
-        let offset = step.offset;
-        for (let sent = 0; sent < total && !signal.aborted; ) {
-          onProgress(
-            t('{at}/{of} {name}: {got} of {total}', {
-              at: i + 1,
-              of: names.length,
-              name,
-              got: mbs(sent),
-              total: mbs(total),
-            }),
-          );
-          const n = Math.min(UPLOAD_CHUNK, total - sent);
-          const size = await putChunk(c, name, offset, src.readBytes(n));
-          if (size !== offset + n)
-            throw new BackendError(
-              t('{name}: server size {size}, expected {expected}', { name, size, expected: offset + n }),
-            );
-          offset = size;
-          sent += n;
-          res.bytes += n;
-        }
-        if (signal.aborted) break;
-      } catch (err) {
-        if (err instanceof BackendError && err.status === 409) {
-          // Someone else changed it in between; the next upload re-plans.
-          res.problems.push(t('{name}: changed on the server meanwhile - try again', { name }));
-          continue;
-        }
-        throw err;
-      } finally {
-        src.close();
-      }
-    }
-    // Everything we hold is on the server now ('done' or a finished 'send').
-    // The file itself stays: the trips read it.
-    state[name] = { uploaded: e.uploaded + e.pending, pending: 0 };
-    saveInbox(state);
-    res.files++;
-  }
-  return res;
-}
-
-const mbs = (n: number) => `${(n / 1048576).toFixed(1)} MB`;

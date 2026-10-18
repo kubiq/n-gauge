@@ -1,29 +1,77 @@
+import { router } from 'expo-router';
 import { File } from 'expo-file-system';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { ScreenOrderCard } from '@/components/screen-order-card';
-import { Button, Card, Note, Screen, useUi } from '@/components/ui';
+import { SystemCard } from '@/components/system-card';
+import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
-import { t, tn } from '@/i18n';
-import { getSettings, saveSettings, uploadFirmware } from '@/lib/pod';
+import { N_, t, tn } from '@/i18n';
+import { getLive, getSettings, type PodLive, saveSettings, setClock, uploadFirmware, zeroGmeter } from '@/lib/pod';
+import { scanPodQr } from '@/lib/scan-qr';
 import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
+import { saveGaugeFw } from '@/lib/store';
 import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
 
-// The gauge's own settings, its screen order and its firmware - opened from
-// the Gauge screen, and linked from Settings, which holds the phone's.
+// The gauge's own screen, from the main ⋮ (under Settings, which is the
+// phone's): setting it up, its settings and screen order, its firmware and
+// system, and the few things done to it. Everything else about the gauge is
+// a tap on it in the header - a sync.
+//
+// It connects by itself when opened, and holds the connection while it is
+// open (useHoldPod): "Disconnect after syncing" waits for it to close.
 export default function GaugeSettingsScreen() {
   const pod = usePod();
-  useHoldPod();   // its settings and firmware need it: no disconnect after syncing
+  useHoldPod();
   const connected = pod.state === 'connected';
+
+  // Once per gauge set up: a failed connect stays failed, with its reason and
+  // a Connect button, rather than retrying in a loop.
+  const { creds, state, connect } = pod;
+  const autoFor = useRef<object | null>(null);
+  useEffect(() => {
+    if (creds && state === 'idle' && autoFor.current !== creds) {
+      autoFor.current = creds;
+      connect();
+    }
+  }, [creds, state, connect]);
+
+  const scan = async () => {
+    const r = await scanPodQr();
+    if (r.kind === 'ok') await pod.setCreds(r.creds);
+    else if (r.kind === 'wrong') Alert.alert(t('Not the gauge’s code'), t('Scan the QR on the gauge’s WiFi screen.'));
+    else if (r.kind === 'unavailable') router.push('/scan');
+  };
+
+  // Its firmware and system, read once a connection: nothing here needs them
+  // live. The build is kept for Settings > About.
+  const [live, setLive] = useState<PodLive | null>(null);
+
   const [orig, setOrig] = useState<PodSettings | null>(null);
   // Edits as typed: text for numbers (so "2." survives), booleans as is.
   const [edit, setEdit] = useState<Record<string, string | boolean>>({});
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // The actions' answer under them - a quiet line, not an alert to tap away.
+  // `what` is English, marked N_, shown through t(); the answer is the
+  // gauge's own, in English. Errors still alert.
+  const [done, setDone] = useState<string | null>(null);
+  const run = async (what: string, fn: () => Promise<string>) => {
+    setBusy(what);
+    setDone(null);
+    try {
+      setDone(`${t(what)}: ${await fn()}`);
+    } catch (e) {
+      Alert.alert(t(what), String((e as Error).message));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const load = () =>
     getSettings().then(
@@ -38,7 +86,15 @@ export default function GaugeSettingsScreen() {
   // Fresh from the pod on every connect: it may have been changed from its own
   // pages, or be a different pod.
   useEffect(() => {
-    if (connected) load();
+    if (!connected) return;
+    load();
+    getLive().then(
+      (l) => {
+        setLive(l);
+        if (l.fw) saveGaugeFw(l.fw.build);
+      },
+      () => setLive(null),
+    );
   }, [connected]);
 
   const changes: Record<string, number | boolean> = {};
@@ -118,25 +174,51 @@ export default function GaugeSettingsScreen() {
     );
   };
 
+  if (pod.ready && !pod.creds) {
+    return (
+      <Screen>
+        <Card title={t('Set up')}>
+          <Note>
+            {t(
+              'Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the password, so this is needed once.',
+            )}
+          </Note>
+          <Button title={t('Scan the gauge’s QR')} onPress={scan} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  // Scanning another gauge replaces the stored one: rare, so last and plain.
+  const another = <Button title={t('Scan a different gauge')} kind="plain" onPress={scan} />;
+
   if (!connected) {
     // The settings live on the gauge: nothing to show until it answers.
     return (
       <Screen>
-        <Card title={t('Not connected')}>
-          <Note>{t('The settings are read from the gauge itself. Connect to change them or to update its firmware.')}</Note>
-          {pod.creds ? (
-            <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={pod.connect} />
-          ) : (
-            <Note>{t('Set the gauge up first, on the Gauge screen.')}</Note>
-          )}
+        <Card title={pod.state === 'connecting' ? t('Connecting…') : t('Not connected')}>
+          <Note>
+            {t(
+              'The settings are read from the gauge itself - it must be awake (car on, or a door opened). Meanwhile the phone has no internet.',
+            )}
+          </Note>
+          <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={pod.connect} />
           {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
         </Card>
+        {another}
       </Screen>
     );
   }
 
   return (
     <Screen>
+      <Card title={t('Gauge')}>
+        <Row label={t('Network')} value={pod.creds?.ssid ?? ''} />
+        <Row label={t('Firmware')} value={live ? (live.fw?.build ?? t('older firmware')) : '…'} />
+        {/* Leaving this screen lets go by itself; this is for "Disconnect
+            after syncing" switched off. */}
+        <Button title={t('Disconnect')} kind="plain" onPress={pod.disconnect} />
+      </Card>
       {err ? <Note tone="bad">{err}</Note> : null}
       {orig ? null : err ? null : <Note>{t('Reading the gauge’s settings…')}</Note>}
       {orig
@@ -171,10 +253,32 @@ export default function GaugeSettingsScreen() {
           {saved && !nChanged ? <Note tone={saved.startsWith('Saved') ? 'good' : 'bad'}>{saved}</Note> : null}
         </>
       ) : null}
+      <Card title={t('Actions')}>
+        <Button
+          title={t('Set the gauge’s clock from this phone')}
+          kind="plain"
+          busy={busy === 'Clock'}
+          onPress={() => run(N_('Clock'), setClock)}
+        />
+        <Button
+          title={t('Zero the g-meter here')}
+          kind="plain"
+          busy={busy === 'G-meter'}
+          onPress={() =>
+            Alert.alert(t('Zero the g-meter?'), t('Only with the car level and standing still.'), [
+              { text: t('Cancel'), style: 'cancel' },
+              { text: t('Zero'), onPress: () => run(N_('G-meter'), zeroGmeter) },
+            ])
+          }
+        />
+        {done ? <Note tone="good">{done}</Note> : null}
+      </Card>
       <Card title={t('Firmware')}>
         <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
+      {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
+      {another}
     </Screen>
   );
 }

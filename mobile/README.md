@@ -1,12 +1,11 @@
 # N Gauge — phone app
 
-Expo (SDK 57) app for the gauge: joins its WiFi, pulls the logs off its card
-by itself, and shows every drive - named after where it went, grouped by
-week - with its track on a map and its readings as charts. It decrypts
-encrypted logs, deletes a drive from the phone and the gauge alike, shows
-the gauge's live status, edits its settings and updates its firmware.
-English or Czech; dark themes or light. Uploading the logs to
-[backend/](../backend) is built but switched off (`src/features.ts`).
+Expo (SDK 57) app for the gauge: a tap on it pulls the logs off its card -
+then the phone leaves its WiFi again - and shows every drive, named after
+where it went, grouped by week, with its track on a map and its readings as
+charts. It decrypts encrypted logs, saves them to a folder, deletes a drive
+from the phone and the gauge alike, and edits the gauge's settings and
+updates its firmware. English or Czech; dark themes or light.
 
 ## Screenshots
 
@@ -17,8 +16,8 @@ swapped for made-up ones and the map zoomed away from both ends.
 |---|---|---|
 | <img src="docs/screenshots/01-trips.png" width="240"> | <img src="docs/screenshots/03-trip-map.png" width="240"> | <img src="docs/screenshots/07-drive-charts.png" width="240"> |
 | The main screen: every drive, named after where it went, by week. The gauge sits in the header, like a watch in Garmin Connect | A drive: the track, coloured by speed | Its readings over the drive - drag to read them at any moment |
-| <img src="docs/screenshots/04-gauge.png" width="240"> | <img src="docs/screenshots/02-settings.png" width="240"> | <img src="docs/screenshots/05-gauge-settings.png" width="240"> |
-| Tap the gauge: connection, live readings in the car, the log sync | Settings: language, theme, log encryption, your places | The gauge's own settings (an older shot, from before they had a screen of their own) |
+| <img src="docs/screenshots/02-settings.png" width="240"> | <img src="docs/screenshots/05-gauge-settings.png" width="240"> | |
+| Settings: language, theme, log encryption, your places | The gauge's own settings (an older shot, from before Gauge settings was the gauge's one screen) | |
 
 Android only. Joining the gauge's AP from an app needs `WifiNetworkSpecifier`,
 which is what the local module `modules/pod-wifi` wraps; iOS has no equivalent
@@ -33,7 +32,8 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
 - **Routing:** while connected, the whole app process is bound to the gauge's
   network (`bindProcessToNetwork`), so `fetch` and downloads reach
   `http://4.3.2.1`. ⚠ That also means the app has **no internet** - no map
-  tiles - until `disconnect()`.
+  tiles - until `disconnect()`, which it does once a sync is done (unless a
+  screen that needs the gauge is open: `useHoldPod`).
 - **Credentials:** scanned once from the QR on the gauge's WiFi screen, kept in
   SecureStore.
 - **Endpoints used:** `/api/live`, `/api/settings`, `/save` (form-encoded,
@@ -46,9 +46,9 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
   meanwhile - so deleting while not connected just waits for the next
   connect.
 - **Sync:** on every connect, from any screen (`src/hooks/use-sync.tsx`):
-  list the card, pull what is new or grew. The gauge serves one request at a
-  time, so the live readout pauses meanwhile, and saving settings or a
-  firmware upload stops it first.
+  list the card, pull what is new or grew, then leave the gauge's WiFi and
+  say in a toast what came over. The gauge serves one request at a time, so
+  saving settings or a firmware upload stops a sync first.
 - **Pairing a drive's files:** every log's name ends in the session (the
   gauge's boot or wake) that wrote it - `trip_2026-10-12_21-19_3fa81c.gpx` -
   and a GPX goes with the CSV of its session.
@@ -60,13 +60,12 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
 | `src/app/index.tsx` | N Gauge: every drive on the phone, by week - the main screen, no tabs |
 | `src/app/trip/[key].tsx` | A drive: map, charts, stats; rename, share, save or delete it |
 | `src/app/name.tsx` | Naming a drive, or one of its ends as a place of yours |
-| `src/app/gauge.tsx` | The gauge: connect, live status, the log sync, clock, g-meter zero |
-| `src/app/gauge-settings.tsx` | The gauge's settings table, its screens' order, firmware upload |
+| `src/app/gauge-settings.tsx` | The gauge's one screen: setting it up, its settings, screens' order, firmware, system, clock, g-meter zero - connects by itself |
 | `src/app/settings.tsx` | The phone's: language, theme, log encryption, logs folder, your places |
 | `src/app/scan.tsx` | QR scan for the WiFi credentials |
-| `src/components/pod-chip.tsx` | The gauge in the header: connection and sync at a glance |
+| `src/components/pod-chip.tsx` | The gauge in the header: connection and sync at a glance; a tap syncs |
 | `src/components/drive-chart.tsx` | Speed, boost, temperatures, voltage over a drive (react-native-svg) |
-| `src/hooks/use-sync.tsx` | The sync, run by itself on every connect |
+| `src/hooks/use-sync.tsx` | The sync, run by itself on every connect; leaving the gauge's WiFi after |
 | `src/lib/pod.ts` | HTTP client for the gauge |
 | `src/lib/store.ts` | Credentials, the inbox (the pulled logs), the delete-on-gauge list |
 | `src/lib/trip-cache.ts` | Each log's summary, thinned track and chart series, cached by size |

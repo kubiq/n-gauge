@@ -48,6 +48,14 @@ test('i18n: every tn() has three Czech forms, each with the same placeholders', 
   }
 });
 
+// The other way round: a Czech text no t()/tn() asks for is left over from
+// something removed (the log upload, the Gauge screen, 2026-10-18), and only
+// misleads whoever translates next.
+test('i18n: no Czech text without a t() or tn() that uses it', () => {
+  const unused = Object.keys(cs).filter((k) => !used.one.has(k) && !used.plural.has(k));
+  assert.deepEqual(unused, [], `Czech for text no longer used:\n${unused.join('\n')}`);
+});
+
 test('i18n: Czech plurals and placeholders', () => {
   setLang('cs');
   const k = '1 drive|{n} drives';

@@ -3,17 +3,20 @@
 // open the Sync tab and tap Pull meant drives stayed on the pod unnoticed
 // (2026-10-12: two drives, synced "already", never pulled).
 //
-// Lives beside the connection rather than in the Sync tab so it runs from any
-// screen, and so other screens can stay out of its way: the pod serves one
-// request at a time, so the live readout pauses while a pull runs, and a
-// firmware upload cancels it first.
+// Lives beside the connection so it runs from any screen, and so other
+// screens can stay out of its way: the pod serves one request at a time, so
+// saving its settings or uploading firmware cancels a pull first.
+//
+// What it did is said in a toast - the files that came over, or why it
+// stopped - since there is no screen to watch it on: a sync is a tap on the
+// gauge in the header, and the phone leaves the gauge's WiFi when it is done.
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ToastAndroid } from 'react-native';
 
 import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
-import { deletePodFile, listFiles } from '@/lib/pod';
+import { deletePodFile, getLive, listFiles } from '@/lib/pod';
 import {
   dropNonLogs,
   type Inbox,
@@ -24,6 +27,7 @@ import {
   loadLastSync,
   pull,
   saveDeleted,
+  saveGaugeFw,
   saveLastSync,
 } from '@/lib/store';
 import { dropStaleCopies, renameLegacyLogs } from '@/lib/trip-cache';
@@ -206,6 +210,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           const now = Date.now();
           saveLastSync(now);
           setLastSync(now);
+          // Its build, for Settings > About: read while on its WiFi. Older
+          // firmware does not say; a failure here is no failed sync.
+          try {
+            const fw = (await getLive()).fw;
+            if (fw) saveGaugeFw(fw.build);
+          } catch {
+            // the next sync tries again
+          }
           setSyncedSession(session.current);
         }
       }),
@@ -250,6 +262,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       ToastAndroid.LONG,
     );
   }, [connected, synced, phase, holders, disconnect]);
+
+  // A sync that stopped says why - still connected, so a tap on the gauge
+  // in the header tries again (pod-chip.tsx).
+  useEffect(() => {
+    if (err) ToastAndroid.show(t('Sync failed: {error}', { error: err }), ToastAndroid.LONG);
+  }, [err]);
 
   return (
     <SyncContext.Provider

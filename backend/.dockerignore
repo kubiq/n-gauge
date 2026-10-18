@@ -1,4 +1,0 @@
-logs
-.env
-node_modules
-*.test.js

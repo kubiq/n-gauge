@@ -498,7 +498,7 @@ side effect of the design.
   byte was found - now starts from those copies.
 - **Costs accepted:** the card in a reader or shared over USB holds only
   ciphertext; `logger_dump_tail()` and the pod's `/files` page show
-  ciphertext; the backend stores ciphertext (which is a plus).
+  ciphertext.
 
 ---
 
@@ -781,22 +781,36 @@ SDK 57 with expo-router; native code only for joining the pod's WiFi
 the logs between syncs, hold the private key the logs are encrypted to, and
 join the pod's network by itself.
 
-**One main screen, the gauge in its header.** (2026-10-13.) Like Garmin
-Connect shows its watch: the drives are the app, titled "N Gauge"; the gauge
-is a ring in the header - grey, green, red after a failed sync, a spinner
-while busy - and a tap connects, or opens the Gauge screen when connected.
-No tabs. Settings in the main ⋮ holds only the phone's things (log key,
-logs folder, About); the gauge's settings, screen order and firmware are a
-screen of their own in the Gauge screen's ⋮ (2026-10-14, e10070d). The
-app says "gauge", never "pod".
+**One main screen, the gauge in its header; a tap syncs.** (2026-10-13,
+reworked 2026-10-18.) Like Garmin Connect shows its watch: the drives are
+the app, titled "N Gauge"; the gauge is a ring in the header - grey, green,
+red after a failed sync, a spinner while busy. A tap syncs where you are:
+it connects, the sync runs by itself, the phone leaves the gauge's WiFi when
+it is done (below) and a toast says what came over, or why it stopped. No
+tabs. The main ⋮ has Settings - the phone's things: log key, logs folder,
+About - and under it Gauge settings, the gauge's one screen: setting it up,
+its settings, screen order, firmware, system, clock and g-meter zero. Gauge
+settings connects by itself when opened and holds the connection while it
+is open. There was a Gauge screen with live readings, reached only by
+tapping the ring while connected; once the phone let go after every sync it
+- and Gauge settings in its ⋮ - was out of reach, and the live readings
+were not wanted, so it went. The app says "gauge", never "pod".
+
+**Off the gauge's WiFi once synced.** (2026-10-16, cb647a0.) Connected
+means no internet (below), so the phone lets go as soon as a sync has left
+nothing to pull - unless a screen that needs the gauge is open (Gauge
+settings, the log key), then once it closes. A sync that stopped short stays
+connected: a tap on the ring tries again. "Disconnect after syncing" in
+Settings switches it off; the gauge's firmware build is remembered from the
+last sync for About.
 
 **Connected means no internet.** The app joins the pod's network with
 `WifiNetworkSpecifier` - Android's one-tap "connect to this device", with
 mobile data still the default route - and binds its own process to it, or
 requests to 4.3.2.1 would leave over mobile data. So while connected the
-app has no internet: no map tiles, no upload. Everything that must work
-right after a sync works offline - which decided how drives are named
-(below). The Gauge screen says so before connecting. The QR is read with
+app has no internet: no map tiles, no place lookups. Everything that must
+work right after a sync works offline - which decided how drives are named
+(below). Gauge settings says so while connecting. The QR is read with
 Google's code scanner: the gauge's ~12 mm code is too small for the in-app
 camera without zoom.
 
@@ -807,8 +821,15 @@ fetched from where the phone stopped, by Range; one smaller on the pod than
 on the phone is not the same file and is fetched whole. Smallest first, so a
 sync cut short by the pod going to sleep has whole files, not half a GPX.
 Only the pod's own logs are synced (it had been pulling firmware `.bin`s).
-The pod serves one request at a time: live readings pause during a sync, and
-a settings save or firmware upload stops it first.
+The pod serves one request at a time: a settings save or firmware upload
+stops a sync first.
+
+**No log server.** (Removed 2026-10-18.) The app could upload the logs to a
+small server of our own (`backend/`, Node in Docker) - built, never
+deployed, switched off behind a flag. Logs leave the phone as files instead
+("Save all to a folder", synced on from there), so it went: the server, the
+app's Upload card and server screen, and the inbox's uploaded/pending split
+(read as one byte count by older phones' `inbox.json`).
 
 **A drive deleted on the phone is deleted on the gauge.** (2026-10-14,
 d45a40c.) Its names go on a delete-on-gauge list; every sync asks the gauge
