@@ -100,6 +100,8 @@ static lv_style_t rimStyle;
 static uint8_t noticeShown = 0;     // active faults being displayed (mask)
 static uint8_t noticeSel   = 0;     // which one the text shows (a single bit)
 static bool    noticeDrawn = false; // false until the first redraw
+static int     noticeOilC  = 0;     // the temperatures the hot faults name
+static int     noticeCoolC = 0;
 static void noticeRedraw();
 static void notice_tap_cb(lv_event_t *e);
 
@@ -1880,12 +1882,21 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
   }
 }
 
-void ui_set_faults(uint8_t faults) {
+void ui_set_faults(uint8_t faults, int oilC, int coolantC) {
   // Suppressed while the boot splash is up, or every cold start would flash a
   // fault across the animation before CAN or the GNSS has had a chance to
   // answer. Folded into the value being compared, so the rim appears on the
   // first call after the splash goes.
   const uint8_t shown = bootSplashUp() ? 0 : faults;
+  // The hot faults' text names the temperature, so a change of a degree
+  // redraws too - once a degree at most, nothing for the rim's cost.
+  const int oil  = (shown & FAULT_OIL_HOT)  ? oilC : 0;
+  const int cool = (shown & FAULT_COOL_HOT) ? coolantC : 0;
+  if (oil != noticeOilC || cool != noticeCoolC) {
+    noticeOilC = oil;
+    noticeCoolC = cool;
+    noticeDrawn = false;
+  }
 
   // The change guard is not an optimisation here - it is the difference
   // between a rim and a strobe.
@@ -1903,9 +1914,12 @@ void ui_set_faults(uint8_t faults) {
   if (shown == noticeShown && noticeDrawn) return;
 
   // A fault appearing or clearing jumps back to the most important one: a new
-  // fault should be seen, not left behind whatever was tapped to last.
-  noticeShown = shown;
-  noticeSel   = (uint8_t)(shown & (uint8_t)-shown);   // lowest set bit
+  // fault should be seen, not left behind whatever was tapped to last. A
+  // temperature changing keeps the one tapped to.
+  if (shown != noticeShown || !(noticeSel & shown)) {
+    noticeShown = shown;
+    noticeSel   = (uint8_t)(shown & (uint8_t)-shown);   // lowest set bit
+  }
   noticeRedraw();
 }
 
@@ -1922,12 +1936,17 @@ static void noticeRedraw() {
   }
 
   static const char *const text[] = {
+    "OIL %d\xC2\xB0" "C - TOO HOT",         // FAULT_OIL_HOT
+    "COOLANT %d\xC2\xB0" "C - TOO HOT",     // FAULT_COOL_HOT
     "not connected to CAN bus",           // FAULT_CAN
     "no GPS module",                      // FAULT_GPS
     "no SD card - not logging",           // FAULT_SD
   };
   int idx = 0;
   while (!(noticeSel & (1u << idx))) idx++;
+  char what[40];
+  snprintf(what, sizeof(what), text[idx],
+           idx == 0 ? noticeOilC : idx == 1 ? noticeCoolC : 0);
 
   // Position among the active faults, e.g. "2/3", so it is obvious there are
   // others and that tapping moves through them. Replaces the old "+N", which
@@ -1943,13 +1962,13 @@ static void noticeRedraw() {
   // gauge cannot do its job" (no bus, no readings), amber for "degraded" (it
   // still shows everything, but a log or a feature is missing). Otherwise a
   // missing SD card would look exactly as alarming as losing the bus.
-  const lv_color_t rim  = (noticeShown & FAULT_CAN) ? COL_BAD : COL_WARN;
-  const lv_color_t txtC = (noticeSel   & FAULT_CAN) ? COL_BAD : COL_WARN;
+  const lv_color_t rim  = (noticeShown & FAULTS_RED) ? COL_BAD : COL_WARN;
+  const lv_color_t txtC = (noticeSel   & FAULTS_RED) ? COL_BAD : COL_WARN;
   lv_style_set_line_color(&rimStyle, rim);
   lv_obj_report_style_change(&rimStyle);    // all RIM_SEG segments at once
   lv_obj_set_style_text_color(noticeText, txtC, 0);
-  if (count > 1) lv_label_set_text_fmt(noticeText, "%s  %d/%d", text[idx], pos, count);
-  else           lv_label_set_text(noticeText, text[idx]);
+  if (count > 1) lv_label_set_text_fmt(noticeText, "%s  %d/%d", what, pos, count);
+  else           lv_label_set_text(noticeText, what);
   lv_obj_clear_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
 }
 

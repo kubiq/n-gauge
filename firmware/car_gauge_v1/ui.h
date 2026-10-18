@@ -77,16 +77,24 @@ void ui_update_track(const LapInfo *info);
 //
 // "No GPS fix" is deliberately NOT a fault. It is normal in a tunnel or a
 // garage and would flash constantly; the GPS screen already shows it.
+//
+// Over-temperature is a fault too, and the most important one: it used to show
+// only on the oil screen's state line, so on the track screen - where a track
+// day is spent - nothing said the oil was at 132 C (2026-10-17).
 enum UiFault : uint8_t {
-  FAULT_CAN = 1u << 0,   // no CAN traffic: the gauge cannot do its job  (red)
-  FAULT_GPS = 1u << 1,   // GNSS module not talking at all               (amber)
-  FAULT_SD  = 1u << 2,   // no SD card: nothing is being logged          (amber)
+  FAULT_OIL_HOT  = 1u << 0,   // oil at/over settings.oilWarnC                 (red)
+  FAULT_COOL_HOT = 1u << 1,   // coolant at/over settings.coolantWarnC         (red)
+  FAULT_CAN      = 1u << 2,   // no CAN traffic: the gauge cannot do its job   (red)
+  FAULT_GPS      = 1u << 3,   // GNSS module not talking at all                (amber)
+  FAULT_SD       = 1u << 4,   // no SD card: nothing is being logged           (amber)
 };
+// The faults shown red; the rest are amber.
+#define FAULTS_RED (FAULT_OIL_HOT | FAULT_COOL_HOT | FAULT_CAN)
 
-// Show the given faults (a mask of UiFault). Safe to call every loop: it
-// compares before touching anything, which for a full-panel shape is essential,
-// not tidiness.
-void ui_set_faults(uint8_t faults);
+// Show the given faults (a mask of UiFault), with the temperatures the hot
+// ones name. Safe to call every loop: it compares before touching anything,
+// which for a full-panel shape is essential, not tidiness.
+void ui_set_faults(uint8_t faults, int oilC, int coolantC);
 // Shows the AP SSID + IP on screen while the settings AP is up, so you know
 // what to connect to without needing a serial console.
 // The WiFi screen: network name, passphrase and IP, so they can be read from

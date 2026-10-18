@@ -471,6 +471,11 @@ void loop() {
   // ---- push to UI ----
   {
     uint8_t faults = 0;
+    // Over-temperature on every screen, not just the oil screen's state line:
+    // a track day is spent on the track screen (2026-10-17: oil at 132 C,
+    // nothing said so there). The same latched states, so the same hysteresis.
+    if (overOil)  faults |= FAULT_OIL_HOT;
+    if (overCool) faults |= FAULT_COOL_HOT;
     if (!obd.linkUp || (obd.lastFrameMs == 0 && !canGrace)) faults |= FAULT_CAN;
     // A grace period, because at boot the GNSS task is still hunting for the
     // module's baud rate, and "not found yet" is not "missing". Checked on
@@ -485,7 +490,7 @@ void loop() {
     if (dbgCmd == 'r') noRim = !noRim;
     if (noRim) faults = 0;
 #endif
-    ui_set_faults(faults);
+    ui_set_faults(faults, oilTempC, obd.coolantC);
   }
   // The same "car on" test as obd.cpp's schedule: lastFrameMs counts every
   // frame except the TPMS module's, which answers with the car parked too.
