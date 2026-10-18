@@ -22,8 +22,9 @@
 //       there so the pair runs straight to the transceiver socket instead of
 //       crossing. Both 16 and 17 are RTC-capable, so either can be CAN_RX (the
 //       ext1 wake source); CAN_RS stays on GPIO18 on both.
-// ⚠ Set to 1 when moving to the carrier, or CAN is silent: TX and RX reversed.
-#define BOARD_CARRIER      0
+// The gauge has been on the carrier since 2026-10-18; 0 is for the prototype
+// only. ⚠ The wrong one leaves CAN silent: TX and RX reversed.
+#define BOARD_CARRIER      1
 #if BOARD_CARRIER
 #define CAN_TX_GPIO        16     // TWAI TX -> transceiver CTX / "CAN TX"
 #define CAN_RX_GPIO        17     // TWAI RX <- transceiver CRX / "CAN RX"
