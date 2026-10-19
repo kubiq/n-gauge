@@ -87,13 +87,6 @@ static void oil_mode22_is_monotonic_and_sane() {
   CHECK(OIL_TEMP_FROM_MODE22(d) > 100 && OIL_TEMP_FROM_MODE22(d) < 160);
 }
 
-static void oil_mode01_is_the_standard_offset() {
-  unsigned char d[1];
-  d[0] = 40;  CHECK_EQ(OIL_TEMP_FROM_MODE01(d), 0);     // OBD-II A-40
-  d[0] = 0;   CHECK_EQ(OIL_TEMP_FROM_MODE01(d), -40);
-  d[0] = 215; CHECK_EQ(OIL_TEMP_FROM_MODE01(d), 175);
-}
-
 static void tpms_pressure_matches_the_dashboard() {
   // The layout was confirmed against the dashboard on 2026-09-20: raw values
   // 191/192/178/176 read as 2.63/2.65/2.45/2.43 bar, front 2.6 and rear 2.4.
@@ -183,7 +176,6 @@ int main() {
   TEST(oil_mode22_matches_observed_values);
   TEST(oil_mode22_offset_is_the_oil_byte_not_coolant);
   TEST(oil_mode22_is_monotonic_and_sane);
-  TEST(oil_mode01_is_the_standard_offset);
   TEST(tpms_pressure_matches_the_dashboard);
   TEST(tpms_temperature_matches_the_same_drive);
   TEST(tpms_offsets_have_stride_four_and_fit);

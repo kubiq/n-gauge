@@ -166,13 +166,7 @@ struct ScheduledRequest {
 };
 
 static void askTyres() { sendMode22(TPMS_REQ_ID, TPMS_MODE22_DID); }
-static void askOil() {
-#if OIL_USE_MODE22
-  sendMode22(0x7E0, OIL_MODE22_DID);
-#else
-  sendMode01(0x5C);
-#endif
-}
+static void askOil() { sendMode22(0x7E0, OIL_MODE22_DID); }   // oil and dash coolant
 static void askFast() {
   static const uint8_t pids[] = OBD_MULTI_PIDS;
   static_assert(sizeof(pids) <= 6, "Mode 01 takes at most 6 PIDs per request");
@@ -240,21 +234,15 @@ static void isoSendFlowControl(uint16_t reqId) {
 // formulas are calc_mode01_value() in calc.h (SAE J1979, host-tested); what
 // is kept, and the guards on it, are here.
 static void handlePid(uint8_t pid, const uint8_t *d, uint16_t dl) {
-  if (dl < 1) return;
-  const uint32_t now = millis();
-  if (pid == 0x5C) {
-    obd.oilTempC = OIL_TEMP_FROM_MODE01(d); obd.haveOil = true; obd.oilMs = now;
-    return;
-  }
-  if (pid == BOOST_MODE01_PID) {
-    obd.boostBar = BOOST_BAR_FROM_KPA(d[0], obd.haveBaro ? obd.baroKpa : AMBIENT_KPA);
-    obd.haveBoost = true;
-    obd.boostMs  = now;
-    return;
-  }
   float v;
   if (!calc_mode01_value(pid, d, dl, &v)) return;
+  const uint32_t now = millis();
   switch (pid) {
+    // Manifold pressure, kPa absolute: boost is it against the barometer.
+    case BOOST_MODE01_PID:
+      obd.boostBar = BOOST_BAR_FROM_KPA((uint8_t)v, obd.haveBaro ? obd.baroKpa : AMBIENT_KPA);
+      obd.boostMs = now; obd.haveBoost = true;
+      break;
     case 0x05:
       obd.coolantPid05C = (int)v; obd.pid05Ms = now; obd.havePid05 = true;
 #if !COOLANT_FROM_E001
@@ -308,7 +296,6 @@ static void handleUds(const uint8_t *p, uint16_t len) {
     const uint16_t did = (p[1] << 8) | p[2];
     const uint8_t *d   = &p[3];
     const uint16_t dl  = len - 3;          // data bytes available after the DID
-#if OIL_USE_MODE22
     // Bounds check matters: we index byte 34 of the payload.
     if (did == OIL_MODE22_DID && dl > OIL_MODE22_OFFSET) {
       obd.oilRaw   = d[OIL_MODE22_OFFSET];
@@ -328,7 +315,6 @@ static void handleUds(const uint8_t *p, uint16_t len) {
                         ? sizeof(obd.oilPayload) : (uint8_t)dl;
       memcpy(obd.oilPayload, d, obd.oilPayloadLen);
     }
-#endif
     if (did == TPMS_MODE22_DID) {
       obd.tpmsRawLen = dl > sizeof(obd.tpmsRaw) ? sizeof(obd.tpmsRaw) : (uint8_t)dl;
       memcpy(obd.tpmsRaw, d, obd.tpmsRawLen);
@@ -352,13 +338,6 @@ static void handleUds(const uint8_t *p, uint16_t len) {
         obd.haveTyre[i]  = true;
       }
     }
-#if BOOST_USE_MODE22
-    if (did == BOOST_MODE22_DID && dl >= 2) {
-      obd.boostBar = /*TODO formula*/ ((d[0] << 8 | d[1]) / 1000.0f);
-      obd.haveBoost = true;
-      obd.boostMs   = millis();
-    }
-#endif
   }
   // A negative response (PID/DID unsupported): left as no-update.
 }

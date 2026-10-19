@@ -332,16 +332,14 @@
 #define WDT_TIMEOUT_MS     8000
 
 // ---- Oil temperature -------------------------------------------------------
-// Two ways to get it. Try standard first; if the car NAKs it, use Mode 22.
-//   Get these from the sniffer session + the Car Scanner "i30 N" PID profile.
-// Mode01 PID 0x5C is NOT supported by this car: 193 requests, zero replies
-// (not even a NAK) in log_0015.csv. Enhanced Mode22 is the only way.
-#define OIL_USE_MODE22     1              // 1 = enhanced Mode22 DID, 0 = Mode01 0x5C
+// Mode 22 DID 0xE001, from the Car Scanner "i30 N" PID profile. The standard
+// Mode 01 PID 0x5C is NOT supported by this car: 193 requests, zero replies
+// (not even a NAK) in log_0015.csv - so there is no fallback to switch to.
 #define OIL_MODE22_DID     0xE001         // verified responding on this car
 
 // DID 0xE001 answers with a 45-byte ISO-TP **multi-frame** payload, so it
-// needs Flow Control + Consecutive Frame reassembly - implemented in obd.cpp
-// (handleFrame / isoSendFlowControl).
+// needs Flow Control + Consecutive Frame reassembly - calc_isotp_rx() in
+// calc.h, driven from obd.cpp's handleFrame().
 //
 // Oil temp is ONE byte at data offset 34.
 //
@@ -385,13 +383,9 @@
 // 179, 180, 183, 185, 188, 191, 193, 196, 201 seen) - steps of ~1.5-4 °C,
 // coarser when hot - so the reading moves in jumps; that is the source.
 //
-// Two separate macros on purpose: the Mode22 payload is 42 data bytes and we
-// index byte 34, while a Mode01 reply is a single byte in an 8-byte frame.
-// Using one macro for both would read far out of bounds on the Mode01 path.
-// In both, `d` points at the first data byte (after the echoed DID / PID).
+// `d` points at the first data byte, after the echoed DID.
 #define OIL_MODE22_OFFSET        34
 #define OIL_TEMP_FROM_MODE22(d)  ((int)((d)[OIL_MODE22_OFFSET] * 0.7435f - 49.2f))
-#define OIL_TEMP_FROM_MODE01(d)  ((int)(d)[0] - 40)
 
 // Coolant as the DASHBOARD shows it: byte 25 of the same DID, same encoding.
 // Mode 01 PID 0x05 read 90-93 °C on every warm drive while the cluster stayed
@@ -407,10 +401,10 @@
 #define COOLANT_FROM_MODE22(d)   ((int)lroundf((d)[COOLANT_MODE22_OFFSET] * 0.7435f - 49.2f))
 
 // ---- Boost -----------------------------------------------------------------
-// Easy start: Mode01 PID 0x0B (intake manifold abs pressure, kPa).
-// Later swap to the enhanced charge-pressure DID for true boost.
-#define BOOST_USE_MODE22   0
-#define BOOST_MODE22_DID   0x0000         // <<< TODO if using enhanced boost
+// Mode 01 PID 0x0B, intake manifold absolute pressure in kPa, against the
+// barometer (PID 0x33) - see BOOST_BAR_FROM_KPA. No enhanced charge-pressure
+// DID has been found for this car; MAP minus baro is boost as the driver
+// means it.
 #define BOOST_MODE01_PID   0x0B
 // The boost arc glides to each new sample over this long rather than jumping.
 // Boost arrives every ~15 ms (a 6-PID reply ~10 ms + the gap), ~45 ms once a
