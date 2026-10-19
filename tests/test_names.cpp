@@ -70,8 +70,26 @@ static void nothing_else_is_deletable() {
   CHECK(!log(nullptr));
 }
 
+// ?p= on the card listings. The bug: toInt() made a huge p INT_MAX, and
+// p * perPage overflowed to a negative index into the name table.
+static void page_numbers_are_digits_in_range() {
+  CHECK_EQ(calc_parse_page("0", 100000), 0);
+  CHECK_EQ(calc_parse_page("12", 100000), 12);
+  CHECK_EQ(calc_parse_page("100000", 100000), 100000);
+  CHECK_EQ(calc_parse_page("100001", 100000), -1);
+  CHECK_EQ(calc_parse_page("99999999999999999999", 100000), -1);
+  CHECK_EQ(calc_parse_page("-1", 100000), -1);
+  CHECK_EQ(calc_parse_page("1a", 100000), -1);
+  CHECK_EQ(calc_parse_page(" 1", 100000), -1);
+  CHECK_EQ(calc_parse_page("", 100000), -1);
+  CHECK_EQ(calc_parse_page(nullptr, 100000), -1);
+  // The largest page times the largest page size still fits an int.
+  CHECK(100000LL * 50 < 2147483647LL);
+}
+
 int main() {
   printf("test_names\n");
+  TEST(page_numbers_are_digits_in_range);
   TEST(every_name_the_firmware_writes_is_safe);
   TEST(separators_and_parent_dirs_are_refused);
   TEST(an_embedded_nul_is_refused);

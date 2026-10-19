@@ -804,6 +804,22 @@ static inline bool calc_fresh(bool have, uint32_t stampMs, uint32_t nowMs,
   return have && (nowMs - stampMs < maxAgeMs);
 }
 
+// ---- a page number from the phone ---------------------------------------------
+// The card listings' ?p=: digits only, 0..maxPage, else -1 (a 400). It was
+// String::toInt() - a huge p became INT_MAX, p * perPage overflowed to a
+// negative index, and the listing read before its own table. A page past the
+// end is not an error: it is an empty page (files can go between requests).
+static inline int calc_parse_page(const char *s, int maxPage) {
+  if (!s || !*s) return -1;
+  long v = 0;
+  for (; *s; s++) {
+    if (*s < '0' || *s > '9') return -1;
+    v = v * 10 + (*s - '0');
+    if (v > maxPage) return -1;
+  }
+  return (int)v;
+}
+
 // ---- card file names from the phone ------------------------------------------
 // A name the web API may open on the card. Everything there is flat in the
 // card root, so a name containing a separator or ".." can only be an attempt

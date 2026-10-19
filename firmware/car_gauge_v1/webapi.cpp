@@ -451,6 +451,13 @@ static int byCardOrder(const void *a, const void *b) {
   return calc_card_order((const char *)a, (const char *)b);
 }
 
+// ?p= of the card listings: -1 for anything but a page number (a 400). With
+// at most this many pages, page * perPage stays far inside an int.
+static constexpr int CARD_MAX_PAGE = 100000;
+static int pageArg() {
+  return server.hasArg("p") ? calc_parse_page(server.arg("p").c_str(), CARD_MAX_PAGE) : 0;
+}
+
 static int listCardPage(int page, int perPage, String *names, int *nShown) {
   *nShown = 0;
   int nFiles = 0;
@@ -494,6 +501,8 @@ static long cardFileSize(const String &name) {
 }
 
 static void handleFiles() {
+  const int page = pageArg();
+  if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
   // The logger writes from its own task on core 0: take turns with it.
   LoggerSdLock lock;
   // The card can be lent to the PC as a USB drive - then it is not ours to
@@ -531,7 +540,6 @@ static void handleFiles() {
            (unsigned long long)(total / 1048576ULL));
   server.sendContent(hdr);
 
-  const int page = server.hasArg("p") ? max(0, (int)server.arg("p").toInt()) : 0;
   String names[FILES_PER_PAGE];
   int nShown = 0;
   const int nFiles = listCardPage(page, FILES_PER_PAGE, names, &nShown);
@@ -571,13 +579,14 @@ static void handleFiles() {
 // grew. Only names /dl will serve are listed - anything else could never be
 // fetched, and the app would retry it on every sync.
 static void handleFilesJson() {
+  const int page = pageArg();
+  if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
   LoggerSdLock lock;
   if (logger_card_shared()) {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;
   }
   if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return; }
-  const int page = server.hasArg("p") ? max(0, (int)server.arg("p").toInt()) : 0;
   String names[FILES_JSON_PER_PAGE];
   int nShown = 0;
   const int nFiles = listCardPage(page, FILES_JSON_PER_PAGE, names, &nShown);
