@@ -458,13 +458,18 @@ static int pageArg() {
   return server.hasArg("p") ? calc_parse_page(server.arg("p").c_str(), CARD_MAX_PAGE) : 0;
 }
 
+// Returns the file count, or -1 when the card could not be listed - not 0:
+// "no files" told the app every pending delete was already done.
 static int listCardPage(int page, int perPage, String *names, int *nShown) {
   *nShown = 0;
   int nFiles = 0;
   char *table = nullptr;
   for (int pass = 0; pass < 2; pass++) {
     File root = SD_MMC.open("/");
-    if (!root) break;
+    if (!root) {
+      if (table) heap_caps_free(table);
+      return -1;
+    }
     int i = 0;
     bool isDir = false;
     for (String n = root.getNextFileName(&isDir); n.length(); n = root.getNextFileName(&isDir)) {
@@ -480,12 +485,11 @@ static int listCardPage(int page, int perPage, String *names, int *nShown) {
       nFiles = i;
       if (nFiles == 0) return 0;
       table = (char *)heap_caps_malloc(nFiles * CARD_NAME_MAX, MALLOC_CAP_SPIRAM);
-      if (!table) return 0;
+      if (!table) return -1;
     } else if (i < nFiles) {
       nFiles = i;                            // a file went between the passes
     }
   }
-  if (!table) return 0;
   qsort(table, nFiles, CARD_NAME_MAX, byCardOrder);
   for (int i = page * perPage; i < nFiles && *nShown < perPage; i++)
     names[(*nShown)++] = table + i * CARD_NAME_MAX;
@@ -542,7 +546,11 @@ static void handleFiles() {
 
   String names[FILES_PER_PAGE];
   int nShown = 0;
-  const int nFiles = listCardPage(page, FILES_PER_PAGE, names, &nShown);
+  int nFiles = listCardPage(page, FILES_PER_PAGE, names, &nShown);
+  if (nFiles < 0) {
+    server.sendContent(F("</table><p class='sub'>The card could not be read.</p>"));
+    nFiles = 0;
+  }
   for (int k = 0; k < nShown; k++) {
     const long size = cardFileSize(names[k]);
     char row[240];
@@ -590,6 +598,9 @@ static void handleFilesJson() {
   String names[FILES_JSON_PER_PAGE];
   int nShown = 0;
   const int nFiles = listCardPage(page, FILES_JSON_PER_PAGE, names, &nShown);
+  // An error, not an empty card: the app takes a file missing from the list
+  // as deleted, and would drop every delete it still has pending.
+  if (nFiles < 0) { server.send(500, "text/plain", "The card could not be read."); return; }
   const int pages = (nFiles + FILES_JSON_PER_PAGE - 1) / FILES_JSON_PER_PAGE;
 
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -646,6 +657,9 @@ static void handleDelete() {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;
   }
+  // No card is "not now", not "already gone": with it missing, every file
+  // looked absent, and a 410 told the app to forget the pending delete.
+  if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return; }
   const String n = server.arg("f");
   if (!safeName(n) || !calc_is_drive_log(n.c_str(), LOGCRYPT_SUFFIX)) {
     server.send(400, "text/plain", "not a drive log");
