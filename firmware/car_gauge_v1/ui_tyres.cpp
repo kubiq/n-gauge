@@ -57,16 +57,32 @@ lv_obj_t *ui_build_tyres() {
 
 void ui_update_tpms(const bool have[WHEEL_COUNT], const float bar[WHEEL_COUNT],
                     const int tempC[WHEEL_COUNT]) {
-  // Same guard as the other updaters, at display resolution (1 dp of bar).
+  // Same guard as the other updaters, on what is SHOWN: the pressure at
+  // display resolution (1 dp), the temperature, and whether it is red. The
+  // last is not a function of the reading alone - the limits come from the
+  // phone - so guarding on the readings missed a limit changed on the
+  // settings page until the next TPMS reply, up to a minute later.
   static bool lastHave[WHEEL_COUNT] = { false };
   static int  lastDeci[WHEEL_COUNT] = { INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN };
   static int  lastTemp[WHEEL_COUNT] = { INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN };
+  static bool lastBad[WHEEL_COUNT]  = { false };
+  bool bad[WHEEL_COUNT];
   bool changed = false;
   for (int i = 0; i < WHEEL_COUNT; i++) {
+    // settings, not the config.h macros. These two were loaded from NVS,
+    // rendered into the phone form, clamped and persisted on save - and then
+    // read by nothing, so setting a track-day pressure showed "Saved." and
+    // changed no behaviour at all. The config.h values are only the defaults
+    // that settings_load() falls back to.
+    // Per axle: slots are FL, FR, RL, RR, so 0-1 are the fronts.
+    const int axle = i < 2 ? 0 : 1;
+    bad[i] = have[i] && (bar[i] < settings.tpmsLowBar[axle] ||
+                         bar[i] > settings.tpmsHighBar[axle]);
     const int deci = (int)(bar[i] * 10.0f + 0.5f);
-    if (have[i] != lastHave[i] || deci != lastDeci[i] || tempC[i] != lastTemp[i]) {
+    if (have[i] != lastHave[i] || deci != lastDeci[i] || tempC[i] != lastTemp[i] ||
+        bad[i] != lastBad[i]) {
       changed = true;
-      lastHave[i] = have[i]; lastDeci[i] = deci; lastTemp[i] = tempC[i];
+      lastHave[i] = have[i]; lastDeci[i] = deci; lastTemp[i] = tempC[i]; lastBad[i] = bad[i];
     }
   }
   if (!changed) return;
@@ -78,19 +94,10 @@ void ui_update_tpms(const bool have[WHEEL_COUNT], const float bar[WHEEL_COUNT],
       lv_label_set_text(tyreTemp[i], "");
       continue;
     }
-    // settings, not the config.h macros. These two were loaded from NVS,
-    // rendered into the phone form, clamped and persisted on save - and then
-    // read by nothing, so setting a track-day pressure showed "Saved." and
-    // changed no behaviour at all. The config.h values are only the defaults
-    // that settings_load() falls back to.
-    // Per axle: slots are FL, FR, RL, RR, so 0-1 are the fronts.
-    const int axle = i < 2 ? 0 : 1;
-    const bool bad = bar[i] < settings.tpmsLowBar[axle] ||
-                     bar[i] > settings.tpmsHighBar[axle];
     lv_label_set_text_fmt(tyreVal[i], "%.1f", bar[i]);
     // The pressure's own colour is the warning. There used to be a wheel
     // marker coloured green/red as well; the car picture replaced it.
-    lv_obj_set_style_text_color(tyreVal[i], bad ? COL_BAD : COL_INK, 0);
+    lv_obj_set_style_text_color(tyreVal[i], bad[i] ? COL_BAD : COL_INK, 0);
     lv_label_set_text_fmt(tyreTemp[i], "%d C", tempC[i]);
   }
 }
