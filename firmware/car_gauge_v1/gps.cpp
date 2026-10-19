@@ -431,6 +431,7 @@ static void gpsPoll() {
   // parses" (wrong baud / noise) and "no bytes at all" (wiring, power, wrong
   // pin) look identical on screen, so tell them apart here.
   static uint16_t dumped = 0;
+  static uint32_t lastSentenceMs = 0;          // 0 = none yet
   while (gpsSerial.available()) {
     int c = gpsSerial.read();
     gps.rawBytes++;
@@ -439,18 +440,34 @@ static void gpsPoll() {
       Serial.printf("%02X%c", c, (c >= 32 && c < 127) ? (char)c : '.');
       if (++dumped == GPS_RAW_DUMP_BYTES) Serial.println();
     }
-    if (nmea.encode(c)) gps.sentences++;
+    if (nmea.encode(c)) {
+      gps.sentences++;
+      lastSentenceMs = millis() ? millis() : 1;
+    }
   }
 
-  // Nothing has ever decoded -> wrong baud (or nothing wired). Try the next.
-  if (gps.sentences == 0 && millis() - baudTryMs > GPS_BAUD_TRY_MS) {
+  // The link is sentences arriving NOW, not ever. It used to be
+  // "sentences > 0", so a module that died mid-drive never showed FAULT_GPS,
+  // and the baud hunt below never resumed for one that came back at another
+  // rate (a power-cycled module returns to its 38400 default).
+  const uint32_t now = millis();
+  const bool wasUp = gps.linkUp;
+  gps.linkUp = lastSentenceMs != 0 && now - lastSentenceMs < GPS_LINK_STALE_MS;
+  if (wasUp && !gps.linkUp) {
+    // Gone: when it is found again, configure it again - after a power cycle
+    // it is back to 1 Hz with every sentence on.
+    configTried = false;
+    gps.configured = false;
+    Serial.println(F("[ERR] GPS: no NMEA for a while - link lost, hunting"));
+  }
+
+  // No NMEA -> wrong baud (or nothing wired, or the module gone). Try the next.
+  if (!gps.linkUp && now - baudTryMs > GPS_BAUD_TRY_MS) {
     baudIdx = (baudIdx + 1) % (sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]));
     openPort(baudIdx);
     Serial.printf("[..] GPS no NMEA (raw bytes seen: %lu), trying %lu baud\n",
                   (unsigned long)gps.rawBytes, (unsigned long)gps.baud);
   }
-
-  gps.linkUp = gps.sentences > 0;
 
   // Configure only once we know sentences are decoding, i.e. the baud is
   // right - sending UBX at the wrong baud would just be noise. One-shot, and
@@ -461,6 +478,9 @@ static void gpsPoll() {
     // Straight after config, while we are already blocking on UBX replies and
     // long before a fix is plausible - which is the entire point of it.
     gpsSeedClockFromModuleRtc();
+    // Those waits ate the NMEA in between (~2 s): that is not the module
+    // going quiet, so do not count it as a lost link.
+    lastSentenceMs = millis() ? millis() : 1;
   }
 
   if (nmea.satellites.isValid()) gps.sats = nmea.satellites.value();
