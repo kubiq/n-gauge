@@ -7,6 +7,7 @@
 #include "power.h"      // a tap is a sign of life; hold off sleep
 #include <math.h>       // cosf, sinf, floorf, fminf for the rim
 #include <stdio.h>      // snprintf
+#include <string.h>     // strcmp: the text is set only when it changed
 
 static lv_obj_t *noticeRing, *noticeText;
 // The rim's segments: see ui_build_notice(). lv_line keeps a pointer to its
@@ -144,7 +145,7 @@ void ui_set_faults(uint8_t faults, int oilC, int coolantC) {
   // first call after the splash goes.
   const uint8_t shown = ui_boot_splash_up() ? 0 : faults;
   // The hot faults' text names the temperature, so a change of a degree
-  // redraws too - once a degree at most, nothing for the rim's cost.
+  // redraws too - the text only (noticeRedraw), once a degree at most.
   const int oil  = (shown & FAULT_OIL_HOT)  ? oilC : 0;
   const int cool = (shown & FAULT_COOL_HOT) ? coolantC : 0;
   if (oil != noticeOilC || cool != noticeCoolC) {
@@ -183,10 +184,17 @@ void ui_set_faults(uint8_t faults, int oilC, int coolantC) {
 // the next active fault. The rim stays the colour of the WORST active fault
 // throughout, so tapping to a minor one can never make a lost CAN bus look
 // amber; the text takes the colour of the fault it is showing.
+//
+// Each change is applied only when it IS a change. Restyling the 48 segments
+// and un-hiding the full-panel container both invalidate the whole panel, and
+// they used to run on every redraw - so with oil over its limit, every degree
+// re-flushed the entire screen (2026-10-19 review, A8). A new degree now
+// redraws only the text.
 static void noticeRedraw() {
   noticeDrawn = true;
   if (!noticeShown) {
-    lv_obj_add_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
+    if (!lv_obj_has_flag(noticeRing, LV_OBJ_FLAG_HIDDEN))
+      lv_obj_add_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
     return;
   }
 
@@ -217,14 +225,24 @@ static void noticeRedraw() {
   // gauge cannot do its job" (no bus, no readings), amber for "degraded" (it
   // still shows everything, but a log or a feature is missing). Otherwise a
   // missing SD card would look exactly as alarming as losing the bus.
-  const lv_color_t rim  = (noticeShown & FAULTS_RED) ? COL_BAD : COL_WARN;
-  const lv_color_t txtC = (noticeSel   & FAULTS_RED) ? COL_BAD : COL_WARN;
-  lv_style_set_line_color(&rimStyle, rim);
-  lv_obj_report_style_change(&rimStyle);    // all RIM_SEG segments at once
-  lv_obj_set_style_text_color(noticeText, txtC, 0);
-  if (count > 1) lv_label_set_text_fmt(noticeText, "%s  %d/%d", what, pos, count);
-  else           lv_label_set_text(noticeText, what);
-  lv_obj_clear_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
+  static int rimRed = -1, txtRed = -1;      // -1: never drawn
+  const int rimNowRed = (noticeShown & FAULTS_RED) ? 1 : 0;
+  const int txtNowRed = (noticeSel   & FAULTS_RED) ? 1 : 0;
+  if (rimNowRed != rimRed) {
+    rimRed = rimNowRed;
+    lv_style_set_line_color(&rimStyle, rimNowRed ? COL_BAD : COL_WARN);
+    lv_obj_report_style_change(&rimStyle);  // all RIM_SEG segments at once
+  }
+  if (txtNowRed != txtRed) {
+    txtRed = txtNowRed;
+    lv_obj_set_style_text_color(noticeText, txtNowRed ? COL_BAD : COL_WARN, 0);
+  }
+  char line[56];
+  if (count > 1) snprintf(line, sizeof(line), "%s  %d/%d", what, pos, count);
+  else           snprintf(line, sizeof(line), "%s", what);
+  if (strcmp(lv_label_get_text(noticeText), line) != 0) lv_label_set_text(noticeText, line);
+  if (lv_obj_has_flag(noticeRing, LV_OBJ_FLAG_HIDDEN))
+    lv_obj_clear_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
 }
 
 // Tap the notification text: show the next active fault, wrapping round.
