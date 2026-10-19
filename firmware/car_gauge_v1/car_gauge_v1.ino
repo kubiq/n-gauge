@@ -278,9 +278,8 @@ static void updateTempStates() {
     if (!tempOverOil && oilTempC >= settings.oilWarnC)                     tempOverOil = true;
     else if (tempOverOil && oilTempC < settings.oilWarnC - STATE_HYST_C)   tempOverOil = false;
   } else {
-    // A warning with no reading behind it is a frozen reading too. Left
-    // latched, a stale overOil made the oil screen say "COOLANT TOO HOT"
-    // (ui_update_oil's no-data branch reads `over` as the coolant warning).
+    // A warning with no reading behind it is a frozen reading too: a stale
+    // overOil would keep the oil screen and the rim saying TOO HOT.
     tempOverOil = false;
   }
   if (obd_coolant_fresh()) {
@@ -380,7 +379,7 @@ static void gaugesTask(uint32_t now) {
   ui_set_car_talking(obd.lastFrameMs != 0 &&
                      (int32_t)(now - obd.lastFrameMs) < (int32_t)OBD_STALE_MS);
   // Oil first: it owns the state line that the coolant arc shares.
-  ui_update_oil(obd_oil_fresh(), obd.oilTempC, tempCold, tempOverOil || tempOverCool);
+  ui_update_oil(obd_oil_fresh(), obd.oilTempC, tempCold, tempOverOil, tempOverCool);
   ui_update_coolant(obd_coolant_fresh(), obd.coolantC, tempOverCool);
   // The bench's synthetic boost samples at the real rate, not per pass.
   if (bench_synth()) ui_update_boost(true, 0.95f + 0.95f *

@@ -61,14 +61,16 @@ lv_obj_t *ui_build_temps() {
 
 void ui_set_car_talking(bool talking) { carTalking = talking; }
 
-void ui_update_oil(bool have, int tempC, bool cold, bool over) {
-  static bool lastHave = false, lastCold = false, lastOver = false, lastTalking = false;
+void ui_update_oil(bool have, int tempC, bool cold, bool overOil, bool overCool) {
+  static bool lastHave = false, lastCold = false, lastOverOil = false, lastOverCool = false;
+  static bool lastTalking = false;
   static int  lastTemp = INT32_MIN;
-  if (have == lastHave && tempC == lastTemp && cold == lastCold && over == lastOver &&
-      carTalking == lastTalking)
+  if (have == lastHave && tempC == lastTemp && cold == lastCold &&
+      overOil == lastOverOil && overCool == lastOverCool && carTalking == lastTalking)
     return;
   const bool haveChanged = have != lastHave || lastTemp == INT32_MIN;
-  lastHave = have; lastTemp = tempC; lastCold = cold; lastOver = over;
+  lastHave = have; lastTemp = tempC; lastCold = cold;
+  lastOverOil = overOil; lastOverCool = overCool;
   lastTalking = carTalking;
 
   if (!have) {
@@ -83,7 +85,7 @@ void ui_update_oil(bool have, int tempC, bool cold, bool over) {
     // blanking it unconditionally threw away a coolant over-temp warning
     // whenever the oil DID stopped answering - and coolant is the failure that
     // wrecks an engine fastest. Keep the warning if coolant is still over.
-    if (over) {
+    if (overCool) {
       lv_label_set_text(oilState, "COOLANT TOO HOT");
       lv_obj_set_style_text_color(oilState, COL_BAD, 0);
     } else {
@@ -97,12 +99,19 @@ void ui_update_oil(bool have, int tempC, bool cold, bool over) {
   if (haveChanged) show_value_style(oilVal, COL_OIL);
   lv_arc_set_value(oilArc, tempC);
   lv_label_set_text_fmt(oilVal, "%d\xC2\xB0", tempC);
-  // The symbol takes the arc's colour: blue cold, oil orange ready, red hot.
-  const lv_color_t stateC = over ? COL_BAD : cold ? COL_BLUE : COL_OIL;
+  // The symbol takes the arc's colour: blue cold, oil orange ready, red hot -
+  // the OIL's state only. It used to take coolant's too, so a hot coolant
+  // turned the oil arc and symbol red over a perfectly good oil reading.
+  const lv_color_t stateC = overOil ? COL_BAD : cold ? COL_BLUE : COL_OIL;
   lv_obj_set_style_arc_color(oilArc, stateC, LV_PART_INDICATOR);
   lv_obj_set_style_image_recolor(oilIcon, stateC, 0);
-  if (over)      { lv_label_set_text(oilState, "TOO HOT");
-                   lv_obj_set_style_text_color(oilState, COL_BAD, 0); }
+  // The shared state line names which one is hot.
+  if (overOil && overCool) { lv_label_set_text(oilState, "OIL + COOLANT TOO HOT");
+                             lv_obj_set_style_text_color(oilState, COL_BAD, 0); }
+  else if (overOil)  { lv_label_set_text(oilState, "OIL TOO HOT");
+                       lv_obj_set_style_text_color(oilState, COL_BAD, 0); }
+  else if (overCool) { lv_label_set_text(oilState, "COOLANT TOO HOT");
+                       lv_obj_set_style_text_color(oilState, COL_BAD, 0); }
   else if (cold) { lv_label_set_text(oilState, "COLD - take it easy");
                    lv_obj_set_style_text_color(oilState, COL_BLUE, 0); }
   else           { lv_label_set_text(oilState, "READY");

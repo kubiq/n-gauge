@@ -40,7 +40,9 @@ void ui_bench();
 // Whether the car is answering at all (a non-TPMS frame within OBD_STALE_MS).
 // Only says why a value is missing: "waiting for car" vs "no oil reading".
 void ui_set_car_talking(bool talking);
-void ui_update_oil(bool have, int tempC, bool cold, bool over);
+// overOil colours the oil arc and number; overCool only takes the state line
+// (shared with the coolant arc), which says which of the two is hot.
+void ui_update_oil(bool have, int tempC, bool cold, bool overOil, bool overCool);
 void ui_update_coolant(bool have, int tempC, bool over);
 void ui_update_boost(bool have, float bar);
 // Engine torque ESTIMATE in Nm (TORQUE_NM_FROM_LOAD), inside the boost arc.
