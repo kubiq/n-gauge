@@ -251,18 +251,24 @@ void rtc_init() {
     return;
   }
 
-  // Only seed if we do not already have a good clock. After a deep-sleep wake
-  // the system clock has kept counting and is the better of the two, since it
-  // was last set from GNSS.
+  // A system clock that survived (deep sleep, a reset) is kept only while it
+  // agrees with the chip. Through a deep sleep it runs on the ESP32's RC slow
+  // clock, a few percent out - minutes per parked hour - while the chip runs
+  // on a quartz crystal; it was the system clock that "won" here, and
+  // rtc_task() then wrote its drift into the chip. Within a second, the system
+  // clock is kept for its sub-second part, which the chip does not have.
+  rtc.timeValid = true;
   if (clock_valid()) {
-    rtc.timeValid = true;
-    Serial.println(F("[..] system clock already valid; RTC left as the backup"));
-    return;
+    const long long diff = (long long)time(nullptr) - (long long)e;
+    if (diff > -RTC_TRUST_SYS_SEC && diff < RTC_TRUST_SYS_SEC) {
+      Serial.println(F("[..] system clock agrees with the RTC; kept"));
+      return;
+    }
+    Serial.printf("[..] system clock %+lld s from the RTC - taking the RTC\n", diff);
   }
 
   struct timeval tv = { .tv_sec = e, .tv_usec = 0 };
   settimeofday(&tv, nullptr);
-  rtc.timeValid = true;
 
   char buf[24];
   struct tm tm;

@@ -831,6 +831,10 @@
 // log timestamp cares about, and large enough that a normal crystal is not
 // rewritten every single check.
 #define RTC_DRIFT_TOL_SEC   2
+// At boot, a system clock that survived (deep sleep, a reset) is kept only
+// within this of the chip; further off, the chip's crystal is believed over
+// the RC slow clock that ran the system clock through the sleep.
+#define RTC_TRUST_SYS_SEC   2
 // Upper sanity bound for an externally supplied clock (the settings page).
 // 2100-01-01. Not decoration: the PCF85063 holds the year as two BCD digits,
 // so anything past 2099 cannot be stored and would come back as a wrong year.

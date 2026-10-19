@@ -175,15 +175,12 @@ void setup() {
   gps_init();          // read-only NMEA on GPS_RX_GPIO
   bootMark("gps");
 
-  // The system clock survives deep sleep - the ESP32's own RTC keeps running -
-  // but setup() re-runs on every wake, so gps.timeSet went back to false and a
-  // perfectly good clock was treated as unset, blanking the timestamp column
-  // until the GPS reacquired. Parked, that is every wake. Trust a retained
-  // clock: only a genuine cold start can read earlier than CLOCK_SANE_EPOCH.
-  if (esp_reset_reason() == ESP_RST_DEEPSLEEP && time(nullptr) > CLOCK_SANE_EPOCH) {
-    gps.timeSet = true;
-    Serial.println(F("[OK] clock retained across deep sleep"));
-  }
+  // No "clock retained" flag after a deep sleep. Anything that stamps a file
+  // asks clock_valid(), which a retained clock passes. gps.timeSet means "the
+  // GNSS set it THIS boot", and setting it here on every wake (as it once was)
+  // held the GNSS resync off for GPS_TIME_RESYNC_MS and let rtc_task() write
+  // the system clock - drifted on the RC oscillator through the sleep - into
+  // the crystal RTC. rtc_init() now prefers the crystal on a wake instead.
 
   logger_init();       // mount the card; the log file opens on the first row
   // /firmware.bin on the card is installed now (and the pod restarts into
