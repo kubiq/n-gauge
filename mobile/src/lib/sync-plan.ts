@@ -25,7 +25,7 @@ export type Pull = {
   restart: boolean;
 };
 
-// What the pod itself writes (logger.cpp, laps.cpp, power.cpp's sleep log).
+// What the pod itself writes (log_*.cpp, laps.cpp, power.cpp's sleep log).
 // Anything else on the card - a firmware .bin copied there, notes - is the
 // owner's, not a log, and is not synced.
 // Encrypted logs carry ".nge" after their own extension (logcrypt.h).

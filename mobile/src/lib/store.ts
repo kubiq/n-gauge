@@ -140,7 +140,7 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   }
 
   // A GPX the pod is still writing ends in closing tags that it overwrites
-  // with the next batch (gpxCommit() in logger.cpp). Continuing after them
+  // with the next batch (gpxWriteTail() in log_gpx.cpp). Continuing after them
   // would leave them in the middle of our copy, so continue over them.
   let from = p.from;
   if (p.name.endsWith('.gpx') && !p.restart && dest.exists && endsWithGpxTail(dest)) from -= GPX_TAIL.length;

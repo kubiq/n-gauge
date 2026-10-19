@@ -771,7 +771,7 @@
 // failing cleanly if it is not there, so it must not flap. It also needs
 // AP_MIN_INTERNAL_HEAP (80 KB) free, or it does not start at all: a log
 // writer holding internal RAM kept it down after every drive (2026-10-12..17,
-// see logger.cpp's ioBuf) - the drive CSV's ramKb and apRefused show it now.
+// see log_sink.cpp's ioBuf) - the drive CSV's ramKb and apRefused show it now.
 #define AP_DRIVE_ON_KMH    20.0f
 #define AP_DRIVE_ON_MS     5000
 #define AP_DRIVE_OFF_KMH   5.0f

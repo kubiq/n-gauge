@@ -89,7 +89,7 @@ enum LogLevel : uint8_t {
 
 // The g-meter's latest horizontal g (calibrated, as the screen shows it):
 // lateral, and longitudinal as force felt forwards (+ = braking). For the
-// track log's IMU channels - see the VBO section of logger.cpp.
+// track log's IMU channels - see log_vbo.cpp.
 void logger_note_g(float lateral, float longitudinal);
 // The loop's latest raw IMU sample, for the CSV's gx/gy/gz - the logger runs
 // on core 0 and must not use the I2C bus, which core 1 shares with touch.

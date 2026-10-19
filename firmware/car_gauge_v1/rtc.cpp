@@ -219,7 +219,7 @@ void rtc_init() {
   // Deliberately NOT used to seed the clock. It is a genuine lower bound on
   // "now", but it is wrong by however long the power was off, which could be
   // days, and a plausible-looking wrong date is worse than no date: it looks
-  // real in a spreadsheet and silently misfiles a drive. logger.cpp already
+  // real in a spreadsheet and silently misfiles a drive. log_csv.cpp already
   // makes exactly this call for the 1970 case, and this is the same argument.
   //
   // Nor can we have it both ways. Any write clears OS, so storing the retained

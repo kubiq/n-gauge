@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import { distM, isStub, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates, staleTitleKeys } from './trips.ts';
 
-// One line exactly as logger.cpp writes it.
+// One line exactly as log_gpx.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
   `<trkpt lat="${lat}" lon="${lon}"><ele>250.0</ele><time>${time}</time><sat>12</sat><hdop>0.8</hdop>` +
   `<extensions><gpxtpx:TrackPointExtension><gpxtpx:speed>${ms.toFixed(2)}</gpxtpx:speed>` +

@@ -1,14 +1,14 @@
 // A GPX as other apps should get it: valid XML, one closing tail.
 //
 // The pod keeps its GPX valid on the card by writing the closing tags after
-// every batch and seeking back over them for the next one (gpxCommit() in
-// logger.cpp). A copy the phone pulled while the file was still being
+// every batch and seeking back over them for the next one (gpxWriteTail() in
+// log_gpx.cpp). A copy the phone pulled while the file was still being
 // written, and then continued, can therefore hold that old tail in the
 // middle, with a trackpoint cut short after it. Pulls now continue over the
 // tail (store.ts), but copies made before that may still be broken - so the
 // shared file is rebuilt from the lines that are whole.
 
-/** logger.cpp's GPX_TAIL. */
+/** log_gpx.cpp's GPX_TAIL. */
 export const GPX_TAIL = '</trkseg></trk></gpx>\n';
 
 const TRKPT = /^<trkpt .*<\/trkpt>$/;

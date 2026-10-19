@@ -333,7 +333,7 @@ Placed before the gates it was governed by a timestamp the gates hold stale, so
 a spell of poor reception appended `</trkseg><trkseg>` on every call —
 kilobytes per second of empty segments.
 
-**Trip distance is summed in `logger.cpp`, not `gps.cpp`.**
+**Trip distance is summed in the logger (`log_gpx.cpp`), not `gps.cpp`.**
 It accumulates at the one line where a fix has passed every gate, because the
 logger is the only place that knows a fix is trustworthy. Summing raw positions
 would let one tunnel spike add kilometres nobody drove. It is held in

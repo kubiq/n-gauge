@@ -3,7 +3,7 @@
 //
 // A drive leaves two files with (nearly) the same start stamp in the name:
 // trip_<stamp>.gpx, opened at the first GPS fix, and drive_<stamp>.csv,
-// opened at the first CAN frame (logger.cpp). They are paired by that stamp.
+// opened at the first CAN frame (log_csv.cpp). They are paired by that stamp.
 
 // ---- GPX -------------------------------------------------------------------
 
@@ -64,7 +64,7 @@ export function distM(lat1: number, lon1: number, lat2: number, lon2: number): n
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-// Matches the trkpt line logger.cpp writes. <time> is empty while the clock
+// Matches the trkpt line log_gpx.cpp writes. <time> is empty while the clock
 // is unknown. The speed is in the gpxtpx extension; files from before
 // 2026-09-23 have a bare <speed> instead, and some have none.
 const TRKPT =
@@ -214,7 +214,7 @@ export type CsvSummary = {
   lastOilC: number | null;
 };
 
-// The header has grown over time (logger.cpp), so columns are found by name
+// The header has grown over time (log_csv.cpp), so columns are found by name
 // and a column an older file lacks just yields null.
 export function parseCsv(text: string): CsvSummary {
   // CRLF, as the gauge writes them - see series.ts: "\r" left in the last
@@ -258,7 +258,7 @@ export function parseCsv(text: string): CsvSummary {
 // ---- pairing ---------------------------------------------------------------
 
 /**
- * Start time from a dated name, or null. The name is LOCAL time (logger.cpp
+ * Start time from a dated name, or null. The name is LOCAL time (log_names.cpp
  * names files with localtime_r, in the pod's TZ setting) - unlike the GPX's
  * <time>, which is UTC. Read as the phone's local time, which is the pod's
  * as long as both are set to the same zone.
@@ -272,7 +272,7 @@ export function stampOf(name: string): number | null {
 // ---- names -------------------------------------------------------------------
 // <kind>_<when>_<session>.<ext>[.nge] - "trip_2026-10-12_21-19_3fa81c.gpx".
 // <when> is the start (or a number, before the clock was known); <session>
-// is the pod's boot or wake that wrote it (logger.cpp), shared by a drive's
+// is the pod's boot or wake that wrote it (log_names.cpp), shared by a drive's
 // GPX, CSV and VBO. An encrypted log is its plain name plus ".nge" (logcrypt.h).
 export const isEncryptedName = (n: string) => n.endsWith('.nge');
 export const plainName = (n: string) => (isEncryptedName(n) ? n.slice(0, -4) : n);
@@ -316,7 +316,7 @@ export function isStub(g?: { distanceM: number; start: number | null; end: numbe
  * Undated (numbered) files come last.
  */
 // A log opened before the clock was set is numbered (drive_0001_3082dd.csv)
-// and renamed to its dated name once it is (logger.cpp) - the same file. A
+// and renamed to its dated name once it is (log_csv.cpp) - the same file. A
 // phone that synced it before the rename holds both: the numbered copy is
 // the dated file's beginning. Found 2026-10-15: the GPX paired with that
 // 35 KB copy, the whole 1.7 MB drive log stood alone as a second drive.
