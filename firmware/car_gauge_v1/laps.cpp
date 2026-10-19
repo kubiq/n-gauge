@@ -212,7 +212,12 @@ void laps_task() {
   if (!gps_read_fix(&f)) return;
   if (f.seq == lastSeq) return;         // no new fix since last time
   lastSeq = f.seq;
-  if (!f.timeOk) { forgetPath(); return; }
+  // A fix that cannot be used is SKIPPED, the previous point kept - not
+  // forgotten. Forgetting it left the next good fix with nothing to pair
+  // with, so a crossing between the fix before the bad one and the fix after
+  // it was never tested, and two laps ran together as one. A real gap is
+  // already safe: a step longer than TRACK_MAX_FIX_GAP_MS is never tested.
+  if (!f.timeOk) return;
 
   // RMC and GGA both carry a position, so one 40 ms epoch can publish twice
   // with the same time. A zero-length step can never cross anything, but it
@@ -220,11 +225,9 @@ void laps_task() {
   if (havePrev && f.fixMs == prevFixMs) return;
 
   // The same quality gate the GPX track uses. A fix the receiver does not
-  // stand behind must not be able to close a lap - or a loop.
-  if (!calc_fix_quality_ok(gps.sats, gps.hdop, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG)) {
-    forgetPath();
-    return;
-  }
+  // stand behind must not be able to close a lap - or a loop. Skipped, like
+  // the one without a time above.
+  if (!calc_fix_quality_ok(gps.sats, gps.hdop, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG)) return;
 
   if (searching && !searchStep(f)) return;
 
