@@ -6,7 +6,7 @@ Arduino (ESP32 core 3.x) firmware for the Waveshare ESP32-S3 Touch AMOLED
 | File | Does |
 |---|---|
 | `obd.cpp` | TWAI/CAN at 500 k: Mode 01 and Mode 22 requests, ISO-TP multi-frame reassembly, on its own task on core 0 |
-| `ui.cpp` | LVGL screens: oil + coolant, boost, g-meter, tyres, GPS + trip, track/laps, WiFi; the notification rim |
+| `ui.cpp`, `ui_*.cpp` | LVGL screens, one file each: `ui_temps` (oil + coolant), `ui_boost`, `ui_gmeter`, `ui_tyres`, `ui_gps` (+ trip), `ui_track` (laps), `ui_wifi`; the notification rim (`ui_notice`), the boot splash (`ui_boot`); `ui.cpp` builds them and switches between them, `ui_priv.h` is what they share |
 | `gps.cpp` | u-blox GNSS at 25 Hz (UBX), on core 0; position validation |
 | `logger.cpp` | drive CSV, GPX track and the sleep log on the SD card, on core 0 |
 | `laps.cpp` | lap timer against a start line |

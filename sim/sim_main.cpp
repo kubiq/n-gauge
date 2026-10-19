@@ -1,5 +1,5 @@
 // The gauge firmware on the PC: its own setup() and loop() (car_gauge_v1.ino),
-// its own screens (ui.cpp) in an SDL window, fed a recorded drive.
+// its own screens (ui*.cpp) in an SDL window, fed a recorded drive.
 //
 //   sim/run.sh [drive_....csv] [trip_....gpx]
 //   gauge-sim --shots DIR ...   screenshots of every screen, then quit

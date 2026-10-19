@@ -4,7 +4,7 @@
 
 The gauge firmware built for Linux: its own `setup()` and `loop()`
 ([car_gauge_v1.ino](../firmware/car_gauge_v1/car_gauge_v1.ino)) and its own
-screens ([ui.cpp](../firmware/car_gauge_v1/ui.cpp)), unchanged, in a
+screens ([ui.cpp](../firmware/car_gauge_v1/ui.cpp) and its `ui_*.cpp`), unchanged, in a
 466x466 window through LVGL's SDL driver - fed a recorded drive instead of
 the car. Not chip emulation: the board is stood in for
 ([sim_hw.cpp](sim_hw.cpp), [stubs/](stubs)), and the drive's CSV goes into

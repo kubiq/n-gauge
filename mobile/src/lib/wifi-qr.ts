@@ -1,5 +1,5 @@
 // The pod's WiFi screen shows a QR of `WIFI:T:WPA;S:<ssid>;P:<pass>;;` (built
-// in ui.cpp from settings.apSsid / apPass). Scanning it is how the app learns
+// in ui_wifi.cpp from settings.apSsid / apPass). Scanning it is how the app learns
 // the passphrase, which is random per pod and never leaves it otherwise.
 
 export type WifiCreds = { ssid: string; pass: string };

@@ -507,7 +507,7 @@
 #define LV_FONT_MONTSERRAT_42 0
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0
-#define LV_FONT_MONTSERRAT_48 1   /*big oil-temp readout in ui.cpp*/
+#define LV_FONT_MONTSERRAT_48 1   /*big oil-temp readout in ui_temps.cpp*/
 
 /*Demonstrate special features*/
 #define LV_FONT_MONTSERRAT_28_COMPRESSED 0  /*bpp = 3*/
@@ -808,7 +808,7 @@
 #define LV_USE_RLE 0
 
 /*QR code library*/
-#define LV_USE_QRCODE 1   /*WiFi screen: scan to join, see ui.cpp*/
+#define LV_USE_QRCODE 1   /*WiFi screen: scan to join, see ui_wifi.cpp*/
 
 /*Barcode code library*/
 #define LV_USE_BARCODE 0

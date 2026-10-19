@@ -26,13 +26,16 @@ target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 target_link_libraries(lvgl PUBLIC ${SDL2_LIBRARIES})
 
 file(GLOB FW_IMAGES ${FW}/*_img.c ${FW}/icon_*.c)
+# The UI is ui.cpp plus one ui_<part>.cpp per screen (see ui_priv.h).
+# CONFIGURE_DEPENDS so a new screen file is picked up without a re-run of cmake.
+file(GLOB FW_UI CONFIGURE_DEPENDS ${FW}/ui.cpp ${FW}/ui_*.cpp)
 add_executable(gauge-sim
   sim_main.cpp
   sim_hw.cpp
   sim_replay.cpp
   sim_shots.cpp
   gauge_firmware.cpp
-  ${FW}/ui.cpp
+  ${FW_UI}
   ${FW}/laps.cpp
   ${FW}/settings.cpp
   ${FW_IMAGES})
