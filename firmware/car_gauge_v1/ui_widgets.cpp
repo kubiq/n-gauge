@@ -17,6 +17,11 @@
 // which has none. Vertical swipes are ignored, so they stay free for later use.
 void screen_gesture_cb(lv_event_t *e) {
   (void)e;
+  // Not over the boot splash or the bench page: it is built with
+  // make_screen() too, and a swipe there stepped the view hidden behind it -
+  // which the splash then handed over to. Its touch still ends the splash,
+  // onto the remembered view, as a tap does (ui_boot_take_touch).
+  if (ui_boot_splash_up()) return;
   lv_indev_t *indev = lv_indev_active();
   const lv_dir_t dir = lv_indev_get_gesture_dir(indev);
   if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
