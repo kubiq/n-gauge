@@ -15,7 +15,9 @@ static lv_obj_t *torqueArc, *torqueVal, *pedalBar;
 // exists at the OBD port), so its figure says "~" and moves in 5 Nm steps.
 lv_obj_t *ui_build_boost() {
   lv_obj_t *s = make_screen();
-  boostArc = make_arc(s, COL_BLUE, 0, 200);  // 0..2.00 bar *100
+  // In hundredths of a bar, as ui_update_boost() sets it; lv_arc clamps a
+  // value past the end to the end.
+  boostArc = make_arc(s, COL_BLUE, 0, (int)(BOOST_ARC_MAX_BAR * 100.0f + 0.5f));
   torqueArc = make_arc_sized(s, COL_INK, 0, TORQUE_ARC_MAX_NM, 372, 12);
   torqueVal = make_tyre_val(s, 0, 84);        // 28px, under "bar"
   // Accelerator pedal: a short bar in the open bottom quarter both arcs

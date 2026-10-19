@@ -297,6 +297,11 @@
 #define TORQUE_PEAK_LOAD_PCT   230.0f
 #define TORQUE_NM_FROM_LOAD(p) ((p) * TORQUE_RATED_NM / TORQUE_PEAK_LOAD_PCT)
 #define TORQUE_ARC_MAX_NM      400    // full scale of the inner arc
+// Full scale of the boost arc, bar. Was 2.00, and the car's real peak -
+// 1.26-1.34 bar per session on the 2026-10-17 track day, 1.34 the most the
+// owner could get out of it - filled only two thirds of the arc. Above it
+// the arc stays full; the number still says the truth.
+#define BOOST_ARC_MAX_BAR      1.4f
 
 // Gear, from rpm over OBD speed (calc_gear), for the track log and the drive
 // CSV - the DCT picks its own gears, but in any gear rpm / km/h is fixed.
