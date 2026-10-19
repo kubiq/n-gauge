@@ -1201,10 +1201,14 @@ void web_task() {
   // Both are non-blocking polls. DNS first: the portal sheet only appears if
   // the name lookup is answered before the HTTP probe is attempted.
   dns.processNextRequest();
-  // The default 5 s socket timeout is more than half the 8 s watchdog budget,
-  // so a client that dribbles a request header can reboot the board on its
-  // own. Tighten it per connection.
-  WiFiClient c = server.client();
-  if (c) c.setTimeout(DL_CLIENT_TIMEOUT_MS);
+  // KNOWN GAP: a client that dribbles its request holds loop(). The core's
+  // WebServer (3.3.8) parses a request with readStringUntil() at a 5 s
+  // per-byte timeout it sets itself just before (handleClient: setTimeout(
+  // HTTP_MAX_SEND_WAIT), a plain #define), so a byte every few seconds keeps
+  // loop() - the screen, the watchdog - waiting, and past 8 s the pod reboots.
+  // A setTimeout() here used to look like the fix, but server.client() is a
+  // copy, and the server resets its own anyway. The fix is the server on its
+  // own task - see TODO, "web server task". Only a client on the pod's own
+  // AP, with its passphrase, can do it.
   server.handleClient();
 }
