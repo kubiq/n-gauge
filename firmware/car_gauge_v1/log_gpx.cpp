@@ -43,7 +43,6 @@ static void isoStamp(char *out, size_t n) {
 static constexpr size_t GPX_BUF_N = 12288;
 static LogFile  gpx;
 static bool     gpxOpenFailed = false;  // stop retrying a hopeless open
-static uint32_t gpxLastMs = 0;
 static uint32_t gpxLastWriteMs = 0;
 RTC_DATA_ATTR static int nextTripN = 0;
 // Byte offset of the point insertion position, i.e. just past the last
@@ -188,105 +187,34 @@ void gpxlog_task() {
   float   posAlt;
   if (!gps_read_position(&posLat, &posLon, &posAlt)) return;
 
-  const uint32_t now = millis();
-
-  // RATE LIMIT FIRST. Everything below judges a candidate against the last
-  // point we WROTE, so it has to run at the write rate, not the loop rate.
-  //
-  // This ordering is load-bearing, and getting it wrong broke the jump check
-  // outright: with the limiter last, the check ran every loop iteration (~5 ms)
-  // and refreshed its reference point each time, while gps.lat/lon only change
-  // every GPS_NAV_RATE_MS (40 ms). So 40 ms of travel got divided by a 5 ms
-  // interval - roughly an 8x overstatement - and the effective rejection
-  // threshold collapsed from 250 km/h to about 31. Ordinary driving was being
-  // thrown away. The offline simulation missed it because it replayed points
-  // that had already been written, i.e. already 40 ms apart.
-  const uint32_t interval = log_idle() ? GPX_IDLE_POINT_MS : GPX_POINT_MS;
-  if (gpxLastMs != 0 && now - gpxLastMs < interval) return;
-
-  // Refuse points the receiver does not actually stand behind. On the first
-  // real drive 315 points (0.8 %) went in with <sat>0</sat> and hdop 99.99 -
-  // a frozen position with a stale speed, written for up to GPS_FIX_STALE_MS
-  // after the fix was lost, in runs of 52 points. In a viewer that reads as
-  // the car stopping dead and then teleporting.
-  //
-  // Guarded by sawSats so this can only ever suppress points on a module that
-  // has proven it reports satellite counts: if GGA were absent, sats would sit
-  // at 0 forever and this would silently disable logging altogether.
-  static bool sawSats = false;
-  if (gps.sats > 0) sawSats = true;
-  if (sawSats && !calc_fix_quality_ok(gps.sats, gps.hdop,
-                                      GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG))
+  // Rate, quality and plausibility: calc_gpx_gate() (calc.h, host-tested).
+  // The gate runs with or without a card - deciding what counts as a real
+  // point has nothing to do with whether it can be stored, and a gate that
+  // only advanced on a written point never engaged its rate limiter without
+  // a card, which broke the jump check (see calc.h).
+  static CalcGpxGate gate;
+  const CalcGpxLimits lim = {
+    GPX_POINT_MS, GPX_IDLE_POINT_MS, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG,
+    GPX_SEGMENT_GAP_MS, GPX_MAX_JUMP_KMH, GPX_MAX_REJECT_RUN,
+    // One definition of "stationary" in the firmware, not two.
+    LOG_IDLE_SPEED_KMH,
+    (uint32_t)(settings.tripGapMin * 60000UL),
+  };
+  CalcGpxStep step;
+  if (!calc_gpx_gate(&gate, &lim, millis(), log_idle(), gps.sats, gps.hdop,
+                     posLat, posLon, gps.speedKmh, &step))
     return;
+  const uint32_t now = gate.lastMs;
 
-  // Physical plausibility check, and the one that actually fixes tunnels.
-  //
-  // Coming out of a tunnel the track sprayed across the map in
-  // straight spikes. Quality flags alone do NOT catch it: the worst points
-  // carried 3-4 satellites but plausible-looking HDOP of 1.5-2.2, and on the
-  // logged drive filtering on sats and HDOP still left 35 jumps with a worst
-  // case of 12920 km/h. A car cannot move that fast, so the distance from the
-  // last ACCEPTED point is the reliable discriminator.
-  //
-  // Across a real gap we cannot judge anything - the car genuinely moved while
-  // we had no fix - so a point after GPX_SEGMENT_GAP_MS is always accepted and
-  // the segment splitter below breaks the line instead of drawing through it.
-  // The consecutive-reject limit is an escape hatch: if the reference point
-  // itself is bad, refusing forever would throw away the rest of the trip.
-  static int32_t lastOkLat = 0, lastOkLon = 0;   // degrees x 1e7, as stored
-  static uint32_t lastOkMs = 0;
-  static uint16_t rejectRun = 0;
-  if (lastOkMs != 0 && now - lastOkMs <= GPX_SEGMENT_GAP_MS) {
-    const float kmh = calc_implied_kmh(lastOkLat, lastOkLon,
-                                       posLat, posLon,
-                                       (now - lastOkMs) / 1000.0f);
-    if (kmh > GPX_MAX_JUMP_KMH && rejectRun < GPX_MAX_REJECT_RUN) {
-      rejectRun++;
-      return;
-    }
-  }
-  // Trip distance, summed HERE and only here - past every gate above, so a
-  // tunnel spike that would have added kilometres nobody drove has already
-  // been rejected. That is the whole reason this lives in the logger rather
-  // than somewhere more obvious like gps.cpp: this is the only place in the
+  // Trip distance, summed HERE and only here - past every gate, so a tunnel
+  // spike that would have added kilometres nobody drove has already been
+  // rejected. That is the whole reason this lives in the logger rather than
+  // somewhere more obvious like gps.cpp: this is the only place in the
   // firmware that knows a fix is trustworthy.
-  //
-  // Only across a continuous stretch. Beyond GPX_SEGMENT_GAP_MS the car
-  // genuinely moved while we had no fix, and counting that leg would add a
-  // straight line between wherever the signal died and wherever it returned -
-  // the same reason the segment splitter below breaks the track there.
-  //
-  // And only while actually moving. Standing at lights with a fix, the
-  // position wanders by centimetres to metres from one point to the next, and
-  // points are accepted at 25 Hz for minutes before idle throttling starts -
-  // so summing every leg added hundreds of metres without the car moving.
-  // GNSS speed is Doppler-derived and far steadier near zero than position
-  // is, so it is the right discriminator. Reuses LOG_IDLE_SPEED_KMH so the
-  // firmware has one definition of "stationary", not two.
-  if (lastOkMs != 0 && now - lastOkMs <= GPX_SEGMENT_GAP_MS &&
-      gps.speedKmh >= LOG_IDLE_SPEED_KMH) {
-    tripMetres += calc_distance_m(lastOkLat, lastOkLon,
-                                  posLat, posLon);
-  }
-  tripNoteTime(lastOkMs != 0 &&
-               now - lastOkMs < (uint32_t)settings.tripGapMin * 60000UL);
-
-  rejectRun  = 0;
-  lastOkLat  = posLat;
-  lastOkLon  = posLon;
-  lastOkMs   = now;
+  tripMetres += step.addM;
+  tripNoteTime(step.recent);
 
   // ---- everything below writes the point, and needs a card ----------------
-  //
-  // gpxLastMs advances HERE, with or without a card. It is the rate limiter's
-  // reference, and if it only moved when a point was written, a card-less run
-  // would never engage the limiter - the jump check would then run at loop
-  // rate and divide 40 ms of travel by ~5 ms, the 8x overstatement described
-  // at the top of this function. Capture the gap it implies first, for the
-  // segment split below.
-  const bool gapSinceLast = gpxLastMs != 0 && now - gpxLastMs > GPX_SEGMENT_GAP_MS;
-  gpxLastMs = now;
-
   if (!logger_card_ok()) return;       // no card
   if (settings.logLevel < LOG_TRIPS) return;   // logging off: count, don't write
   if (gpxOpenFailed) return;           // see gpxOpen(): do not retry forever
@@ -299,11 +227,11 @@ void gpxlog_task() {
   //
   // Emitted HERE, after every gate and immediately before the point itself,
   // because it must only be written when a point actually follows it. With the
-  // split before the gates it was governed by gpxLastMs, which the gates hold
-  // stale - so a spell of poor reception appended "</trkseg><trkseg>" on every
-  // loop iteration, thousands of empty segments and kilobytes a second of
-  // nothing, with SD flushes to match.
-  if (gapSinceLast) logfile_puts(gpx, "</trkseg><trkseg>\n");
+  // split before the gates it was governed by the last point's time, which the
+  // gates hold stale - so a spell of poor reception appended
+  // "</trkseg><trkseg>" on every loop iteration, thousands of empty segments
+  // and kilobytes a second of nothing, with SD flushes to match.
+  if (step.gap) logfile_puts(gpx, "</trkseg><trkseg>\n");
 
   char stamp[32] = "";
   if (clock_valid()) isoStamp(stamp, sizeof(stamp));

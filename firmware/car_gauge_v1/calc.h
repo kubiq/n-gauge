@@ -698,6 +698,103 @@ static inline bool calc_mode01_value(uint8_t pid, const uint8_t *d, uint16_t dl,
   return false;
 }
 
+// ---- the GPX gate ---------------------------------------------------------------
+// Which GNSS fixes become track points, and which count towards the trip:
+// rate, quality, physical plausibility, in that order. The logger
+// (log_gpx.cpp) asks once per pass with the latest fix; what it writes and
+// sums is what passes here. "Load-bearing" (DECISIONS.md): every rule below
+// is the fix for something that went wrong on a real drive.
+struct CalcGpxLimits {
+  uint32_t pointMs, idlePointMs;   // the point rate, moving and parked
+  int      minSats;                // calc_fix_quality_ok()
+  float    maxHdop;
+  uint32_t segGapMs;               // a longer gap breaks the track
+  float    maxJumpKmh;             // faster than this from the last point: a spike
+  uint16_t maxRejectRun;           // then accept anyway
+  float    movingKmh;              // below this, distance is not counted
+  uint32_t tripGapMs;              // closer than this, provably the same trip
+};
+
+struct CalcGpxGate {
+  uint32_t lastMs = 0;             // the last accepted point; 0 = none yet
+  bool     sawSats = false;        // the module has reported satellites
+  int32_t  okLat = 0, okLon = 0;   // the last accepted position, degrees x 1e7
+  uint16_t rejectRun = 0;
+};
+
+// What an accepted point means for the caller.
+struct CalcGpxStep {
+  float addM;     // metres for the trip distance
+  bool  recent;   // the previous point was under tripGapMs ago (millis says so)
+  bool  gap;      // a segment break goes before this point
+};
+
+// True when the fix at `nowMs` is a point; *out then says what it means.
+static inline bool calc_gpx_gate(CalcGpxGate *g, const CalcGpxLimits *lim, uint32_t nowMs,
+                                 bool idle, int sats, float hdop, int32_t lat, int32_t lon,
+                                 float kmh, CalcGpxStep *out) {
+  // RATE LIMIT FIRST. Everything below judges a candidate against the last
+  // point accepted, so it has to run at the point rate, not the loop rate.
+  //
+  // This ordering is load-bearing, and getting it wrong broke the jump check
+  // outright: with the limiter last, the check ran every loop iteration (~5 ms)
+  // and refreshed its reference point each time, while the position only
+  // changes every GPS_NAV_RATE_MS (40 ms). So 40 ms of travel got divided by a
+  // 5 ms interval - roughly an 8x overstatement - and the effective rejection
+  // threshold collapsed from 250 km/h to about 31. Ordinary driving was being
+  // thrown away.
+  const uint32_t interval = idle ? lim->idlePointMs : lim->pointMs;
+  if (g->lastMs != 0 && nowMs - g->lastMs < interval) return false;
+
+  // Refuse points the receiver does not actually stand behind. On the first
+  // real drive 315 points (0.8 %) went in with <sat>0</sat> and hdop 99.99 -
+  // a frozen position with a stale speed, written for up to GPS_FIX_STALE_MS
+  // after the fix was lost, in runs of 52 points. In a viewer that reads as
+  // the car stopping dead and then teleporting.
+  //
+  // Only on a module that has proven it reports satellite counts: if GGA were
+  // absent, sats would sit at 0 forever and this would silently disable
+  // logging altogether.
+  if (sats > 0) g->sawSats = true;
+  if (g->sawSats && !calc_fix_quality_ok(sats, hdop, lim->minSats, lim->maxHdop)) return false;
+
+  // Physical plausibility, the check that actually fixes tunnels. Coming out
+  // of one the track sprayed across the map in straight spikes, with 3-4
+  // satellites and a plausible HDOP of 1.5-2.2: quality alone left 35 jumps,
+  // the worst at 12920 km/h. A car cannot move that fast, so the distance
+  // from the last ACCEPTED point is the reliable discriminator.
+  //
+  // Across a real gap nothing can be judged - the car moved while there was
+  // no fix - so a point after segGapMs is always accepted and the track is
+  // broken there instead. The reject-run limit is an escape hatch: if the
+  // reference itself is bad, refusing forever would lose the rest of the trip.
+  const bool continuous = g->lastMs != 0 && nowMs - g->lastMs <= lim->segGapMs;
+  if (continuous) {
+    const float jump = calc_implied_kmh(g->okLat, g->okLon, lat, lon,
+                                        (nowMs - g->lastMs) / 1000.0f);
+    if (jump > lim->maxJumpKmh && g->rejectRun < lim->maxRejectRun) {
+      g->rejectRun++;
+      return false;
+    }
+  }
+
+  // Trip distance only across a continuous stretch - beyond segGapMs it would
+  // be a straight line between where the signal died and where it returned -
+  // and only while moving: standing at lights the position wanders by
+  // centimetres to metres between points, at 25 Hz, for minutes. GNSS speed
+  // is Doppler-derived and far steadier near zero than position is.
+  out->addM   = continuous && kmh >= lim->movingKmh
+                    ? calc_distance_m(g->okLat, g->okLon, lat, lon) : 0.0f;
+  out->recent = g->lastMs != 0 && nowMs - g->lastMs < lim->tripGapMs;
+  out->gap    = g->lastMs != 0 && nowMs - g->lastMs > lim->segGapMs;
+
+  g->rejectRun = 0;
+  g->okLat     = lat;
+  g->okLon     = lon;
+  g->lastMs    = nowMs;
+  return true;
+}
+
 // ---- is a reading current? -----------------------------------------------------
 // Stale data must present as NO data: a number that has stopped changing looks
 // exactly like a steady reading. `have` = it ever arrived; `stampMs` = when
