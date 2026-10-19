@@ -157,7 +157,7 @@ static inline void calc_fmt_deg(char *out, unsigned outLen, int32_t v) {
 
 // Is this fix worth recording at all?
 //
-// Measured against a real drive through the Komorany tunnel: quality flags
+// Measured against a real drive through a tunnel: quality flags
 // alone are NOT enough. The worst points carried only 3-4 satellites but
 // reported plausible HDOP of 1.5-2.2, and filtering on satellites and HDOP
 // still left 35 jumps with a worst case of 12920 km/h. The distance check is

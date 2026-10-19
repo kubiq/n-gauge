@@ -505,7 +505,7 @@ static void gpxTask() {
 
   // Physical plausibility check, and the one that actually fixes tunnels.
   //
-  // Coming out of the Komorany tunnel the track sprayed across the map in
+  // Coming out of a tunnel the track sprayed across the map in
   // straight spikes. Quality flags alone do NOT catch it: the worst points
   // carried 3-4 satellites but plausible-looking HDOP of 1.5-2.2, and on the
   // logged drive filtering on sats and HDOP still left 35 jumps with a worst
