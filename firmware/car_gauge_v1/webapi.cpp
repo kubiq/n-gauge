@@ -415,29 +415,9 @@ static void handleSave() {
 // what was needed. Serving the card over the AP means pulling logs onto a
 // phone while still standing at the car.
 
-// Everything here is flat in the card root, so a name containing a separator
-// or ".." can only be an attempt to escape it.
-// A whitelist, not a blacklist. The blacklist version was not exploitable,
-// but it relied on a check/use mismatch failing closed: String::indexOf() is
-// strchr-based and stops at an embedded NUL, while the length check uses
-// length() - so "x%00/../secret" passed the separator check, and only survived
-// because c_str() truncated at the same NUL before the filesystem saw it. A
-// character whitelist over length() bytes does not depend on that, and also
-// rejects CR/LF (the name is interpolated into a Content-Disposition header).
-// It covers every name this firmware writes: drive_/trip_ files, dated
-// (drive_2026-09-25_14-32.csv, 26 chars) or numbered (trip_0012.gpx), and
-// sleeplog.txt.
-static bool safeName(const String &n) {
-  const size_t len = n.length();
-  if (len == 0 || len > 40) return false;
-  for (size_t i = 0; i < len; i++) {
-    const char c = n[i];
-    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                    (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
-    if (!ok) return false;
-  }
-  return n.indexOf("..") < 0;
-}
+// A name from the phone, safe to open in the card root - calc_safe_name()
+// (host-tested), over all length() bytes, embedded NULs included.
+static bool safeName(const String &n) { return calc_safe_name(n.c_str(), n.length()); }
 
 static const char *mimeFor(const String &n) {
   if (n.endsWith(LOGCRYPT_SUFFIX)) return "application/octet-stream";   // ciphertext
@@ -657,11 +637,11 @@ static void handleDelete() {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;
   }
-  String n = server.arg("f");
-  String plain = n.endsWith(LOGCRYPT_SUFFIX) ? n.substring(0, n.length() - strlen(LOGCRYPT_SUFFIX)) : n;
-  const bool isLog = (n.startsWith("trip_") || n.startsWith("drive_") || n.startsWith("track_")) &&
-                     (plain.endsWith(".gpx") || plain.endsWith(".csv") || plain.endsWith(".vbo"));
-  if (!safeName(n) || !isLog) { server.send(400, "text/plain", "not a drive log"); return; }
+  const String n = server.arg("f");
+  if (!safeName(n) || !calc_is_drive_log(n.c_str(), LOGCRYPT_SUFFIX)) {
+    server.send(400, "text/plain", "not a drive log");
+    return;
+  }
   if (logger_is_open(n.c_str())) {
     server.send(409, "text/plain", "That log is still being written - delete it after the drive.");
     return;

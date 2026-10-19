@@ -547,3 +547,47 @@ static inline int calc_card_order(const char *a, const char *b) {
   if (ka || kb) return ka ? -1 : 1;             // logs before everything else
   return strcmp(a, b);
 }
+
+// ---- card file names from the phone ------------------------------------------
+// A name the web API may open on the card. Everything there is flat in the
+// card root, so a name containing a separator or ".." can only be an attempt
+// to escape it.
+//
+// A whitelist, not a blacklist. The blacklist version was not exploitable,
+// but it relied on a check/use mismatch failing closed: String::indexOf() is
+// strchr-based and stops at an embedded NUL, while the length check uses
+// length() - so "x%00/../secret" passed the separator check, and only survived
+// because c_str() truncated at the same NUL before the filesystem saw it. A
+// character whitelist over all `len` bytes does not depend on that, and also
+// rejects CR/LF (the name is interpolated into a Content-Disposition header).
+// It covers every name this firmware writes: drive_/trip_/track_ files, dated
+// (drive_2026-09-25_14-32_3fa81c.csv) or numbered (trip_0012_3fa81c.gpx),
+// maybe with the encrypted suffix, and sleeplog.txt.
+static inline bool calc_safe_name(const char *s, size_t len) {
+  if (!s || len == 0 || len > 40) return false;
+  for (size_t i = 0; i < len; i++) {
+    const char c = s[i];
+    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+    if (!ok) return false;
+    if (c == '.' && i + 1 < len && s[i + 1] == '.') return false;
+  }
+  return true;
+}
+
+// A drive's log, which the app may delete: trip_/drive_/track_ ... .gpx /
+// .csv / .vbo, plain or with `cryptSuffix` once. Never the settings, the
+// sleep log or a firmware .bin. Pair it with calc_safe_name().
+static inline bool calc_is_drive_log(const char *name, const char *cryptSuffix) {
+  if (!name) return false;
+  const bool kind = strncmp(name, "trip_", 5) == 0 || strncmp(name, "drive_", 6) == 0 ||
+                    strncmp(name, "track_", 6) == 0;
+  if (!kind) return false;
+  size_t len = strlen(name);
+  const size_t sl = strlen(cryptSuffix);
+  if (len >= sl && strcmp(name + len - sl, cryptSuffix) == 0) len -= sl;
+  if (len < 4) return false;
+  const char *ext = name + len - 4;
+  return strncmp(ext, ".gpx", 4) == 0 || strncmp(ext, ".csv", 4) == 0 ||
+         strncmp(ext, ".vbo", 4) == 0;
+}
