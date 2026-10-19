@@ -32,7 +32,7 @@ bool ui_view_shown(GaugeView v);
 // Where to land when the remembered screen will not do (WiFi, or hidden):
 // the first view of the cycle other than WiFi.
 GaugeView ui_home_view();
-// FRAME_STATS only: time a full and a small redraw on every screen, rim on
+// BENCH_CONSOLE only ('b'): time a full and a small redraw on every screen, rim on
 // and off, and print the results. Blocks for a few seconds.
 void ui_bench();
 

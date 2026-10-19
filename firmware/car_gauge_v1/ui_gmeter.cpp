@@ -102,7 +102,7 @@ lv_obj_t *ui_build_gmeter() {
   return s;
 }
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 lv_obj_t *ui_gmeter_label() { return gLabel; }
 lv_obj_t *ui_gmeter_dot()   { return gDot; }
 #endif

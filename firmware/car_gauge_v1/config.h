@@ -263,7 +263,9 @@
 // Bench results 2026-10-08, pod on the desk next to the keyboard: at 100 mg
 // three minutes of typing gave nothing and a hand pickup fired at once; at
 // 50 mg typing alone fired bursts of 200 events. Car default 80, tunable.
-#define WOM_BENCH          0
+#ifndef WOM_BENCH
+#define WOM_BENCH          0       // code in bench.cpp
+#endif
 #define WOM_BENCH_MG       100     // starting threshold, mg
 
 // Wake on motion: the IMU wakes the pod (ext0 on GPIO21 = QMI8658 INT2) when
@@ -618,18 +620,28 @@
 // of going round again and drawing it one loop pass late.
 #define LV_WAIT_MAX_MS 4
 
-// 1 = print display timing to serial every 2 s: frames actually drawn, time
-// spent rendering and pushing pixels over QSPI, pixels pushed, and loop pass
-// time. For working out where the frame budget goes. Costs a few micros()
-// calls per frame; 0 for the car.
-// Serial commands while it is on: 'b' runs a render benchmark of every screen
-// (ui_bench), 's' toggles synthetic g-meter and boost input, 'r' hides the
-// notification rim as if nothing were faulted, 'c' pretends a CAN frame
-// arrived, 't<epoch>' sets the clock, 'f' injects readings that then go
-// stale, 'd' prints the tail of the drive log, 'v<kmh>' fakes the speed the
-// AP-while-driving logic sees (v0 = no fix, v-1 = real GNSS again),
-// 'k<64 hex>' / 'koff' sets the log encryption key.
+// ---- Bench builds -------------------------------------------------------------
+// Both 0 for the car. `BENCH=1 ./scripts/build.sh gauge flash` builds with both
+// on, without editing this file; scripts/check.sh builds both ways, so the
+// bench code cannot rot unseen. The code itself is bench.cpp and prof.h.
+//
+// FRAME_STATS 1 = print timing to serial every 2 s: frames actually drawn,
+// time spent rendering and pushing pixels over QSPI, pixels pushed, and loop
+// pass time - for working out where the frame budget goes - and how often
+// each OBD value arrives. Costs a few micros() calls per frame.
+#ifndef FRAME_STATS
 #define FRAME_STATS 0
+#endif
+// BENCH_CONSOLE 1 = serial commands: 'b' runs a render benchmark of every
+// screen (ui_bench), 's' toggles synthetic g-meter and boost input, 'r' hides
+// the notification rim as if nothing were faulted, 'c' pretends a CAN frame
+// arrived, 't<epoch>' sets the clock, 'f' injects readings that then go
+// stale, 'd' prints the tail of the drive log, 'h' internal RAM and the AP,
+// 'v<kmh>' fakes the speed the AP-while-driving logic sees (v0 = no fix, v-1
+// = real GNSS again), 'k<64 hex>' / 'koff' sets the log encryption key.
+#ifndef BENCH_CONSOLE
+#define BENCH_CONSOLE 0
+#endif
 
 // ---- Drive logging (onboard microSD) ---------------------------------------
 // Decoded values, plus the raw TPMS payload as hex (its byte layout is still

@@ -14,6 +14,7 @@ Arduino (ESP32 core 3.x) firmware for the Waveshare ESP32-S3 Touch AMOLED
 | `webapi.cpp` | the WiFi AP: settings pages, JSON API, card files, firmware upload |
 | `ota.cpp`, `rtc.cpp`, `settings.cpp`, `brightness.cpp`, `usbdisk.cpp` | updates with rollback, the clock, NVS settings, day/night dimming, the SD card as a USB drive |
 | `bsp.cpp` | board glue: display, touch, IMU, PMU, I/O expander |
+| `bench.cpp`, `prof.h` | the desk tools - the serial console, timing (`BENCH=1` builds only) |
 | `calc.h` | the pure maths (time zones, GPS checks, g-meter projection, gears…), host-tested in `../../tests` |
 
 **Values worked out on the car (all in `config.h`, the reasoning in
@@ -31,6 +32,12 @@ Fresh machine, two commands:
 ./scripts/setup-libs.sh      # core + pinned libs + SensorLib fork + lv_conf link
 ./scripts/build.sh gauge     # add 'flash' to upload
 ```
+
+`BENCH=1 ./scripts/build.sh gauge flash` builds for the desk instead: a
+serial console (fake CAN, injected readings, the log tail, the clock, RAM, a
+render benchmark - the list is in `config.h`, "Bench builds") and frame
+timing every 2 s. None of it is in the normal build; `bench.cpp` and
+`prof.h` hold it. `scripts/check.sh` builds both, so neither goes stale.
 
 `sketch.yaml` records the exact versions this was built and tested against.
 Three things are easy to get wrong and are handled by those scripts:

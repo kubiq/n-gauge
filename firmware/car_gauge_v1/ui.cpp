@@ -56,7 +56,7 @@ void ui_init() {
   lv_scr_load(scr[VIEW_OIL]);
 }
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 lv_obj_t *ui_screen(GaugeView v) { return scr[v]; }
 #endif
 

@@ -75,7 +75,7 @@ void ui_share_btn_cb(lv_event_t *e);
 // The boot splash is up: the rim stays hidden meanwhile (ui_boot.cpp).
 bool ui_boot_splash_up();
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 // For ui_bench() (ui_bench.cpp), which times screens from the inside.
 lv_obj_t *ui_screen(GaugeView v);   // ui.cpp; NULL for one not built
 lv_obj_t *ui_notice_ring();         // ui_notice.cpp

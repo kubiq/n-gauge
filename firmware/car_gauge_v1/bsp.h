@@ -7,6 +7,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "prof.h"   // FRAME_STATS: the loop's ProfStats
 
 // ---- I2C map (SDA=15, SCL=14) ----------------------------------------------
 // Every address that answers the boot scan, from the board schematic. Kept
@@ -39,9 +40,15 @@ void bsp_lvgl_init();     // register LVGL display + flush cb + tick + input dev
 void bsp_display_off();   // AMOLED + backlight off (for sleep; a wake is a
                           // full boot, so there is no matching "on")
 void bsp_display_set_brightness(uint8_t b);   // 0-255, applies immediately
-// FRAME_STATS only: feed one loop pass (total, and inside lv_timer_handler);
-// prints the frame/flush/loop summary every 2 s.
-void bsp_frame_stats_loop(uint32_t loopUs, uint32_t lvUs, int view);
+#if FRAME_STATS
+// One loop pass (sleep excluded) and the lv_timer_handler() in it, fed by
+// loop() with PROF_SCOPE.
+extern ProfStat bspLoopStat, bspLvglStat;
+// The frame/flush/loop summary, every 2 s; call once per loop pass.
+void bsp_frame_stats_print(int view);
+#else
+static inline void bsp_frame_stats_print(int) {}
+#endif
 
 // QMI8658 accel in g. gz is the vertical axis - used as a depth cue on the
 // g-meter sphere, and it also shows kerb strikes and suspension loading.

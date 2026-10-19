@@ -124,16 +124,18 @@ void bsp_init() {
 static uint32_t lvglTick() { return millis(); }
 
 #if FRAME_STATS
-static struct {
-  uint32_t frames;       // refreshes that drew something
-  uint32_t idle;         // refreshes with nothing invalidated
-  uint32_t refrStart;
-  uint32_t refrUs, refrMaxUs;   // whole refresh (render + flush), drawn frames only
-  uint32_t flushUs;             // of which pushing pixels
-  uint32_t flushes;
-  uint64_t px;
-  uint32_t loops, loopUs, loopMaxUs, lvUs;
-} fst;
+// What the display costs, since the last print. Fed by the LVGL events below,
+// the flush, and loop() (bspLoopStat / bspLvglStat).
+struct FrameStats {
+  uint32_t frames = 0;   // refreshes that drew something
+  uint32_t idle = 0;     // refreshes with nothing invalidated
+  uint32_t refrStart = 0;
+  ProfStat refr;         // whole refresh (render + flush), drawn frames only
+  ProfStat flush;        // of which pushing pixels, per flush
+  uint64_t px = 0;
+};
+static FrameStats fst;
+ProfStat bspLoopStat, bspLvglStat;
 
 static void lvglRefrStart(lv_event_t *) { fst.refrStart = micros(); }
 static void lvglRenderReady(lv_event_t *) { fst.frames++; }
@@ -141,17 +143,10 @@ static void lvglRefrReady(lv_event_t *) {
   static uint32_t lastFrames = 0;
   if (fst.frames == lastFrames) { fst.idle++; return; }
   lastFrames = fst.frames;
-  const uint32_t us = micros() - fst.refrStart;
-  fst.refrUs += us;
-  if (us > fst.refrMaxUs) fst.refrMaxUs = us;
+  fst.refr.add(micros() - fst.refrStart);
 }
 
-void bsp_frame_stats_loop(uint32_t loopUs, uint32_t lvUs, int view) {
-  fst.loops++;
-  fst.loopUs += loopUs;
-  fst.lvUs   += lvUs;
-  if (loopUs > fst.loopMaxUs) fst.loopMaxUs = loopUs;
-
+void bsp_frame_stats_print(int view) {
   static uint32_t since = millis();
   const uint32_t el = millis() - since;
   if (el < 2000) return;
@@ -161,27 +156,24 @@ void bsp_frame_stats_loop(uint32_t loopUs, uint32_t lvUs, int view) {
                 "flush %lu us/frame, %lu KPx/frame, %.0f us/KPx | "
                 "loop %.0f Hz avg %lu max %lu us, lvgl %lu us/pass\n",
                 view, fst.frames * 1000.0f / el, (unsigned long)fst.idle,
-                (unsigned long)(fst.refrUs / f), (unsigned long)fst.refrMaxUs,
-                (unsigned long)(fst.flushUs / f), (unsigned long)(fst.px / f / 1000),
-                fst.px ? fst.flushUs * 1000.0f / fst.px : 0.0f,
-                fst.loops * 1000.0f / el,
-                (unsigned long)(fst.loopUs / fst.loops), (unsigned long)fst.loopMaxUs,
-                (unsigned long)(fst.lvUs / fst.loops));
-  memset(&fst, 0, sizeof(fst));
+                (unsigned long)fst.refr.avgUs(), (unsigned long)fst.refr.maxUs,
+                (unsigned long)(fst.flush.sumUs / f), (unsigned long)(fst.px / f / 1000),
+                fst.px ? fst.flush.sumUs * 1000.0f / fst.px : 0.0f,
+                bspLoopStat.n * 1000.0f / el,
+                (unsigned long)bspLoopStat.avgUs(), (unsigned long)bspLoopStat.maxUs,
+                (unsigned long)bspLvglStat.avgUs());
+  fst = FrameStats{};
+  bspLoopStat = bspLvglStat = ProfStat{};
 }
 #endif
 
 static void lvglFlush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
-#if FRAME_STATS
-  const uint32_t t0 = micros();
-#endif
-  gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map,
-                          lv_area_get_width(area), lv_area_get_height(area));
-#if FRAME_STATS
-  fst.flushUs += micros() - t0;
-  fst.flushes++;
-  fst.px += (uint32_t)lv_area_get_width(area) * lv_area_get_height(area);
-#endif
+  {
+    PROF_SCOPE(fst.flush);
+    gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map,
+                            lv_area_get_width(area), lv_area_get_height(area));
+  }
+  PROF_ADD(fst.px, (uint32_t)lv_area_get_width(area) * lv_area_get_height(area));
   lv_display_flush_ready(disp);
 }
 

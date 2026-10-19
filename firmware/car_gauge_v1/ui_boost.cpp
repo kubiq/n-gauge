@@ -41,7 +41,7 @@ lv_obj_t *ui_build_boost() {
   return s;
 }
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 lv_obj_t *ui_boost_value() { return boostVal; }
 lv_obj_t *ui_boost_arc()   { return boostArc; }
 #endif

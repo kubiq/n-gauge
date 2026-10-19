@@ -67,7 +67,6 @@ void bsp_lvgl_init() {
 }
 void bsp_display_off() {}
 void bsp_display_set_brightness(uint8_t) {}
-void bsp_frame_stats_loop(uint32_t, uint32_t, int) {}
 bool bsp_imu_read(float *gx, float *gy, float *gz) {
   *gx = simImu[0]; *gy = simImu[1]; *gz = simImu[2];
   return true;

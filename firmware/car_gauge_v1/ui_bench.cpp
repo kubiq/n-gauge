@@ -1,10 +1,11 @@
 // ============================================================================
-// ui_bench.cpp  —  render-cost measurements, on the bench only (FRAME_STATS).
+// ui_bench.cpp  —  render-cost measurements: the bench console's 'b'
+// (BENCH_CONSOLE).
 // See ui_priv.h.
 // ============================================================================
 #include "ui_priv.h"
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 #include "settings.h"       // the views to time, in the cycle order
 #include <Arduino.h>        // micros, Serial - ui_bench() only
 #include <esp_task_wdt.h>

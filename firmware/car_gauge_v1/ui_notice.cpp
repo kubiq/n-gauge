@@ -133,7 +133,7 @@ void ui_build_notice() {
   lv_obj_add_event_cb(noticeText, notice_tap_cb, LV_EVENT_CLICKED, NULL);
 }
 
-#if FRAME_STATS
+#if BENCH_CONSOLE
 lv_obj_t *ui_notice_ring() { return noticeRing; }
 #endif
 

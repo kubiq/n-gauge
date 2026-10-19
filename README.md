@@ -134,6 +134,7 @@ Firmware ([details](firmware/car_gauge_v1/README.md)):
 ./scripts/setup-libs.sh          # Arduino core, pinned libraries, lv_conf
 ./scripts/build.sh gauge flash   # compile and flash over USB
 ./scripts/test.sh                # host tests
+./scripts/check.sh               # before a commit: tests, both firmware builds, the sim
 ```
 
 The gauge on a PC ([details](sim/README.md)) - needs SDL2 and CMake:
