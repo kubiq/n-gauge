@@ -35,6 +35,8 @@ static uint32_t vboLastWriteMs = 0, vboLastSeq = 0, vboLastFixMs = UINT32_MAX;
 RTC_DATA_ATTR static int nextTrackN = 0;
 
 bool vbolog_init() { return logfile_alloc(vbo, VBO_BUF_N); }
+bool vbolog_failed() { return vboFailed; }
+void vbolog_card_back() { vboFailed = false; }
 
 const char *vbolog_path() { return vbo.path; }
 

@@ -24,9 +24,12 @@ static bool     pathDated = false;   // csv.path is a dated name, not a fallback
 static uint32_t driveOpenMs = 0;     // millis() when the CSV was created
 static uint32_t lastSampleMs = 0;
 static uint32_t lastFlushMs  = 0;
+static bool     csvFailed = false;   // gave up on the file - see log_priv.h
 RTC_DATA_ATTR static int nextDriveN = 0;
 
 bool csvlog_init() { return logfile_alloc(csv, CSV_BUF_N); }
+bool csvlog_failed() { return csvFailed; }
+void csvlog_card_back() { csvFailed = false; }
 
 const char *csvlog_path() { return csv.path; }
 
@@ -210,7 +213,7 @@ static bool driveOpen() {
   driveOpenMs = millis();
   if (name == LOG_NAME_NONE || !(csv.f = SD_MMC.open(csv.path, FILE_WRITE))) {
     Serial.println(F("[ERR] could not open a drive log file"));
-    log_card_give_up();        // don't retry every loop once it's hopeless
+    csvFailed = true;          // don't retry every pass once it's hopeless
     return false;
   }
   logfile_begin(csv);
@@ -249,7 +252,7 @@ static void driveRenameDated() {
   if (!csv.f) {
     Serial.printf("[ERR] could not reopen drive log %s - logging stopped\n", csv.path);
     csv.open = false;
-    log_card_give_up();        // same give-up rule as driveOpen()
+    csvFailed = true;          // same give-up rule as driveOpen()
     return;
   }
   logfile_begin(csv);          // reopened: a new segment, a fresh key
@@ -266,7 +269,7 @@ void csvlog_task() {
     // means "a CAN frame has been seen". Not a GNSS fix: a parked car near a
     // window has one too, and this is a car gauge, not a walk logger.
     if (obd.lastFrameMs == 0) return;
-    if (!driveOpen()) return;
+    if (csvFailed || !driveOpen()) return;
   } else if (!pathDated && clock_valid()) {
     driveRenameDated();
     if (!csv.open) return;

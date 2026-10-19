@@ -367,6 +367,7 @@ static void faultsTask(uint32_t now, bool canGrace) {
   if (!gps.linkUp && now > GPS_MISSING_GRACE_MS) faults |= FAULT_GPS;
   // Lent to a PC as a USB drive is not "missing" - the WiFi screen says so.
   if (!logger_card_ok() && !logger_card_shared()) faults |= FAULT_SD;
+  if (logger_write_failed()) faults |= FAULT_SD_WRITE;
   if (bench_no_rim()) faults = 0;
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }

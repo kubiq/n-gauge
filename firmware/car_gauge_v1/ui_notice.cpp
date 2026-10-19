@@ -204,7 +204,9 @@ static void noticeRedraw() {
     "not connected to CAN bus",           // FAULT_CAN
     "no GPS module",                      // FAULT_GPS
     "no SD card - not logging",           // FAULT_SD
+    "SD card full or failing",            // FAULT_SD_WRITE
   };
+  static_assert(sizeof(text) / sizeof(text[0]) == FAULT_COUNT, "one text per UiFault bit");
   int idx = 0;
   while (!(noticeSel & (1u << idx))) idx++;
   char what[40];

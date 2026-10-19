@@ -39,7 +39,9 @@ static bool cardOk = false;     // card mounted; a file may not be open yet
 static bool bufsOk = false;     // every writer has its batch: logging may start
 
 bool logger_card_ok()   { return cardOk; }
-void log_card_give_up() { cardOk = false; }
+bool logger_write_failed() {
+  return cardOk && (csvlog_failed() || gpxlog_failed() || vbolog_failed());
+}
 
 // ---- idle throttle --------------------------------------------------------
 static uint32_t lastMovingMs = 0;
@@ -137,7 +139,10 @@ void logger_resume() {
   LoggerSdLock lock;
   sharedWithPc = false;
   cardOk = bufsOk;   // never without the buffers to write through
+  // The PC may have freed space: every writer may try its file again.
+  csvlog_card_back();
   gpxlog_card_back();
+  vbolog_card_back();
   Serial.println(F("[OK] SD card back"));
 }
 

@@ -163,6 +163,7 @@ static void gpxOpen() {
 }
 
 void gpxlog_card_back() { gpxOpenFailed = false; }
+bool gpxlog_failed() { return gpxOpenFailed; }
 
 // Two jobs, in this order: decide whether the current fix is a trustworthy
 // point (rate, quality, plausibility), then - only if there is a card - write

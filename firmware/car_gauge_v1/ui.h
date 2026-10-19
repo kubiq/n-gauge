@@ -89,7 +89,10 @@ enum UiFault : uint8_t {
   FAULT_CAN      = 1u << 2,   // no CAN traffic: the gauge cannot do its job   (red)
   FAULT_GPS      = 1u << 3,   // GNSS module not talking at all                (amber)
   FAULT_SD       = 1u << 4,   // no SD card: nothing is being logged           (amber)
+  FAULT_SD_WRITE = 1u << 5,   // a card, but a log could not be opened on it -
+                              // full or failing (logger_write_failed)       (amber)
 };
+#define FAULT_COUNT 6   // bits in UiFault - the notice's text table has one each
 // The faults shown red; the rest are amber.
 #define FAULTS_RED (FAULT_OIL_HOT | FAULT_COOL_HOT | FAULT_CAN)
 

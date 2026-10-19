@@ -44,6 +44,10 @@ struct LoggerSdLock {
 // Just "is a card mounted" - for telling the driver the card is missing. Not
 // "is a log open": with a card, no file exists until the car is on.
 bool logger_card_ok();
+// A card is mounted, but a log file could not be opened on it - full, or
+// failing. That writer has stopped; the others, and the phone's file pages,
+// carry on. Cleared when the card comes back from the PC.
+bool logger_write_failed();
 // Bench aid: print the last `bytes` of the open drive log to serial, so its
 // rows can be checked without taking the card out of the pod.
 void logger_dump_tail(size_t bytes);

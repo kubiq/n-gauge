@@ -74,9 +74,6 @@ bool lognames_dated(const char *prefix, const char *ext, time_t t,
                     char *out, size_t n);
 
 // ---- shared by the writers (logger.cpp) -------------------------------------
-// The card cannot be written - an open failed for good, say. Every writer
-// stops, as when there is no card at all.
-void log_card_give_up();
 // Parked a while (with a GPS fix): the writers thin out.
 bool log_idle();
 // Gear from rpm / OBD speed (calc_gear): 1..8, 0 = none (shifting, clutch
@@ -84,19 +81,31 @@ bool log_idle();
 int  log_gear();
 
 // ---- the writers, called by the logger task ---------------------------------
+// Each gives up on its OWN file when it cannot open it (a full card, say) -
+// never retried per pass, where a hopeless open walks thousands of exists()
+// and trips the watchdog. *_failed() says so (the "can't write" fault);
+// *_card_back() lets it try again once the card returns from the PC.
+// Giving up used to mark the whole card unusable: one failed CSV open
+// stopped the GPX, the VBO and the sleep log, and the phone could not even
+// list the card to delete files and make room.
 bool csvlog_init();                 // its batch; false = no logging
 void csvlog_task();                 // a row at LOG_INTERVAL_MS, opening the file
 void csvlog_close();
 void csvlog_note_pass_us(uint32_t us);   // the logger pass, for logMaxMs
+bool csvlog_failed();
+void csvlog_card_back();
 const char *csvlog_path();
 
 bool gpxlog_init();
 void gpxlog_task();                 // per GNSS fix; also counts the trip
 void gpxlog_close();
-void gpxlog_card_back();            // the card is back: an open may be tried again
+bool gpxlog_failed();
+void gpxlog_card_back();
 const char *gpxlog_path();
 
 bool vbolog_init();
 void vbolog_task();                 // per GNSS fix, in a track session
 void vbolog_close();
+bool vbolog_failed();
+void vbolog_card_back();
 const char *vbolog_path();

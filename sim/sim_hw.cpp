@@ -73,6 +73,7 @@ void logger_start() {}
 void logger_sd_lock() {}
 void logger_sd_unlock() {}
 bool logger_card_ok() { return true; }
+bool logger_write_failed() { return false; }
 void logger_dump_tail(size_t) {}
 void logger_close() {}
 float sim_trip_km();
