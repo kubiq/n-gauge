@@ -925,9 +925,9 @@
 // until LVGL's pool was moved to PSRAM (see lv_conf.h).
 #define AP_MIN_INTERNAL_HEAP (80 * 1024)
 
-// Log downloads. The default 5 s socket timeout is more than half the 8 s
-// watchdog budget, so a stalled client alone can reboot the board; and a whole
-// transfer needs a ceiling so one request cannot occupy the loop forever.
+// Log downloads: a client that has taken nothing for DL_CLIENT_TIMEOUT_MS is
+// dropped (webapi.cpp's sendAll - well inside the 8 s watchdog), and a whole
+// transfer has a ceiling so one request cannot occupy the loop forever.
 #define DL_CLIENT_TIMEOUT_MS 1500
 #define DL_MAX_MS            120000
 

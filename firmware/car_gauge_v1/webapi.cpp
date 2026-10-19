@@ -13,6 +13,8 @@
 #include "logcrypt.h"       // logcrypt_fingerprint(), for /api/settings
 #include <sys/stat.h>       // stat(), for file sizes without opening them
 #include <WiFi.h>
+#include <sys/socket.h>     // select()/send() on the download's socket - see sendAll;
+#include <errno.h>          // after WiFi.h, whose lwip order the socket header needs
 #include <WebServer.h>
 #include <DNSServer.h>   // captive portal; see the note on dns below
 #include <stdlib.h>
@@ -675,6 +677,38 @@ static void handleDelete() {
   server.send(200, "text/plain", "deleted");
 }
 
+// All `n` bytes to the client's socket, or false once it has taken nothing
+// for DL_CLIENT_TIMEOUT_MS (or is gone). Not WiFiClient::write(): that waits
+// up to 1 s in select() per try, for up to 10 tries, then sends with
+// MSG_DONTWAIT - so one write to a client that stopped reading blocked for
+// 10 s, past the 8 s watchdog, and rebooted the pod (setTimeout() sets
+// SO_SNDTIMEO, which MSG_DONTWAIT ignores). Here each wait is 100 ms, the
+// watchdog is fed between them, and the stall limit is ours.
+static bool sendAll(int fd, const uint8_t *p, size_t n) {
+  uint32_t progressAt = millis();
+  while (n) {
+    fd_set w;
+    FD_ZERO(&w);
+    FD_SET(fd, &w);
+    struct timeval tv = { 0, 100000 };
+    const int ready = select(fd + 1, NULL, &w, NULL, &tv);
+    if (ready < 0) return false;
+    if (ready > 0) {
+      const int k = send(fd, p, n, MSG_DONTWAIT);
+      if (k > 0) {
+        p += k;
+        n -= (size_t)k;
+        progressAt = millis();
+        continue;
+      }
+      if (k == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) return false;
+    }
+    if (millis() - progressAt >= DL_CLIENT_TIMEOUT_MS) return false;
+    esp_task_wdt_reset();          // bounded: by the stall limit, then DL_MAX_MS
+  }
+  return true;
+}
+
 static void handleDownload() {
   // Held for the whole download: the logger pauses meanwhile (rows of that
   // time are skipped, the files themselves stay consistent).
@@ -711,7 +745,6 @@ static void handleDownload() {
   uint32_t left = size ? last - first + 1 : 0;
 
   WiFiClient client = server.client();
-  client.setTimeout(DL_CLIENT_TIMEOUT_MS);
   server.sendHeader("Content-Disposition", "attachment; filename=\"" + n + "\"");
   server.sendHeader("Accept-Ranges", "bytes");
   if (r > 0) {
@@ -724,15 +757,19 @@ static void handleDownload() {
   server.send(r > 0 ? 206 : 200, mimeFor(n), "");
 
   static uint8_t buf[1024];
+  const int fd = client.fd();
   const uint32_t deadline = millis() + DL_MAX_MS;
-  while (left && client.connected() && (int32_t)(millis() - deadline) < 0) {
+  while (fd >= 0 && left && (int32_t)(millis() - deadline) < 0) {
     const size_t got = f.read(buf, left < sizeof(buf) ? left : sizeof(buf));
     if (!got) break;
-    if (client.write(buf, got) != got) break;   // stalled or gone: give up
+    if (!sendAll(fd, buf, got)) break;          // stalled or gone: give up
     left -= got;
     esp_task_wdt_reset();
   }
   f.close();
+  // Cut short: close now, so the client sees the transfer end rather than
+  // waiting on a Content-Length that will never be met.
+  if (left) client.stop();
 }
 
 // No delete on these pages: a drive log was often the only copy of a run
