@@ -732,6 +732,25 @@ static void fresh_ages_out_and_survives_the_wrap() {
   CHECK(!calc_fresh(true, 0xFFFFF000u, 0x00001000u, 3000));   // 8 s, across the wrap
 }
 
+// A clock that is a real time is slewed, never stepped back, for an error up
+// to a second - GPX times went backwards when it was stepped.
+static void clock_fix_steps_only_when_it_must() {
+  const long long S = 1000000LL;
+  // Not yet a real time: step, whatever the size.
+  CHECK_EQ(calc_clock_fix(0, 1700000000 * S, false, S, 10000), CALC_CLOCK_STEP);
+  CHECK_EQ(calc_clock_fix(5 * S, 5 * S, false, S, 10000), CALC_CLOCK_STEP);
+  // Set: a few ms is left alone, either way.
+  CHECK_EQ(calc_clock_fix(100 * S, 100 * S + 5000, true, S, 10000), CALC_CLOCK_KEEP);
+  CHECK_EQ(calc_clock_fix(100 * S, 100 * S - 5000, true, S, 10000), CALC_CLOCK_KEEP);
+  // Up to a second, either way: slew - the clock running BEHIND is the case
+  // that would have stepped it backwards.
+  CHECK_EQ(calc_clock_fix(100 * S, 100 * S - 400000, true, S, 10000), CALC_CLOCK_SLEW);
+  CHECK_EQ(calc_clock_fix(100 * S, 100 * S + S, true, S, 10000), CALC_CLOCK_SLEW);
+  // More: step.
+  CHECK_EQ(calc_clock_fix(100 * S, 100 * S - S - 1, true, S, 10000), CALC_CLOCK_STEP);
+  CHECK_EQ(calc_clock_fix(100 * S, 400 * S, true, S, 10000), CALC_CLOCK_STEP);
+}
+
 static void hex_parses_exactly_or_not_at_all() {
   uint8_t b[4] = {9, 9, 9, 9};
   CHECK(calc_parse_hex("00ff7Ac3", b, 4) && b[0] == 0x00 && b[1] == 0xff && b[2] == 0x7a && b[3] == 0xc3);
@@ -747,6 +766,7 @@ static void hex_parses_exactly_or_not_at_all() {
 int main() {
   printf("test_calc\n");
   TEST(fresh_ages_out_and_survives_the_wrap);
+  TEST(clock_fix_steps_only_when_it_must);
   TEST(hex_parses_exactly_or_not_at_all);
   TEST(range_reads_the_three_forms);
   TEST(range_end_past_the_file_is_clamped);

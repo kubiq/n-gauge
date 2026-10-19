@@ -151,6 +151,9 @@
 #define GPS_FIX_STALE_MS   5000   // fix older than this counts as "no fix"
 #define GPS_RAW_DUMP_BYTES 64     // hex/ascii dump of the first bytes, for bring-up
 #define GPS_TIME_RESYNC_MS 600000 // re-set the system clock from GPS this often
+#define GPS_TIME_FRESH_MS  2000   // only from an NMEA time at most this old
+#define GPS_TIME_SLEW_MAX_MS 1000 // a set clock this close is slewed, not stepped
+#define GPS_TIME_KEEP_MS   10     // ... and this close, left alone
 
 // 1 = put the module into backup mode (UBX-RXM-PMREQ) before deep sleep.
 //

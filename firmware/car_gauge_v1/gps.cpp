@@ -5,6 +5,7 @@
 #include "gps.h"
 #include "config.h"
 #include "calc.h"       // calc_timegm; timegm() is absent from this newlib
+#include "rtc.h"        // clock_valid(): step a clock not yet set, slew a set one
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
 #include <sys/time.h>
@@ -511,8 +512,14 @@ static void gpsPoll() {
   // The ESP32 boots with no idea what time it is. NMEA carries UTC, so use it
   // as the clock. Re-synced periodically rather than once, so a long drive
   // can't drift - it costs nothing.
+  //
+  // Only from a FRESH time. TinyGPSPlus keeps date and time isValid() for
+  // ever once seen, so a module that went silent re-stamped the clock with
+  // its last, frozen time at every resync - stepping it back by however long
+  // the module had been quiet.
   static uint32_t lastSyncMs = 0;
   if (nmea.date.isValid() && nmea.time.isValid() && nmea.date.year() >= 2024 &&
+      nmea.time.age() < GPS_TIME_FRESH_MS && nmea.date.age() < GPS_TIME_FRESH_MS &&
       (!gps.timeSet || millis() - lastSyncMs > GPS_TIME_RESYNC_MS)) {
     // calc_timegm(), NOT mktime(). NMEA gives UTC, but mktime() interprets its
     // input as LOCAL time - and settings_apply_tz() has already setenv()'d TZ
@@ -523,12 +530,36 @@ static void gpsPoll() {
     // added, and then silently stopped being true. timegm() is not declared in
     // this newlib build, so calc.h does the conversion arithmetically - which
     // also makes it testable on the host.
-    const time_t epoch = (time_t)calc_timegm(
+    const long long epoch = calc_timegm(
         nmea.date.year(), nmea.date.month(), nmea.date.day(),
         nmea.time.hour(), nmea.time.minute(), nmea.time.second());
     if (epoch > 0) {
-      struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
-      settimeofday(&tv, nullptr);
+      // To the centisecond the sentence gives, plus how long ago it was
+      // parsed - it used to be whole seconds, up to 1 s behind.
+      const long long gnssUs = epoch * 1000000LL +
+                               nmea.time.centisecond() * 10000LL +
+                               (long long)nmea.time.age() * 1000LL;
+      struct timeval now;
+      gettimeofday(&now, nullptr);
+      const long long sysUs = (long long)now.tv_sec * 1000000LL + now.tv_usec;
+      switch (calc_clock_fix(sysUs, gnssUs, clock_valid(),
+                             GPS_TIME_SLEW_MAX_MS * 1000LL, GPS_TIME_KEEP_MS * 1000LL)) {
+        case CALC_CLOCK_STEP: {
+          struct timeval tv = { .tv_sec = (time_t)(gnssUs / 1000000LL),
+                                .tv_usec = (suseconds_t)(gnssUs % 1000000LL) };
+          settimeofday(&tv, nullptr);
+          break;
+        }
+        case CALC_CLOCK_SLEW: {
+          const long long d = gnssUs - sysUs;
+          struct timeval delta = { .tv_sec = (time_t)(d / 1000000LL),
+                                   .tv_usec = (suseconds_t)(d % 1000000LL) };
+          adjtime(&delta, nullptr);
+          break;
+        }
+        case CALC_CLOCK_KEEP:
+          break;
+      }
       if (!gps.timeSet) Serial.println(F("[OK] clock set from GPS (UTC)"));
       gps.timeSet = true;
       lastSyncMs  = millis();

@@ -795,6 +795,23 @@ static inline bool calc_gpx_gate(CalcGpxGate *g, const CalcGpxLimits *lim, uint3
   return true;
 }
 
+// ---- bringing the clock to GNSS time --------------------------------------------
+// Step the clock (settimeofday), slew it (adjtime - it never runs backwards),
+// or leave it. A step backwards is what made GPX times go back - consecutive
+// points out of order - so once the clock is a real time, an error up to
+// slewMaxUs is slewed; only a larger one, or a clock not yet set at all, is
+// stepped. Under keepUs it is left alone.
+enum CalcClockFix : uint8_t { CALC_CLOCK_KEEP, CALC_CLOCK_SLEW, CALC_CLOCK_STEP };
+static inline CalcClockFix calc_clock_fix(long long sysUs, long long gnssUs, bool clockValid,
+                                          long long slewMaxUs, long long keepUs) {
+  if (!clockValid) return CALC_CLOCK_STEP;
+  const long long d = gnssUs - sysUs;
+  const long long a = d < 0 ? -d : d;
+  if (a < keepUs) return CALC_CLOCK_KEEP;
+  if (a <= slewMaxUs) return CALC_CLOCK_SLEW;
+  return CALC_CLOCK_STEP;
+}
+
 // ---- is a reading current? -----------------------------------------------------
 // Stale data must present as NO data: a number that has stopped changing looks
 // exactly like a steady reading. `have` = it ever arrived; `stampMs` = when
