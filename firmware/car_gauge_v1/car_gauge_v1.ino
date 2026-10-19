@@ -279,8 +279,11 @@ static void womBench(uint32_t now) {
 }
 #endif
 
-void loop() {
-  const uint32_t now = millis();
+// ============================================================================
+// loop() and the steps it takes, in the order it takes them.
+// ============================================================================
+
+static void passTiming(uint32_t now) {
   {
     // Whole-pass time, start to start (render and idle delay included), for
     // the CSV's loopMaxMs - what the logger's own cost is measured against.
@@ -289,9 +292,6 @@ void loop() {
     if (passStartUs) logger_note_loop_us(us - passStartUs);
     passStartUs = us;
   }
-#if WOM_BENCH
-  womBench(now);
-#endif
   {
     // Every 10 s for the first minute, so a serial monitor opened late still
     // catches it. The first loop() pass is when the splash starts moving.
@@ -299,21 +299,27 @@ void loop() {
     if (firstLoopMs == 0) { firstLoopMs = now ? now : 1; bootMark("toLoop"); }
     if (now < 60000 && now - lastPrintMs >= 10000) { lastPrintMs = now; bootTimingsPrint(); }
   }
+}
+
 #if FRAME_STATS
-  const uint32_t loopT0 = micros();
-  // One reader for the serial debug commands ('b', 's', 'r'), taken once per
-  // pass. Each handler used to read for itself, and the 'b' check consumed
-  // whatever byte was waiting - so an 's' landing mid-pass was silently eaten.
-  const int dbgCmd = Serial.available() ? Serial.read() : -1;
+// Set from the serial console, read by the steps below.
+static bool benchSynth = false;   // 's': synthetic g-meter and boost
+static bool benchNoRim = false;   // 'r': the notification rim hidden
+
+// The serial bench console - see FRAME_STATS in config.h for the commands.
+// One reader, taken once per pass. Each handler used to read for itself, and
+// the 'b' check consumed whatever byte was waiting - so an 's' landing
+// mid-pass was silently eaten.
+static void benchCommands(uint32_t now) {
+  const int cmd = Serial.available() ? Serial.read() : -1;
   // 'c' pretends a CAN frame arrived (the drive log opens on the first one),
   // 't<epoch>' sets the clock like the phone page does - together they let
   // the logger's drive-start and rename paths be exercised on the desk.
-  if (dbgCmd == 'c' && obd.lastFrameMs == 0) obd.lastFrameMs = now ? now : 1;
+  if (cmd == 'c' && obd.lastFrameMs == 0) obd.lastFrameMs = now ? now : 1;
   // 'f' injects one set of readings stamped now, then nothing refreshes them -
   // a dropout on demand. OBD values go stale after OBD_STALE_MS; tyres are
   // stamped nearly TPMS_STALE_MS old so they follow a few seconds later.
-  // 'd' prints the tail of the drive log to check what the CSV recorded.
-  if (dbgCmd == 'f') {
+  if (cmd == 'f') {
     const uint32_t t = millis();
     obd.oilTempC = 95;  obd.oilRaw = 192; obd.oilMs = t;     obd.haveOil = true;
     obd.coolantC = 90;  obd.coolantMs = t;                   obd.haveCoolant = true;
@@ -331,10 +337,11 @@ void loop() {
     }
     Serial.println(F("[..] bench: fake readings injected, stale in ~3-5 s"));
   }
-  if (dbgCmd == 'd') logger_dump_tail(6000);
+  // 'd' prints the tail of the drive log to check what the CSV recorded.
+  if (cmd == 'd') logger_dump_tail(6000);
   // 'h': internal RAM now, the least it has been since boot, and the largest
   // block - against AP_MIN_INTERNAL_HEAP, what decides whether the AP starts.
-  if (dbgCmd == 'h') {
+  if (cmd == 'h') {
     Serial.printf("[..] internal RAM: %u KB free, %u KB at the least, largest block %u KB; AP %s, refused %lu\n",
                   (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
                   (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
@@ -345,7 +352,7 @@ void loop() {
   // v-1 = back to the real GNSS). See apDriveTask for why it cannot simply
   // write gps.speedKmh.
 #if AP_DRIVE_OFF
-  if (dbgCmd == 'v') {
+  if (cmd == 'v') {
     apBenchKmh = (int)Serial.parseInt();
     if (apBenchKmh < 0) apBenchKmh = -1;
     Serial.printf("[..] bench: AP logic sees %s\n",
@@ -353,34 +360,185 @@ void loop() {
                   apBenchKmh == 0 ? "no fix" : "a fix at the given speed");
   }
 #endif
-  if (dbgCmd == 't') {
+  if (cmd == 't') {
     const long e = Serial.parseInt();
     Serial.printf("[..] bench: set clock to %ld -> %s\n", e,
                   rtc_set_from_epoch(e) ? "ok" : "rejected");
   }
   // 'k<64 hex>' / 'koff' sets the log encryption key as the phone app does,
   // under the same lock - for checking the encrypted logs on the desk.
-  if (dbgCmd == 'k') {
+  if (cmd == 'k') {
     String hex = Serial.readStringUntil('\n');
     hex.trim();
     LoggerSdLock lock;
     Serial.printf("[..] bench: log key %s -> %s\n", hex.c_str(),
                   settings_set_log_key(hex.c_str()) ? "ok" : "rejected");
   }
+  // 'r' hides the rim, to measure frames as they are in the car, where
+  // nothing is normally faulted.
+  if (cmd == 'r') benchNoRim = !benchNoRim;
+  // 's' toggles synthetic input - the g-meter circling and boost sweeping
+  // 0-1.9 bar - so frame rates under constant change can be measured with the
+  // pod untouched and no car.
+  if (cmd == 's') benchSynth = !benchSynth;
+  // 'b' runs the render benchmark.
+  if (cmd == 'b') ui_bench();
+  // How often each OBD value actually arrives - the check for
+  // request pacing on the car. Counts changes of the *Ms stamps.
+  {
+    static uint32_t since = 0, lastB = 0, lastO = 0, lastC = 0, nB = 0, nO = 0, nC = 0;
+    if (obd.boostMs != lastB)   { lastB = obd.boostMs;   nB++; }
+    if (obd.oilMs != lastO)     { lastO = obd.oilMs;     nO++; }
+    if (obd.coolantMs != lastC) { lastC = obd.coolantMs; nC++; }
+    if (now - since >= 2000) {
+      if (obd.lastFrameMs)
+        Serial.printf("[OBD] updates/s: boost %.1f, oil %.1f, coolant %.1f\n",
+                      nB * 1000.0f / (now - since), nO * 1000.0f / (now - since),
+                      nC * 1000.0f / (now - since));
+      nB = nO = nC = 0; since = now;
+    }
+  }
+}
 #endif
 
-  // No gps_task() here: the GNSS runs on its own task on core 0, spawned by
-  // gps_init(), same as CAN.
+// ---- derive states, with hysteresis ----
+// A bare comparison makes these flip on alternate updates when the
+// temperature sits on a threshold - seen on the car as the screen flashing
+// at 89-90 C. Each state now has to be left by STATE_HYST_C, not by a
+// fraction of a degree. Latched here, so they persist across passes.
+static bool tempCold = true, tempOverOil = false, tempOverCool = false;
 
-  // Stale data must present as NO data. A number that has stopped changing
-  // looks exactly like a steady reading, so without this a dead CAN link
-  // would show a believable oil temp forever - and the over-temp alarm would
-  // never fire because the value sits wherever it froze.
-  const bool  haveOil   = obd_oil_fresh();
-  const int   oilTempC  = obd.oilTempC;
-  const bool  haveBoost = obd_boost_fresh();
-  const float boostBar  = obd.boostBar;
-  const bool  haveCool  = obd_coolant_fresh();
+static void updateTempStates() {
+  // Stale data must present as NO data (obd_*_fresh). A number that has
+  // stopped changing looks exactly like a steady reading, so without this a
+  // dead CAN link would show a believable oil temp forever - and the
+  // over-temp alarm would never fire because the value sits wherever it froze.
+  if (obd_oil_fresh()) {
+    const int oilTempC = obd.oilTempC;
+    if (tempCold && oilTempC >= settings.oilReadyC)                   tempCold = false;
+    else if (!tempCold && oilTempC < settings.oilReadyC - STATE_HYST_C) tempCold = true;
+
+    if (!tempOverOil && oilTempC >= settings.oilWarnC)                     tempOverOil = true;
+    else if (tempOverOil && oilTempC < settings.oilWarnC - STATE_HYST_C)   tempOverOil = false;
+  } else {
+    // A warning with no reading behind it is a frozen reading too. Left
+    // latched, a stale overOil made the oil screen say "COOLANT TOO HOT"
+    // (ui_update_oil's no-data branch reads `over` as the coolant warning).
+    tempOverOil = false;
+  }
+  if (obd_coolant_fresh()) {
+    if (!tempOverCool && obd.coolantC >= settings.coolantWarnC)                   tempOverCool = true;
+    else if (tempOverCool && obd.coolantC < settings.coolantWarnC - STATE_HYST_C) tempOverCool = false;
+  } else {
+    tempOverCool = false;
+  }
+}
+
+#if BOOT_ANIM_MS > 0
+// The bench page's text: what is up, at a glance, without a serial monitor.
+static void benchPageText(char *b, size_t n, uint32_t now) {
+  uint32_t sdUsed, sdTotal;
+  web_sd_space_kb(&sdUsed, &sdTotal);
+  char sd[40], wifi[64], gnss[32];
+  if (logger_card_shared())   snprintf(sd, sizeof(sd), "SD lent to the PC");
+  else if (!logger_card_ok()) snprintf(sd, sizeof(sd), "No SD card");
+  else snprintf(sd, sizeof(sd), "SD %.1f / %.1f GB used",
+                sdUsed / 1048576.0f, sdTotal / 1048576.0f);
+  if (web_is_up()) snprintf(wifi, sizeof(wifi), "WiFi: %s  %s  (%u on)",
+                            settings.apSsid, web_ip(), web_clients());
+  else             snprintf(wifi, sizeof(wifi), "WiFi off");
+  if (!gps.linkUp)       snprintf(gnss, sizeof(gnss), "GPS: no module");
+  else if (gps.haveFix)  snprintf(gnss, sizeof(gnss), "GPS: fix, %u sats", gps.sats);
+  else                   snprintf(gnss, sizeof(gnss), "GPS: no fix, %u sats", gps.sats);
+  // The separator is a bullet (U+2022): Montserrat 14 as built has no
+  // middle dot, which drew as nothing.
+  snprintf(b, n,
+           "On the bench\n"
+           "Firmware %s\n%s\n%s\n"
+           "%s  \xE2\x80\xA2  CAN: %s\n"
+           "RAM %u KB free  \xE2\x80\xA2  PSRAM %.1f MB\n"
+           "Chip %.0f\xC2\xB0" "C  \xE2\x80\xA2  up %lu min  \xE2\x80\xA2  %s\n\n"
+           "Touch for the gauges",
+           ota_build(), wifi, sd, gnss,
+           !obd.linkUp ? "driver down" : obd.lastFrameMs ? "talking" : "no car",
+           (unsigned)(ESP.getFreeHeap() / 1024), ESP.getFreePsram() / 1048576.0f,
+           temperatureRead(), (unsigned long)(now / 60000), web_reset_text());
+}
+
+// The splash, once swept, stays up until the car sends a reading: gauges
+// before that all read "--" and the gauge looks broken. It goes when a
+// reading is fresh, or when the "no car" fault would show anyway (the
+// screens then say "--" for a reason), or at a touch. A wake that goes
+// back to sleep never shows a gauge at all. The widget updates that follow
+// are harmless meanwhile - they write to screens that are not loaded.
+//
+// On the bench (a PC on USB) it is a status page instead, with no timeout:
+// the gauges mean nothing at the desk.
+static void bootSplashTask(uint32_t now, bool canGrace) {
+  if (!ui_boot_anim_done()) return;
+  const bool bench   = usbdisk_host_connected();
+  const bool reading = obd_oil_fresh() || obd_coolant_fresh() || obd_boost_fresh() ||
+                       obd_rpm_fresh() || obd_speed_fresh();
+  if (ui_boot_take_touch() || reading || (!bench && !(canGrace && obd.linkUp))) {
+    ui_boot_anim_end();             // idempotent
+  } else if (bench) {
+    static uint32_t benchAt = 0;
+    // The text once a second; the share button every pass, so it says
+    // "Stop sharing" the moment the card is lent (ui_boot_show_bench
+    // compares before it redraws anything).
+    static char b[400] = "";
+    if (benchAt == 0 || now - benchAt >= 1000) {
+      benchAt = now ? now : 1;
+      benchPageText(b, sizeof(b), now);
+    }
+    ui_boot_show_bench(b, usbdisk_state() == USBDISK_SHARED);
+  }
+}
+#endif
+
+// The notification rim: which faults are up.
+static void faultsTask(uint32_t now, bool canGrace) {
+  uint8_t faults = 0;
+  // Over-temperature on every screen, not just the oil screen's state line:
+  // a track day is spent on the track screen (2026-10-17: oil at 132 C,
+  // nothing said so there). The same latched states, so the same hysteresis.
+  if (tempOverOil)  faults |= FAULT_OIL_HOT;
+  if (tempOverCool) faults |= FAULT_COOL_HOT;
+  if (!obd.linkUp || (obd.lastFrameMs == 0 && !canGrace)) faults |= FAULT_CAN;
+  // A grace period, because at boot the GNSS task is still hunting for the
+  // module's baud rate, and "not found yet" is not "missing". Checked on
+  // gps.linkUp (NMEA decoding at all), not haveFix - see UiFault in ui.h.
+  if (!gps.linkUp && now > GPS_MISSING_GRACE_MS) faults |= FAULT_GPS;
+  // Lent to a PC as a USB drive is not "missing" - the WiFi screen says so.
+  if (!logger_card_ok() && !logger_card_shared()) faults |= FAULT_SD;
+#if FRAME_STATS
+  if (benchNoRim) faults = 0;
+#endif
+  ui_set_faults(faults, obd.oilTempC, obd.coolantC);
+}
+
+// ---- push to UI ----
+// Every value through obd_*_fresh: stale data presents as no data.
+static void gaugesTask(uint32_t now) {
+  // The same "car on" test as obd.cpp's schedule: lastFrameMs counts every
+  // frame except the TPMS module's, which answers with the car parked too.
+  ui_set_car_talking(obd.lastFrameMs != 0 &&
+                     (int32_t)(now - obd.lastFrameMs) < (int32_t)OBD_STALE_MS);
+  // Oil first: it owns the state line that the coolant arc shares.
+  ui_update_oil(obd_oil_fresh(), obd.oilTempC, tempCold, tempOverOil || tempOverCool);
+  ui_update_coolant(obd_coolant_fresh(), obd.coolantC, tempOverCool);
+#if FRAME_STATS
+  // Boost samples at the real rate, not per pass.
+  if (benchSynth) ui_update_boost(true, 0.95f + 0.95f *
+                                  sinf((now / BOOST_SAMPLE_MS) * 0.3f));
+  else
+#endif
+  ui_update_boost(obd_boost_fresh(), obd.boostBar);
+  // Torque is an estimate from absolute load - see TORQUE_NM_FROM_LOAD.
+  ui_update_torque(obd_absload_fresh(), TORQUE_NM_FROM_LOAD(obd.absLoadPct));
+  // Pedal travel, foot off .. floored - see PEDAL_RAW_FULL (still assumed).
+  ui_update_pedal(obd_pedal_fresh(),
+                  ((int)obd.pedalRaw - PEDAL_RAW_IDLE) * 100 / (PEDAL_RAW_FULL - PEDAL_RAW_IDLE));
 
   // Real TPMS (0x7A0 / DID 0xC00B). Front/rear is confirmed; which side of an
   // axle each slot is has not been - see the note in config.h.
@@ -393,150 +551,9 @@ void loop() {
     tyreBar[i]   = obd.tyreBar[i];
     tyreTempC[i] = obd.tyreTempC[i];
   }
-
-  // GPS is real even on the bench - it's our own UART, not the car's bus.
-  const bool  gpsLinkUp   = gps.linkUp;
-  const bool  gpsHaveFix  = gps.haveFix;
-  const int   gpsSats     = gps.sats;
-  const float gpsSpeedKmh = gps.speedKmh;
-
-  // ---- derive states, with hysteresis ----
-  // A bare comparison makes these flip on alternate updates when the
-  // temperature sits on a threshold - seen on the car as the screen flashing
-  // at 89-90 C. Each state now has to be left by STATE_HYST_C, not by a
-  // fraction of a degree. Latched in statics, so they persist across loops.
-  static bool cold = true, overOil = false, overCool = false;
-  if (haveOil) {
-    if (cold && oilTempC >= settings.oilReadyC)                   cold = false;
-    else if (!cold && oilTempC < settings.oilReadyC - STATE_HYST_C) cold = true;
-
-    if (!overOil && oilTempC >= settings.oilWarnC)                      overOil = true;
-    else if (overOil && oilTempC < settings.oilWarnC - STATE_HYST_C)    overOil = false;
-  } else {
-    // A warning with no reading behind it is a frozen reading too. Left
-    // latched, a stale overOil made the oil screen say "COOLANT TOO HOT"
-    // (ui_update_oil's no-data branch reads `over` as the coolant warning).
-    overOil = false;
-  }
-  if (haveCool) {
-    if (!overCool && obd.coolantC >= settings.coolantWarnC)                   overCool = true;
-    else if (overCool && obd.coolantC < settings.coolantWarnC - STATE_HYST_C) overCool = false;
-  } else {
-    overCool = false;
-  }
-  const bool over = overOil || overCool;
-
-  // "No car yet" waits out CAN_MISSING_GRACE_MS, and a wake still sampling
-  // the bus (power_wake_pending: up to 60 s after a motion wake); a CAN
-  // driver that never started (!linkUp) shows at once.
-  const bool canGrace = now < CAN_MISSING_GRACE_MS || power_wake_pending();
-
-#if BOOT_ANIM_MS > 0
-  // The splash, once swept, stays up until the car sends a reading: gauges
-  // before that all read "--" and the gauge looks broken. It goes when a
-  // reading is fresh, or when the "no car" fault would show anyway (the
-  // screens then say "--" for a reason), or at a touch. A wake that goes
-  // back to sleep never shows a gauge at all. The widget updates below are
-  // harmless meanwhile - they write to screens that are not loaded.
-  //
-  // On the bench (a PC on USB) it is a status page instead, with no timeout:
-  // the gauges mean nothing at the desk.
-  if (ui_boot_anim_done()) {
-    const bool bench   = usbdisk_host_connected();
-    const bool reading = obd_oil_fresh() || obd_coolant_fresh() || obd_boost_fresh() ||
-                         obd_rpm_fresh() || obd_speed_fresh();
-    if (ui_boot_take_touch() || reading || (!bench && !(canGrace && obd.linkUp))) {
-      ui_boot_anim_end();             // idempotent
-    } else if (bench) {
-      static uint32_t benchAt = 0;
-      // The text once a second; the share button every pass, so it says
-      // "Stop sharing" the moment the card is lent (ui_boot_show_bench
-      // compares before it redraws anything).
-      static char b[400] = "";
-      if (benchAt == 0 || now - benchAt >= 1000) {
-        benchAt = now ? now : 1;
-        uint32_t sdUsed, sdTotal;
-        web_sd_space_kb(&sdUsed, &sdTotal);
-        char sd[40], wifi[64], gnss[32];
-        if (logger_card_shared())   snprintf(sd, sizeof(sd), "SD lent to the PC");
-        else if (!logger_card_ok()) snprintf(sd, sizeof(sd), "No SD card");
-        else snprintf(sd, sizeof(sd), "SD %.1f / %.1f GB used",
-                      sdUsed / 1048576.0f, sdTotal / 1048576.0f);
-        if (web_is_up()) snprintf(wifi, sizeof(wifi), "WiFi: %s  %s  (%u on)",
-                                  settings.apSsid, web_ip(), web_clients());
-        else             snprintf(wifi, sizeof(wifi), "WiFi off");
-        if (!gps.linkUp)       snprintf(gnss, sizeof(gnss), "GPS: no module");
-        else if (gps.haveFix)  snprintf(gnss, sizeof(gnss), "GPS: fix, %u sats", gps.sats);
-        else                   snprintf(gnss, sizeof(gnss), "GPS: no fix, %u sats", gps.sats);
-        // The separator is a bullet (U+2022): Montserrat 14 as built has no
-        // middle dot, which drew as nothing.
-        snprintf(b, sizeof(b),
-                 "On the bench\n"
-                 "Firmware %s\n%s\n%s\n"
-                 "%s  \xE2\x80\xA2  CAN: %s\n"
-                 "RAM %u KB free  \xE2\x80\xA2  PSRAM %.1f MB\n"
-                 "Chip %.0f\xC2\xB0" "C  \xE2\x80\xA2  up %lu min  \xE2\x80\xA2  %s\n\n"
-                 "Touch for the gauges",
-                 ota_build(), wifi, sd, gnss,
-                 !obd.linkUp ? "driver down" : obd.lastFrameMs ? "talking" : "no car",
-                 (unsigned)(ESP.getFreeHeap() / 1024), ESP.getFreePsram() / 1048576.0f,
-                 temperatureRead(), (unsigned long)(now / 60000), web_reset_text());
-      }
-      ui_boot_show_bench(b, usbdisk_state() == USBDISK_SHARED);
-    }
-  }
-#endif
-
-  // ---- push to UI ----
-  {
-    uint8_t faults = 0;
-    // Over-temperature on every screen, not just the oil screen's state line:
-    // a track day is spent on the track screen (2026-10-17: oil at 132 C,
-    // nothing said so there). The same latched states, so the same hysteresis.
-    if (overOil)  faults |= FAULT_OIL_HOT;
-    if (overCool) faults |= FAULT_COOL_HOT;
-    if (!obd.linkUp || (obd.lastFrameMs == 0 && !canGrace)) faults |= FAULT_CAN;
-    // A grace period, because at boot the GNSS task is still hunting for the
-    // module's baud rate, and "not found yet" is not "missing". Checked on
-    // gps.linkUp (NMEA decoding at all), not haveFix - see UiFault in ui.h.
-    if (!gps.linkUp && now > GPS_MISSING_GRACE_MS) faults |= FAULT_GPS;
-    // Lent to a PC as a USB drive is not "missing" - the WiFi screen says so.
-    if (!logger_card_ok() && !logger_card_shared()) faults |= FAULT_SD;
-#if FRAME_STATS
-    // 'r' on the serial console hides the rim, to measure frames as they are
-    // in the car, where nothing is normally faulted.
-    static bool noRim = false;
-    if (dbgCmd == 'r') noRim = !noRim;
-    if (noRim) faults = 0;
-#endif
-    ui_set_faults(faults, oilTempC, obd.coolantC);
-  }
-  // The same "car on" test as obd.cpp's schedule: lastFrameMs counts every
-  // frame except the TPMS module's, which answers with the car parked too.
-  ui_set_car_talking(obd.lastFrameMs != 0 &&
-                     (int32_t)(now - obd.lastFrameMs) < (int32_t)OBD_STALE_MS);
-  // Oil first: it owns the state line that the coolant arc shares.
-  ui_update_oil(haveOil, oilTempC, cold, over);
-  ui_update_coolant(haveCool, obd.coolantC, overCool);
-#if FRAME_STATS
-  // 's' on the serial console toggles synthetic input - the g-meter circling
-  // and boost sweeping 0-1.9 bar - so frame rates under constant change can
-  // be measured with the pod untouched and no car.
-  static bool synth = false;
-  if (dbgCmd == 's') synth = !synth;
-  // Boost samples at the real rate, not per pass.
-  if (synth) ui_update_boost(true, 0.95f + 0.95f *
-                             sinf((now / BOOST_SAMPLE_MS) * 0.3f));
-  else
-#endif
-  ui_update_boost(haveBoost, boostBar);
-  // Torque is an estimate from absolute load - see TORQUE_NM_FROM_LOAD.
-  ui_update_torque(obd_absload_fresh(), TORQUE_NM_FROM_LOAD(obd.absLoadPct));
-  // Pedal travel, foot off .. floored - see PEDAL_RAW_FULL (still assumed).
-  ui_update_pedal(obd_pedal_fresh(),
-                  ((int)obd.pedalRaw - PEDAL_RAW_IDLE) * 100 / (PEDAL_RAW_FULL - PEDAL_RAW_IDLE));
   ui_update_tpms(haveTyre, tyreBar, tyreTempC);
-  ui_update_gps(gpsLinkUp, gpsHaveFix, gpsSats, gpsSpeedKmh, logger_trip_km());
+  // GPS is real even on the bench - it's our own UART, not the car's bus.
+  ui_update_gps(gps.linkUp, gps.haveFix, gps.sats, gps.speedKmh, logger_trip_km());
 
   // Lap timer: runs every pass whether or not the track screen is showing, so
   // laps are still counted while another screen is up.
@@ -548,6 +565,9 @@ void loop() {
   }
   ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
                  web_clients());
+}
+
+static void gmeterTask(uint32_t now) {
   float gx, gy, gz;
   // The CSV's raw IMU columns take this sample: the logger runs on core 0
   // and must not use the I2C bus itself.
@@ -567,74 +587,73 @@ void loop() {
     }
   }
 #if FRAME_STATS
-  if (synth) {
+  if (benchSynth) {
     const float a = now * 0.004f;
     gx = 0.8f * cosf(a); gy = 0.8f * sinf(a); gz = 1.0f;
     ui_update_gmeter(gx, gy, gz);
-  } else
+    return;
+  }
 #endif
   ui_update_gmeter_raw(gx, gy, gz);
+}
 
-  // No button handling: screens change by swiping, and the WiFi AP follows
-  // the car (up when awake, down while driving). The button only wakes the
-  // gauge from deep sleep (power.cpp), like the door opening does.
-
-  // ---- remember the screen across restarts ----
-  // Deferred on purpose: cycling through six views to reach the one you want
-  // would otherwise be six NVS writes. Only the screen you settle on is saved.
-  {
-    static GaugeView settled  = ui_current_view();
-    static uint32_t  changedAt = 0;
-    const GaugeView v = ui_current_view();
-    if (v != settled) { settled = v; changedAt = now ? now : 1; }
-    else if (changedAt && now - changedAt >= VIEW_SAVE_AFTER_MS) {
-      changedAt = 0;
-      // settings_save_view() refuses VIEW_WIFI itself, so lastView simply stays
-      // on the previous gauge view when the WiFi screen is the one settled on.
-      if (settings.lastView != (uint8_t)v) settings_save_view((uint8_t)v);
-    }
-
-    // ...and do not sit on it either. Not persisting it stops the pod BOOTING
-    // into it; this stops it being LEFT on it, which is the same exposure with
-    // a slower start. Returns to the remembered view, which cannot itself be
-    // VIEW_WIFI thanks to the guard above.
-    static uint32_t wifiShownAt = 0;
-    // While the SD card is lent to a PC the screen stays, so its "Stop
-    // sharing" button does not vanish - and that only happens
-    // with a PC on the cable, i.e. on the bench, not with a passer-by.
-    const bool holdWifi = usbdisk_state() == USBDISK_SHARED;
-    // A touch on the screen restarts the countdown too.
-    const bool touched = ui_take_wifi_touch();
-    if (v == VIEW_WIFI && (holdWifi || touched)) wifiShownAt = now ? now : 1;
-    // The arc round the screen counts down to the switch back (-1 = hidden).
-    ui_update_wifi_countdown(v != VIEW_WIFI || holdWifi || wifiShownAt == 0 ? -1.0f
-        : 1.0f - (float)(now - wifiShownAt) / (float)WIFI_VIEW_MAX_MS);
-    if (v == VIEW_WIFI) {
-      if (wifiShownAt == 0) wifiShownAt = now ? now : 1;
-      else if ((int32_t)(now - wifiShownAt) >= (int32_t)WIFI_VIEW_MAX_MS) {
-        wifiShownAt = 0;
-        ui_set_view((GaugeView)settings.lastView);
-        // Belt and braces: if that did not take, force a known view rather
-        // than leaving the passphrase on screen for another minute, forever.
-        if (ui_current_view() == VIEW_WIFI) ui_set_view(ui_home_view());
-      }
-    } else {
-      wifiShownAt = 0;
-    }
+// ---- remember the screen across restarts ----
+// Deferred on purpose: cycling through six views to reach the one you want
+// would otherwise be six NVS writes. Only the screen you settle on is saved.
+static void viewTask(uint32_t now) {
+  static GaugeView settled  = ui_current_view();
+  static uint32_t  changedAt = 0;
+  const GaugeView v = ui_current_view();
+  if (v != settled) { settled = v; changedAt = now ? now : 1; }
+  else if (changedAt && now - changedAt >= VIEW_SAVE_AFTER_MS) {
+    changedAt = 0;
+    // settings_save_view() refuses VIEW_WIFI itself, so lastView simply stays
+    // on the previous gauge view when the WiFi screen is the one settled on.
+    if (settings.lastView != (uint8_t)v) settings_save_view((uint8_t)v);
   }
 
-  // No logger_task() here any more: it runs on its own task on core 0.
-  rtc_task();          // keep the PCF85063 in step with GNSS time
-  brightness_update(false);   // day/night, every NIGHT_CHECK_MS
-  ota_task();                 // confirms a freshly updated firmware once healthy
-  // The SD card as a USB drive, on the bench: a tap shares it, a tap while
-  // shared takes it back - as do the PC's eject and pulling the cable.
+  // ...and do not sit on it either. Not persisting it stops the pod BOOTING
+  // into it; this stops it being LEFT on it, which is the same exposure with
+  // a slower start. Returns to the remembered view, which cannot itself be
+  // VIEW_WIFI thanks to the guard above.
+  static uint32_t wifiShownAt = 0;
+  // While the SD card is lent to a PC the screen stays, so its "Stop
+  // sharing" button does not vanish - and that only happens
+  // with a PC on the cable, i.e. on the bench, not with a passer-by.
+  const bool holdWifi = usbdisk_state() == USBDISK_SHARED;
+  // A touch on the screen restarts the countdown too.
+  const bool touched = ui_take_wifi_touch();
+  if (v == VIEW_WIFI && (holdWifi || touched)) wifiShownAt = now ? now : 1;
+  // The arc round the screen counts down to the switch back (-1 = hidden).
+  ui_update_wifi_countdown(v != VIEW_WIFI || holdWifi || wifiShownAt == 0 ? -1.0f
+      : 1.0f - (float)(now - wifiShownAt) / (float)WIFI_VIEW_MAX_MS);
+  if (v == VIEW_WIFI) {
+    if (wifiShownAt == 0) wifiShownAt = now ? now : 1;
+    else if ((int32_t)(now - wifiShownAt) >= (int32_t)WIFI_VIEW_MAX_MS) {
+      wifiShownAt = 0;
+      ui_set_view((GaugeView)settings.lastView);
+      // Belt and braces: if that did not take, force a known view rather
+      // than leaving the passphrase on screen for another minute, forever.
+      if (ui_current_view() == VIEW_WIFI) ui_set_view(ui_home_view());
+    }
+  } else {
+    wifiShownAt = 0;
+  }
+}
+
+// The SD card as a USB drive, on the bench: a tap shares it, a tap while
+// shared takes it back - as do the PC's eject and pulling the cable.
+static void usbTask() {
   if (ui_take_share_tap()) {
     if (usbdisk_state() == USBDISK_SHARED) usbdisk_unshare();
     else                                   usbdisk_share();
   }
   usbdisk_task();
   ui_update_usbdisk(usbdisk_host_connected(), usbdisk_state() == USBDISK_SHARED);
+}
+
+static void apTask(uint32_t now) {
+  (void)now;
 #if WIFI_AP_ALWAYS
   // Once, as soon as this boot is known to stay up: right away on a cold
   // boot, after the bus check on a deep-sleep wake - so a wake that goes
@@ -652,30 +671,12 @@ void loop() {
   apDriveTask(now);
 #endif
   web_task();
+}
 
-  // ---- power: sleep if the bus has gone quiet ----
-  power_task();
-
-  // ---- LVGL ----
-#if FRAME_STATS
-  // 'b' on the serial console runs the render benchmark.
-  if (dbgCmd == 'b') ui_bench();
-  // How often each OBD value actually arrives - the check for
-  // request pacing on the car. Counts changes of the *Ms stamps.
-  {
-    static uint32_t since = 0, lastB = 0, lastO = 0, lastC = 0, nB = 0, nO = 0, nC = 0;
-    if (obd.boostMs != lastB)   { lastB = obd.boostMs;   nB++; }
-    if (obd.oilMs != lastO)     { lastO = obd.oilMs;     nO++; }
-    if (obd.coolantMs != lastC) { lastC = obd.coolantMs; nC++; }
-    if (now - since >= 2000) {
-      if (obd.lastFrameMs)
-        Serial.printf("[OBD] updates/s: boost %.1f, oil %.1f, coolant %.1f\n",
-                      nB * 1000.0f / (now - since), nO * 1000.0f / (now - since),
-                      nC * 1000.0f / (now - since));
-      nB = nO = nC = 0; since = now;
-    }
-  }
-#endif
+// ---- LVGL ----
+// Renders what is due, then sleeps until LVGL next has something due.
+static void lvglTask(uint32_t loopT0) {
+  (void)loopT0;
   // If the next frame is due within a few ms, wait for it HERE, after the rest
   // of the pass, rather than going round again: the rest of a pass costs
   // ~2.5 ms, so a frame falling due during the sleep below was drawn that
@@ -703,4 +704,42 @@ void loop() {
   // the button are still served ~100 times a second. Never 0: this also
   // yields core 1 to lower-priority tasks.
   delay(lvIdle < 1 ? 1 : lvIdle > 5 ? 5 : lvIdle);
+}
+
+void loop() {
+  const uint32_t now = millis();
+  passTiming(now);
+#if WOM_BENCH
+  womBench(now);
+#endif
+  const uint32_t loopT0 = micros();
+#if FRAME_STATS
+  benchCommands(now);
+#endif
+  // No gps_task() and no logger_task() here: the GNSS and the logger run on
+  // their own tasks on core 0, as CAN does.
+
+  updateTempStates();
+  // "No car yet" waits out CAN_MISSING_GRACE_MS, and a wake still sampling
+  // the bus (power_wake_pending: up to 60 s after a motion wake); a CAN
+  // driver that never started (!linkUp) shows at once.
+  const bool canGrace = now < CAN_MISSING_GRACE_MS || power_wake_pending();
+#if BOOT_ANIM_MS > 0
+  bootSplashTask(now, canGrace);
+#endif
+  faultsTask(now, canGrace);
+  gaugesTask(now);
+  gmeterTask(now);
+  // No button handling: screens change by swiping, and the WiFi AP follows
+  // the car (up when awake, down while driving). The button only wakes the
+  // gauge from deep sleep (power.cpp), like the door opening does.
+  viewTask(now);
+
+  rtc_task();                 // keep the PCF85063 in step with GNSS time
+  brightness_update(false);   // day/night, every NIGHT_CHECK_MS
+  ota_task();                 // confirms a freshly updated firmware once healthy
+  usbTask();
+  apTask(now);
+  power_task();               // sleep if the bus has gone quiet
+  lvglTask(loopT0);
 }
