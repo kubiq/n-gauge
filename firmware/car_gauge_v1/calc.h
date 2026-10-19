@@ -548,6 +548,15 @@ static inline int calc_card_order(const char *a, const char *b) {
   return strcmp(a, b);
 }
 
+// ---- is a reading current? -----------------------------------------------------
+// Stale data must present as NO data: a number that has stopped changing looks
+// exactly like a steady reading. `have` = it ever arrived; `stampMs` = when
+// it last did. Unsigned subtraction, so it holds across the millis() wrap.
+static inline bool calc_fresh(bool have, uint32_t stampMs, uint32_t nowMs,
+                              uint32_t maxAgeMs) {
+  return have && (nowMs - stampMs < maxAgeMs);
+}
+
 // ---- card file names from the phone ------------------------------------------
 // A name the web API may open on the card. Everything there is flat in the
 // card root, so a name containing a separator or ".." can only be an attempt

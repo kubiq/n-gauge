@@ -36,6 +36,7 @@ add_executable(gauge-sim
   sim_shots.cpp
   gauge_firmware.cpp
   ${FW_UI}
+  ${FW}/obd_fresh.cpp
   ${FW}/laps.cpp
   ${FW}/settings.cpp
   ${FW_IMAGES})

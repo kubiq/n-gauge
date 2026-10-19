@@ -25,21 +25,7 @@ SimEsp ESP;
 
 // ---- OBD: the state the replay fills (sim_replay.cpp) -----------------------
 ObdState obd;
-
-static bool fresh(bool have, uint32_t stampMs, uint32_t maxAgeMs) {
-  return have && (millis() - stampMs < maxAgeMs);
-}
-bool obd_oil_fresh()     { return fresh(obd.haveOil,     obd.oilMs,     OBD_STALE_MS); }
-bool obd_coolant_fresh() { return fresh(obd.haveCoolant, obd.coolantMs, OBD_STALE_MS); }
-bool obd_boost_fresh()   { return fresh(obd.haveBoost,   obd.boostMs,   OBD_STALE_MS); }
-bool obd_speed_fresh()   { return fresh(obd.haveSpeed,   obd.speedMs,   OBD_STALE_MS); }
-bool obd_absload_fresh() { return fresh(obd.haveAbsLoad, obd.absLoadMs, OBD_STALE_MS); }
-bool obd_volts_fresh()   { return fresh(obd.haveVolts,   obd.voltsMs,   OBD_STALE_MS); }
-bool obd_pedal_fresh()   { return fresh(obd.havePedal,   obd.pedalMs,   OBD_STALE_MS); }
-bool obd_rpm_fresh()     { return fresh(obd.haveRpm,     obd.rpmMs,     OBD_STALE_MS); }
-bool obd_timing_fresh()  { return fresh(obd.haveTiming,  obd.timingMs,  OBD_STALE_MS); }
-bool obd_iat_fresh()     { return fresh(obd.haveIat,     obd.iatMs,     OBD_STALE_MS); }
-bool obd_tyre_fresh(int i) { return i >= 0 && i < 4 && fresh(obd.haveTyre[i], obd.tyreMs[i], TPMS_STALE_MS); }
+// obd_*_fresh(): the firmware's own, obd_fresh.cpp.
 void obd_init() { obd.linkUp = true; }   // the CAN driver "started"
 void obd_transceiver_standby(bool) {}
 

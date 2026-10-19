@@ -722,6 +722,16 @@ static void range_garbage_means_whole_file() {
   CHECK(calc_parse_range("bytes=1-2x", 1000, &a, &b) == 0);
 }
 
+// Stale must read as no data - and the age is unsigned arithmetic, so it
+// holds when millis() wraps after ~49.7 days of uptime.
+static void fresh_ages_out_and_survives_the_wrap() {
+  CHECK(calc_fresh(true, 1000, 1500, 3000));
+  CHECK(!calc_fresh(true, 1000, 4000, 3000));      // exactly max age: stale
+  CHECK(!calc_fresh(false, 1000, 1000, 3000));     // never arrived
+  CHECK(calc_fresh(true, 0xFFFFFF00u, 0x00000100u, 3000));    // 512 ms, across the wrap
+  CHECK(!calc_fresh(true, 0xFFFFF000u, 0x00001000u, 3000));   // 8 s, across the wrap
+}
+
 static void hex_parses_exactly_or_not_at_all() {
   uint8_t b[4] = {9, 9, 9, 9};
   CHECK(calc_parse_hex("00ff7Ac3", b, 4) && b[0] == 0x00 && b[1] == 0xff && b[2] == 0x7a && b[3] == 0xc3);
@@ -736,6 +746,7 @@ static void hex_parses_exactly_or_not_at_all() {
 
 int main() {
   printf("test_calc\n");
+  TEST(fresh_ages_out_and_survives_the_wrap);
   TEST(hex_parses_exactly_or_not_at_all);
   TEST(range_reads_the_three_forms);
   TEST(range_end_past_the_file_is_clamped);
