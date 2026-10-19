@@ -4,6 +4,7 @@
 // ============================================================================
 #include "obd.h"
 #include "config.h"
+#include "calc.h"         // ISO-TP reassembly, the Mode 01 walk and formulas
 #include <Arduino.h>
 #include "driver/gpio.h"   // RX idle-level report, Rs pad hold
 #include "driver/twai.h"
@@ -218,21 +219,11 @@ static void sendNextRequest(bool carOn) {
 }
 
 // --- ISO-TP (ISO 15765-2) multi-frame receive -------------------------------
-// The oil-temp DID (0xE001) answers with a 45-byte payload split across a
-// First Frame + Consecutive Frames, and the ECU only sends the Consecutive
-// Frames after we answer the First Frame with a Flow Control. Verified on the
-// car: 99.8% and 100% reassembly success across two drives (drive_0015/0016),
-// with zero RX overflows.
-#define ISOTP_BUF_SIZE   96
+// The reassembly is calc_isotp_rx() in calc.h, host-tested; this sends the
+// Flow Control it asks for and counts the outcomes.
 #define ISOTP_TIMEOUT_MS 300
 
-static uint8_t  isoBuf[ISOTP_BUF_SIZE];
-static uint16_t isoExpected = 0;
-static uint16_t isoGot      = 0;
-static uint8_t  isoNextSeq  = 1;
-static uint32_t isoStartMs  = 0;
-static bool     isoActive   = false;
-static uint32_t isoId       = 0;   // CAN ID of the responder mid-transfer
+static CalcIsoTp iso;
 
 static void isoSendFlowControl(uint16_t reqId) {
   twai_message_t m = {};
@@ -245,86 +236,55 @@ static void isoSendFlowControl(uint16_t reqId) {
 }
 
 // --- reply parsing ----------------------------------------------------------
-// Data bytes of a Mode 01 PID, for walking a multi-PID reply. 0 = not known:
-// the walk stops there and hands that PID whatever is left, which is exactly
-// right for a single-PID reply.
-static uint8_t pidDataLen(uint8_t pid) {
-  switch (pid) {
-    case 0x00: case 0x20: case 0x40: case 0x60: case 0x80: return 4;   // bitmaps
-    case 0x34: return 4;
-    case 0x0C: case 0x43: case 0x42: case 0x3C: case 0x3E: case 0x44: case 0x59:
-    case 0x5E: case 0x63: return 2;
-    case 0x04: case 0x05: case 0x0B: case 0x0D: case 0x0E: case 0x0F: case 0x11:
-    case 0x2F: case 0x33: case 0x45: case 0x46: case 0x47: case 0x49: case 0x4A:
-    case 0x4C: case 0x5C: return 1;
-    default: return 0;
-  }
-}
-
-// One PID's data from a Mode 01 reply. dl = bytes available for it.
+// One PID's data from a Mode 01 reply. dl = bytes available for it. The
+// formulas are calc_mode01_value() in calc.h (SAE J1979, host-tested); what
+// is kept, and the guards on it, are here.
 static void handlePid(uint8_t pid, const uint8_t *d, uint16_t dl) {
   if (dl < 1) return;
-  if (pid == 0x05) {
-    obd.coolantPid05C = d[0] - 40; obd.pid05Ms = millis(); obd.havePid05 = true;
-#if !COOLANT_FROM_E001
-    obd.coolantC = obd.coolantPid05C; obd.coolantMs = obd.pid05Ms; obd.haveCoolant = true;
-#endif
+  const uint32_t now = millis();
+  if (pid == 0x5C) {
+    obd.oilTempC = OIL_TEMP_FROM_MODE01(d); obd.haveOil = true; obd.oilMs = now;
+    return;
   }
-  else if (pid == 0x5C) { obd.oilTempC = OIL_TEMP_FROM_MODE01(d);  obd.haveOil = true;
-                          obd.oilMs    = millis(); }
-  else if (pid == BOOST_MODE01_PID) {
+  if (pid == BOOST_MODE01_PID) {
     obd.boostBar = BOOST_BAR_FROM_KPA(d[0], obd.haveBaro ? obd.baroKpa : AMBIENT_KPA);
     obd.haveBoost = true;
-    obd.boostMs  = millis();
+    obd.boostMs  = now;
+    return;
   }
-  else if (pid == 0x0D) { obd.speedKmh = d[0]; obd.speedMs = millis(); obd.haveSpeed = true; }
-  else if (pid == 0x43 && dl >= 2) {
-    obd.absLoadPct = (d[0] << 8 | d[1]) * 100.0f / 255.0f;
-    obd.absLoadMs = millis(); obd.haveAbsLoad = true;
-  }
-  // (256A + B) / 1000 V. Under VOLTS_MIN_V is no reading: switching off, the
-  // ECU answered 0.00 V for ~11 s before going silent (drive 2026-10-14) -
-  // its shutdown, not the battery's - and a logged 0 wrecks any minimum.
-  else if (pid == 0x42 && dl >= 2) {
-    const float v = (d[0] << 8 | d[1]) / 1000.0f;
-    if (v >= VOLTS_MIN_V) { obd.volts = v; obd.voltsMs = millis(); obd.haveVolts = true; }
-  }
-  // Plausibility guard: a garbage byte must not shift every boost reading.
-  else if (pid == 0x33 && d[0] >= 50 && d[0] <= 110) { obd.baroKpa = d[0]; obd.haveBaro = true; }
-  else if (pid == 0x49) {
-    obd.pedalRaw = d[0]; obd.pedalMs = millis(); obd.havePedal = true;
-  }
-  else if (pid == 0x0C && dl >= 2) {             // (256A + B) / 4 rpm
-    obd.rpm = (d[0] << 8 | d[1]) / 4; obd.rpmMs = millis(); obd.haveRpm = true;
-  }
-  else if (pid == 0x0E) {                        // A/2 - 64 deg before TDC
-    obd.timingDeg = d[0] / 2.0f - 64.0f; obd.timingMs = millis(); obd.haveTiming = true;
-  }
-  else if (pid == 0x0F) {                        // A - 40 °C
-    obd.iatC = d[0] - 40; obd.iatMs = millis(); obd.haveIat = true;
-  }
-  // For the logs (2026-10-16) - formulas per SAE J1979.
-  else if (pid == 0x5E && dl >= 2) {             // (256A + B) / 20 L/h
-    obd.fuelLh = (d[0] << 8 | d[1]) / 20.0f; obd.fuelLhMs = millis(); obd.haveFuelLh = true;
-  }
-  else if (pid == 0x34 && dl >= 2) {             // (256A + B) * 2 / 65536; C, D: current
-    obd.lambda = (d[0] << 8 | d[1]) * 2.0f / 65536.0f; obd.lambdaMs = millis(); obd.haveLambda = true;
-  }
-  else if (pid == 0x44 && dl >= 2) {             // the same scale, commanded
-    obd.lambdaCmd = (d[0] << 8 | d[1]) * 2.0f / 65536.0f;
-    obd.lambdaCmdMs = millis(); obd.haveLambdaCmd = true;
-  }
-  else if (pid == 0x46) {                        // A - 40 °C
-    obd.ambientC = d[0] - 40; obd.ambientMs = millis(); obd.haveAmbient = true;
-  }
-  else if (pid == 0x2F) {                        // A * 100 / 255 %
-    obd.fuelPct = d[0] * 100.0f / 255.0f; obd.fuelPctMs = millis(); obd.haveFuelPct = true;
-  }
-  else if (pid == 0x3C && dl >= 2) {             // (256A + B) / 10 - 40 °C, bank 1 sensor 1
-    obd.catC = (d[0] << 8 | d[1]) / 10.0f - 40.0f; obd.catMs = millis(); obd.haveCat = true;
-  }
-  else if (pid == 0x59 && dl >= 2) {             // (256A + B) * 10 kPa, absolute
-    obd.railBar = (d[0] << 8 | d[1]) / 10.0f; obd.railMs = millis(); obd.haveRail = true;
+  float v;
+  if (!calc_mode01_value(pid, d, dl, &v)) return;
+  switch (pid) {
+    case 0x05:
+      obd.coolantPid05C = (int)v; obd.pid05Ms = now; obd.havePid05 = true;
+#if !COOLANT_FROM_E001
+      obd.coolantC = obd.coolantPid05C; obd.coolantMs = now; obd.haveCoolant = true;
+#endif
+      break;
+    case 0x0D: obd.speedKmh = (int)v;    obd.speedMs = now;   obd.haveSpeed = true;   break;
+    case 0x43: obd.absLoadPct = v;       obd.absLoadMs = now; obd.haveAbsLoad = true; break;
+    // Under VOLTS_MIN_V is no reading: switching off, the ECU answered 0.00 V
+    // for ~11 s before going silent (drive 2026-10-14) - its shutdown, not the
+    // battery's - and a logged 0 wrecks any minimum.
+    case 0x42:
+      if (v >= VOLTS_MIN_V) { obd.volts = v; obd.voltsMs = now; obd.haveVolts = true; }
+      break;
+    // Plausibility guard: a garbage byte must not shift every boost reading.
+    case 0x33:
+      if (v >= 50 && v <= 110) { obd.baroKpa = (uint8_t)v; obd.haveBaro = true; }
+      break;
+    case 0x49: obd.pedalRaw = (uint8_t)v; obd.pedalMs = now;  obd.havePedal = true;  break;
+    case 0x0C: obd.rpm = (int)v;          obd.rpmMs = now;    obd.haveRpm = true;    break;
+    case 0x0E: obd.timingDeg = v;         obd.timingMs = now; obd.haveTiming = true; break;
+    case 0x0F: obd.iatC = (int)v;         obd.iatMs = now;    obd.haveIat = true;    break;
+    // For the logs (2026-10-16).
+    case 0x5E: obd.fuelLh = v;            obd.fuelLhMs = now; obd.haveFuelLh = true; break;
+    case 0x34: obd.lambda = v;            obd.lambdaMs = now; obd.haveLambda = true; break;
+    case 0x44: obd.lambdaCmd = v;      obd.lambdaCmdMs = now; obd.haveLambdaCmd = true; break;
+    case 0x46: obd.ambientC = (int)v;    obd.ambientMs = now; obd.haveAmbient = true; break;
+    case 0x2F: obd.fuelPct = v;          obd.fuelPctMs = now; obd.haveFuelPct = true; break;
+    case 0x3C: obd.catC = v;                obd.catMs = now;  obd.haveCat = true;     break;
+    case 0x59: obd.railBar = v;            obd.railMs = now;  obd.haveRail = true;    break;
   }
 }
 
@@ -341,17 +301,9 @@ static void handleUds(const uint8_t *p, uint16_t len) {
   }
 
   if (sid == 0x41 && len >= 3) {
-    // Mode 01: [41, PID, data, PID, data, ...] - one PID, or several when we
-    // asked for several (OBD_MULTI_PIDS) and the ECU packs them in one reply.
-    uint16_t i = 1;
-    while (i + 1 < len) {
-      const uint8_t pid = p[i];
-      const uint8_t n = pidDataLen(pid);
-      const uint16_t avail = len - i - 1;
-      if (n == 0 || n > avail) { handlePid(pid, &p[i + 1], avail); break; }
-      handlePid(pid, &p[i + 1], n);
-      i += 1 + n;
-    }
+    // Mode 01: one PID, or several when we asked for several (OBD_MULTI_PIDS)
+    // and the ECU packs them in one reply.
+    calc_mode01_walk(p, len, handlePid);
   } else if (sid == 0x62 && len >= 3) {    // Mode 22 response: [62,DIDh,DIDl,A,B..]
     const uint16_t did = (p[1] << 8) | p[2];
     const uint8_t *d   = &p[3];
@@ -419,55 +371,27 @@ static bool isOurResponse(uint32_t id) {
 
 static void handleFrame(const twai_message_t &m) {
   if (!isOurResponse(m.identifier)) return;
-
-  // Never read past the frame's own DLC. This core's TWAI HAL copies only dlc
-  // bytes into m.data and does NOT zero the rest, and m is reused for every
-  // iteration of the receive loop - so data[dlc..7] hold the tail of the
-  // PREVIOUS frame. A short final Consecutive Frame (some ECUs don't pad it)
-  // would otherwise splice bytes from an unrelated frame into the payload.
-  const uint8_t dlc = m.data_length_code > 8 ? 8 : m.data_length_code;
-  if (dlc < 2) return;                           // no PCI + data to read
-  const uint8_t pci = m.data[0] & 0xF0;
-
-  if (pci == 0x00) {                             // Single Frame
-    uint8_t len = m.data[0] & 0x0F;
-    if (len > dlc - 1) len = dlc - 1;
-    udsFrom = m.identifier;
-    handleUds(&m.data[1], len);
-  } else if (pci == 0x10) {                      // First Frame
-    // Two modules answer us - the engine ECU on 0x7E8 and TPMS on 0x7A8 - and
-    // both reply multi-frame. With one shared context and no responder check,
-    // a TPMS First Frame could reset the buffer mid-oil-transfer, and the
-    // oil module's Consecutive Frames would then be appended to the TPMS
-    // payload because only the sequence number was validated. That completed
-    // "successfully": engine bytes decoded as tyre pressures, which lands
-    // around 1.96 bar and trips a false low-pressure warning for the next two
-    // minutes. Reject the interloper and count it, rather than silently
-    // corrupting both transfers.
-    if (isoActive && m.identifier != isoId) { obd.isoAborts++; return; }
-    isoId       = m.identifier;
-    isoExpected = ((m.data[0] & 0x0F) << 8) | m.data[1];
-    if (isoExpected > ISOTP_BUF_SIZE) isoExpected = ISOTP_BUF_SIZE;
-    isoGot = 0;
-    for (int i = 2; i < dlc && isoGot < isoExpected; i++) isoBuf[isoGot++] = m.data[i];
-    isoNextSeq = 1;
-    isoActive  = true;
-    isoStartMs = millis();
-    isoSendFlowControl(m.identifier - 8);   // request ID of this responder
-  } else if (pci == 0x20 && isoActive) {         // Consecutive Frame
-    // Must come from the module whose transfer is actually in flight.
-    if (m.identifier != isoId) { obd.isoAborts++; return; }
-    if ((m.data[0] & 0x0F) != (isoNextSeq & 0x0F)) {
-      isoActive = false; obd.isoAborts++; return;
-    }
-    for (int i = 1; i < dlc && isoGot < isoExpected; i++) isoBuf[isoGot++] = m.data[i];
-    isoNextSeq++;
-    if (isoGot >= isoExpected) {
-      isoActive = false;
+  const uint8_t *payload;
+  uint16_t len;
+  switch (calc_isotp_rx(&iso, m.identifier, m.data, m.data_length_code, millis(),
+                        &payload, &len)) {
+    case CALC_ISO_SINGLE:
+      udsFrom = m.identifier;
+      handleUds(payload, len);
+      break;
+    case CALC_ISO_FIRST:
+      isoSendFlowControl(m.identifier - 8);   // request ID of this responder
+      break;
+    case CALC_ISO_DONE:
       obd.isoOk++;
-      udsFrom = isoId;
-      handleUds(isoBuf, isoGot);
-    }
+      udsFrom = m.identifier;
+      handleUds(payload, len);
+      break;
+    case CALC_ISO_ABORT:
+      obd.isoAborts++;                         // counted, never corrupting a transfer
+      break;
+    case CALC_ISO_NONE:
+      break;
   }
 }
 
@@ -492,10 +416,7 @@ static void obdPoll() {
   }
 
   uint32_t now = millis();
-  if (isoActive && now - isoStartMs > ISOTP_TIMEOUT_MS) {
-    isoActive = false;
-    obd.isoAborts++;
-  }
+  if (calc_isotp_expire(&iso, now, ISOTP_TIMEOUT_MS)) obd.isoAborts++;
 
   // --- controller health ----------------------------------------------------
   // The TWAI peripheral counts transmit errors and at 256 enters BUS-OFF, where
@@ -534,7 +455,7 @@ static void obdPoll() {
     reqInFlight = false;
     reqDoneMs = now;
   }
-  if (!reqInFlight && !isoActive && now - reqDoneMs >= OBD_REQ_GAP_MS) {
+  if (!reqInFlight && !iso.active && now - reqDoneMs >= OBD_REQ_GAP_MS) {
     reqInFlight = true;
     reqSentMs = now;
     sendNextRequest(carOn);                  // what goes out: see `schedule`
