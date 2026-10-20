@@ -177,16 +177,37 @@ bool gpxlog_failed() { return gpxOpenFailed; }
 void gpxlog_task() {
   if (!gps.haveFix) return;            // nothing worth recording yet
 
-  // ONE snapshot of the position, used for every decision below and for the
-  // point written. The GNSS runs on core 0 and publishes at 25 Hz, so reading
-  // gps.lat1e7/lon1e7 afresh at each step let a new fix land between the jump
-  // check and the write - the point recorded was not the point that was
-  // checked. gps_read_position() also refuses until a position has actually
-  // been published, which is what stopped (0,0) being accepted on the first
-  // fix after a wake.
-  int32_t posLat, posLon;
-  float   posAlt;
-  if (!gps_read_position(&posLat, &posLon, &posAlt)) return;
+  // ONE snapshot of the fix, used for every decision below and for the point
+  // written. The GNSS runs on core 0, so reading gps.lat1e7/lon1e7 afresh at
+  // each step let a new fix land between the jump check and the write.
+  // gps_read_fix() also refuses until a position has actually been
+  // published, which is what stopped (0,0) being accepted on the first fix
+  // after a wake.
+  //
+  // And each fix ONCE. This ran every logger pass and took whatever position
+  // was there, new or not: with the receiver at 1 Hz (the carrier PCB,
+  // 2026-10-19) every fix was written ~25 times, and the jump check timed the
+  // next real step from the last copy - a second's travel in 40 ms, ~500 m/s,
+  // refused - so the trip read a fraction of the distance. RMC and GGA both
+  // publish, so one epoch can bump seq twice with the same time: that one is
+  // skipped too (as the .vbo does).
+  GpsFix fix;
+  if (!gps_read_fix(&fix) || !fix.timeOk) return;
+  static uint32_t lastSeq = 0, lastFixMs = UINT32_MAX;
+  if (fix.seq == lastSeq || fix.fixMs == lastFixMs) return;
+  lastSeq = fix.seq;
+  lastFixMs = fix.fixMs;
+  const int32_t posLat = fix.lat1e7, posLon = fix.lon1e7;
+  const float   posAlt = fix.altM;
+
+  // The gate's clock is the FIX's time, not when this pass happened to run:
+  // a pass lands up to LOGGER_PASS_MS (and a save) after the fix, which is
+  // most of a 40 ms step at 25 Hz. Ms of day made monotonic across midnight
+  // (and never 0, the gate's "none yet").
+  static uint32_t dayBase = 0, prevFixMs = 0;
+  if (fix.fixMs + 43200000UL < prevFixMs) dayBase += 86400000UL;   // past midnight
+  prevFixMs = fix.fixMs;
+  const uint32_t fixClock = dayBase + fix.fixMs + 1;
 
   // Rate, quality and plausibility: calc_gpx_gate() (calc.h, host-tested).
   // The gate runs with or without a card - deciding what counts as a real
@@ -202,10 +223,10 @@ void gpxlog_task() {
     (uint32_t)(settings.tripGapMin * 60000UL),
   };
   CalcGpxStep step;
-  if (!calc_gpx_gate(&gate, &lim, millis(), log_idle(), gps.sats, gps.hdop,
+  if (!calc_gpx_gate(&gate, &lim, fixClock, log_idle(), gps.sats, gps.hdop,
                      posLat, posLon, gps.speedKmh, &step))
     return;
-  const uint32_t now = gate.lastMs;
+  const uint32_t now = millis();          // for the batch's save timing below
 
   // Trip distance, summed HERE and only here - past every gate, so a tunnel
   // spike that would have added kilometres nobody drove has already been
