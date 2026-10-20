@@ -83,8 +83,13 @@ static void put(const char *fmt, ...) {
   va_end(ap);
 }
 
-static void putHex(bool full, const uint8_t *p, uint8_t n) {
-  for (uint8_t i = 0; full && i < n; i++) put(i ? " %02X" : "%02X", p[i]);
+// A raw payload as hex, at LOG_FULL - one whole reply, copied out under the
+// CAN task's lock (obd_copy_raw), so a newer one cannot land mid-cell.
+static void putRaw(bool full, ObdRaw which) {
+  if (!full) return;
+  uint8_t b[48];
+  const uint8_t n = obd_copy_raw(which, b, sizeof(b));
+  for (uint8_t i = 0; i < n; i++) put(i ? " %02X" : "%02X", b[i]);
 }
 
 struct CsvCol {
@@ -137,13 +142,13 @@ static const CsvCol COLS[] = {
   // columns beside them already say whether the reading is current.
   // The two raw hex columns are LOG_FULL only; below that they stay as
   // empty columns, so the CSV layout is the same at every level.
-  {"tpmsRaw", [](const CsvRow &r) { putHex(r.full, obd.tpmsRaw, obd.tpmsRawLen); }},
+  {"tpmsRaw", [](const CsvRow &r) { putRaw(r.full, OBD_RAW_TPMS); }},
   // Raw DID 0xE001 payload as hex. The byte we decode as oil temp disagreed
   // with the dashboard by ~20 C on the first drive, and one byte of stored
   // history cannot settle which one is right. With the whole payload, a single
   // cold-start warm-up drive plus a few noted dash readings identifies the
   // correct offset offline. See the note in obd.h.
-  {"oilRawPayload", [](const CsvRow &r) { putHex(r.full, obd.oilPayload, obd.oilPayloadLen); }},
+  {"oilRawPayload", [](const CsvRow &r) { putRaw(r.full, OBD_RAW_OIL); }},
   // With the GPX's per-point sat/hdop it answers whether the AP near the GNSS
   // antenna hurts the fix (see AP_DRIVE_OFF).
   {"apUp",   [](const CsvRow &) { put("%d", web_is_up() ? 1 : 0); }},

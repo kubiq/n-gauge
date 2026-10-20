@@ -229,6 +229,20 @@ static void isoSendFlowControl(uint16_t reqId) {
   twai_transmit(&m, pdMS_TO_TICKS(20));
 }
 
+// --- the raw payloads -------------------------------------------------------
+// See obd_copy_raw() in obd.h. A spinlock, held for a 48-byte memcpy at most.
+static portMUX_TYPE rawMux = portMUX_INITIALIZER_UNLOCKED;
+
+uint8_t obd_copy_raw(ObdRaw which, uint8_t *out, uint8_t outMax) {
+  const uint8_t *src = which == OBD_RAW_OIL ? obd.oilPayload : obd.tpmsRaw;
+  portENTER_CRITICAL(&rawMux);
+  uint8_t n = which == OBD_RAW_OIL ? obd.oilPayloadLen : obd.tpmsRawLen;
+  if (n > outMax) n = outMax;
+  memcpy(out, src, n);
+  portEXIT_CRITICAL(&rawMux);
+  return n;
+}
+
 // --- reply parsing ----------------------------------------------------------
 // One PID's data from a Mode 01 reply. dl = bytes available for it. The
 // formulas are calc_mode01_value() in calc.h (SAE J1979, host-tested); what
@@ -311,13 +325,17 @@ static void handleUds(const uint8_t *p, uint16_t len) {
 #endif
       // Keep the whole payload so the correct byte can be identified offline
       // against dashboard readings - see the note in obd.h.
+      portENTER_CRITICAL(&rawMux);
       obd.oilPayloadLen = dl > sizeof(obd.oilPayload)
                         ? sizeof(obd.oilPayload) : (uint8_t)dl;
       memcpy(obd.oilPayload, d, obd.oilPayloadLen);
+      portEXIT_CRITICAL(&rawMux);
     }
     if (did == TPMS_MODE22_DID) {
+      portENTER_CRITICAL(&rawMux);
       obd.tpmsRawLen = dl > sizeof(obd.tpmsRaw) ? sizeof(obd.tpmsRaw) : (uint8_t)dl;
       memcpy(obd.tpmsRaw, d, obd.tpmsRawLen);
+      portEXIT_CRITICAL(&rawMux);
       // pressure = raw/5 psi, temp = raw-50 C. raw 0x00/0xFF means the sensor
       // has not reported yet - the sensors are motion-activated and sleep when
       // parked, so this is the normal state until the car has been driven.
