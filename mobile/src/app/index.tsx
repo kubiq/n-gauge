@@ -13,7 +13,7 @@ import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, weekLabel } from '@/lib/weeks';
 import { saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
-import { type CsvSummary, isEncryptedName, isGpxName, isStub, type TripFiles } from '@/lib/trips';
+import { type CsvSummary, isEncryptedName, isGpxName, isStub, litresPer100, type TripFiles } from '@/lib/trips';
 import { S, themed } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
@@ -223,6 +223,7 @@ function TripRow({
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  const per100 = c ? litresPer100(c) : null;
   const encrypted = [trip.gpx, trip.csv].some((n) => n && isEncryptedName(n));
   const ui = useUi();
   const styles = useStyles();
@@ -250,6 +251,7 @@ function TripRow({
         {g ? <Fact label={t('top')} value={`${Math.round(g.maxKmh)} km/h`} /> : null}
         {c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
         {c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
+        {per100 !== null ? <Fact label={t('fuel')} value={`${per100.toFixed(1)} l/100`} /> : null}
       </View>
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}

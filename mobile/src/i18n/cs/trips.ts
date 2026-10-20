@@ -21,6 +21,7 @@ export const trips: Record<string, string> = {
   // "Boost" in Czech too - what drivers call it ("plnicí tlak" read oddly).
   'boost': 'boost',
   'oil': 'olej',
+  'fuel': 'spotřeba',
   'No GPS track - car data only.': 'Bez trasy GPS - jen data z auta.',
 
   // app/trip/[key].tsx - one drive
@@ -55,6 +56,8 @@ export const trips: Record<string, string> = {
   'Peak coolant': 'Max. chladicí kapalina',
   'Peak rpm': 'Max. otáčky',
   'Top speed (speedometer)': 'Max. rychlost (tachometr)',
+  'Fuel used': 'Spotřebované palivo',
+  'Consumption': 'Spotřeba',
 
   // app/name.tsx - naming a drive or a place
   'Rename the drive': 'Přejmenovat jízdu',

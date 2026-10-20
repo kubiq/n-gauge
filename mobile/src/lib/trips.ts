@@ -212,7 +212,24 @@ export type CsvSummary = {
   maxObdKmh: number | null;
   /** The oil temperature at the end of the drive. */
   lastOilC: number | null;
+  /**
+   * Fuel burned, litres: the car's fuel rate (fuelLh, PID 0x5E) over time.
+   * Not the tank level - it sloshes by tens of percent while driving, and 1 %
+   * of the tank is a third of a short trip. Null without the column.
+   */
+  fuelL: number | null;
+  /**
+   * Distance by the car's own speed (obdKmh) over the same rows, km - what
+   * fuelL is divided by. Not the GPS distance: the track starts at the first
+   * fix, often minutes after the CSV, and that stretch's fuel would count
+   * against no distance.
+   */
+  fuelKm: number | null;
 };
+
+// A row's rate and speed hold until the next row; a longer gap than this (a
+// dropout, the logger paused) counts as nothing rather than as a guess.
+const INTEGRATE_MAX_GAP_MS = 5000;
 
 // The header has grown over time (log_csv.cpp), so columns are found by name
 // and a column an older file lacks just yields null.
@@ -223,11 +240,15 @@ export function parseCsv(text: string): CsvSummary {
   const head = (lines[0] ?? '').trim().split(',');
   const col = (n: string) => head.indexOf(n);
   const iMs = col('ms'), iBoost = col('boostBar'), iOil = col('oilC'), iCool = col('coolantC');
-  const iRpm = col('rpm'), iKmh = col('obdKmh');
+  const iRpm = col('rpm'), iKmh = col('obdKmh'), iFuel = col('fuelLh');
   const s: CsvSummary = {
     rows: 0, durationS: 0, maxBoostBar: null, maxOilC: null, maxCoolantC: null, maxRpm: null, maxObdKmh: null, lastOilC: null,
+    fuelL: null, fuelKm: null,
   };
   let firstMs = NaN, lastMs = NaN;
+  // The previous row's uptime, fuel rate and speed, for the integrals.
+  let prevMs = NaN, prevLh = NaN, prevKmh = NaN;
+  const num = (f: string[], i: number) => (i >= 0 && f[i] ? +f[i] : NaN);
   const max = (cur: number | null, f: string[], i: number) => {
     if (i < 0 || !f[i]) return cur;
     const v = +f[i];
@@ -249,10 +270,30 @@ export function parseCsv(text: string): CsvSummary {
     s.maxRpm = max(s.maxRpm, f, iRpm);
     s.maxObdKmh = max(s.maxObdKmh, f, iKmh);
     if (iOil >= 0 && f[iOil] && Number.isFinite(+f[iOil])) s.lastOilC = +f[iOil];
+
+    const lh = num(f, iFuel), kmh = num(f, iKmh);
+    if (Number.isFinite(lh) && s.fuelL === null) s.fuelL = 0;
+    if (Number.isFinite(kmh) && s.fuelKm === null) s.fuelKm = 0;
+    const dt = ms - prevMs;              // NaN without either; negative after a restart
+    if (dt > 0 && dt <= INTEGRATE_MAX_GAP_MS) {
+      const h = dt / 3_600_000;
+      if (Number.isFinite(prevLh)) s.fuelL! += prevLh * h;
+      if (Number.isFinite(prevKmh)) s.fuelKm! += prevKmh * h;
+    }
+    if (Number.isFinite(ms)) { prevMs = ms; prevLh = lh; prevKmh = kmh; }
   }
   // uptime ms can restart if the pod rebooted mid-drive; never negative.
   if (!Number.isNaN(firstMs)) s.durationS = Math.max(0, (lastMs - firstMs) / 1000);
   return s;
+}
+
+/**
+ * Litres per 100 km for a drive, or null when it says nothing: no fuel
+ * column, or under a kilometre (a short hop at idle reads absurd figures).
+ */
+export function litresPer100(c: Pick<CsvSummary, 'fuelL' | 'fuelKm'>): number | null {
+  if (c.fuelL == null || c.fuelKm == null || c.fuelKm < 1) return null;
+  return (c.fuelL / c.fuelKm) * 100;
 }
 
 // ---- pairing ---------------------------------------------------------------

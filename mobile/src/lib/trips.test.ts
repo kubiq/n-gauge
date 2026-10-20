@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, isStub, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates, staleTitleKeys } from './trips.ts';
+import { distM, isStub, litresPer100, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates, staleTitleKeys } from './trips.ts';
 
 // One line exactly as log_gpx.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -175,6 +175,42 @@ test('csv: maxima by column name, missing columns are null', () => {
   assert.equal(s.maxRpm, 6400);
   assert.equal(s.maxObdKmh, null);
   assert.equal(s.lastOilC, 92);
+});
+
+// A row every 500 ms, as the gauge writes them.
+const fuelCsv = (rows: [number, string, string][]) =>
+  'utc,ms,obdKmh,fuelLh\r\n' + rows.map(([ms, kmh, lh]) => `,${ms},${kmh},${lh}`).join('\r\n') + '\r\n';
+
+test('csv: fuel and distance are the rate and speed over time', () => {
+  // 36 l/h is 0.01 l/s, 72 km/h is 20 m/s: 10 s of it is 0.1 l and 200 m.
+  const rows: [number, string, string][] = [];
+  for (let ms = 1000; ms <= 11000; ms += 500) rows.push([ms, '72', '36']);
+  const s = parseCsv(fuelCsv(rows));
+  assert.ok(Math.abs(s.fuelL! - 0.1) < 1e-9);
+  assert.ok(Math.abs(s.fuelKm! - 0.2) < 1e-9);
+  assert.equal(litresPer100(s), null);            // under a kilometre: says nothing
+  assert.ok(Math.abs(litresPer100({ fuelL: 0.5, fuelKm: 5 })! - 10) < 1e-9);
+});
+
+test('csv: gaps and a restart are not counted, a stale value is not either', () => {
+  const s = parseCsv(fuelCsv([
+    [1000, '72', '36'],
+    [2000, '72', '36'],    // 1 s: counted
+    [9000, '72', '36'],    // 7 s gap: not counted
+    [10000, '72', ''],     // 1 s: counted (the rate at 9000 held until here)
+    [11000, '72', '36'],   // 1 s at no known rate: fuel not counted, distance is
+    [500, '72', '36'],     // uptime back: the pod restarted - not counted
+    [1500, '72', '36'],    // 1 s: counted
+  ]));
+  assert.ok(Math.abs(s.fuelL! - 0.03) < 1e-9);    // three seconds at 0.01 l/s
+  assert.ok(Math.abs(s.fuelKm! - 0.08) < 1e-9);   // four seconds at 20 m/s
+});
+
+test('csv: no fuel column is null, not zero', () => {
+  const s = parseCsv('utc,ms,oilC\n,1000,40\n,1500,41\n');
+  assert.equal(s.fuelL, null);
+  assert.equal(s.fuelKm, null);
+  assert.equal(litresPer100(s), null);
 });
 
 // The one real drive log in the repo (2026-09, an older header without rpm).

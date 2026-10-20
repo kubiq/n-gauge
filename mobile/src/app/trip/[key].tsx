@@ -15,7 +15,7 @@ import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
-import { type CsvSummary, pointAt, type TrackPoint } from '@/lib/trips';
+import { type CsvSummary, litresPer100, pointAt, type TrackPoint } from '@/lib/trips';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -96,6 +96,7 @@ export default function TripScreen() {
 
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  const per100 = c ? litresPer100(c) : null;
   const name = tripName(trip, g, names);
   // Naming, in the modal (name.tsx): the drive itself, or either end as a
   // place of yours - every drive from or to there is then called by it.
@@ -199,6 +200,9 @@ export default function TripScreen() {
           {c.maxRpm != null ? <Row label={t('Peak rpm')} value={String(Math.round(c.maxRpm))} /> : null}
           {/* The car's own figure reads a little different from GPS - both are shown, each named. */}
           {c.maxObdKmh != null ? <Row label={t('Top speed (speedometer)')} value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
+          {/* From the car's fuel rate over time, not the sloshing tank level. */}
+          {c.fuelL != null && c.fuelL > 0 ? <Row label={t('Fuel used')} value={`${c.fuelL.toFixed(2)} l`} /> : null}
+          {per100 !== null ? <Row label={t('Consumption')} value={`${per100.toFixed(1)} l/100 km`} /> : null}
         </Card>
       ) : null}
 

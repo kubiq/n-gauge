@@ -39,7 +39,8 @@ export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; t
 // 6: ends in a Czech city named by the quarter they lie in (2026-10-15).
 // 7: track points keep their time, the series its start: the chart's cursor
 //    shown on the map (2026-10-15).
-const VERSION = 7;
+// 8: fuel burned and the distance it is divided by, from the CSV (2026-10-20).
+const VERSION = 8;
 
 function read<T>(f: File, size: number): T | null {
   if (!f.exists) return null;
