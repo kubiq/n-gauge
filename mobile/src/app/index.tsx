@@ -11,7 +11,7 @@ import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, weekLabel } from '@/lib/weeks';
-import { saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
+import { podTextLogNames, saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
 import { type ListFacts, loadListFacts } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, litresPer100, type TripFiles } from '@/lib/trips';
@@ -105,7 +105,11 @@ export default function TripsScreen() {
       // given when it last updated (the effect below), and so its list - drives
       // synced since were missing, and "Save all" said all was already there.
       const now = tripFiles();
-      const names = [...now.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n), ...trackLogNames()];
+      const names = [
+        ...now.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n),
+        ...trackLogNames(),
+        ...podTextLogNames(),
+      ];
       const r = await saveLogsToFolder(names, setStatus);
       setStatus(null);
       Alert.alert(t('Saved'), savedText(r));

@@ -21,13 +21,26 @@ export function trackLogNames(): string[] {
   return Object.keys(loadInbox()).filter((n) => isVboName(n) && inboxFile(n).exists).sort();
 }
 
+// The pod's own plain-text logs, which GROW: a line per sleep, a line per
+// boot. Unlike a drive's files they are never finished, so "already there"
+// is no reason to skip one - it is written over with the longer copy.
+const GROWING_LOGS = ['sleeplog.txt', 'bootlog.txt'];
+
+/** The pod's sleep and boot logs the phone holds - "Save all" takes them too. */
+export function podTextLogNames(): string[] {
+  return GROWING_LOGS.filter((n) => n in loadInbox() && inboxFile(n).exists);
+}
+
 const dir = new Directory(Paths.cache, 'share');
 
 // A track session's .vbo has no type of its own; octet-stream, because the
 // folder picker gives a name a type's extension when it lacks one -
 // "track_....vbo.txt" as text/plain.
 const mimeOf = (name: string) =>
-  isGpxName(name) ? 'application/gpx+xml' : isVboName(name) ? 'application/octet-stream' : 'text/csv';
+  isGpxName(name) ? 'application/gpx+xml'
+  : isVboName(name) ? 'application/octet-stream'
+  : GROWING_LOGS.includes(name) ? 'text/plain'
+  : 'text/csv';
 
 /**
  * A log as other software should get it: decrypted, under its plain name,
@@ -77,18 +90,19 @@ export function folderName(uri: string): string {
 // The remembered folder and what is in it - or, with none remembered or the
 // remembered one gone (deleted, permission revoked: list() throws), the
 // picker, once.
-async function logsFolder(): Promise<{ target: Directory; there: Set<string> }> {
+async function logsFolder(): Promise<{ target: Directory; there: Map<string, File | Directory> }> {
+  const listed = (target: Directory) => new Map(target.list().map((e) => [e.name, e] as const));
   const uri = loadLogsFolder();
   if (uri) {
     try {
       const target = new Directory(uri);
-      return { target, there: new Set(target.list().map((e) => e.name)) };
+      return { target, there: listed(target) };
     } catch {
       saveLogsFolder(null);
     }
   }
   const target = await pickLogsFolder();
-  return { target, there: new Set(target.list().map((e) => e.name)) };
+  return { target, there: listed(target) };
 }
 
 /**
@@ -101,13 +115,18 @@ export async function saveLogsToFolder(names: string[], onProgress?: (text: stri
   const res: SaveResult = { saved: 0, skipped: 0, failed: [] };
   for (const [i, name] of names.entries()) {
     const plain = plainName(name);
-    if (there.has(plain)) {
+    const existing = there.get(plain);
+    const growing = GROWING_LOGS.includes(plain);
+    if (existing && !(growing && existing instanceof File)) {
       res.skipped++;
       continue;
     }
     onProgress?.(t('Saving {at} of {of}: {name}', { at: i + 1, of: names.length, name: plain }));
     try {
-      target.createFile(plain, mimeOf(name)).write(await readableText(name));
+      // A growing log already there is written over (createFile would make
+      // "bootlog (1).txt" beside it).
+      const out = existing instanceof File ? existing : target.createFile(plain, mimeOf(name));
+      out.write(await readableText(name));
       res.saved++;
     } catch (e) {
       res.failed.push(`${plain}: ${(e as Error).message}`);

@@ -45,6 +45,7 @@ test('only the pod’s own logs are synced', () => {
       { name: 'trip_2026-10-11_12-45.gpx', size: 10 },
       { name: 'track_0003.vbo', size: 10 },
       { name: 'sleeplog.txt', size: 10 },
+      { name: 'bootlog.txt', size: 10 },
       { name: 'drive_2026-10-11_23-09.csv.nge', size: 10 },
       { name: 'trip_2026-10-11_23-09.gpx.nge', size: 10 },
       { name: 'sleeplog.txt.nge', size: 10 },
@@ -55,6 +56,7 @@ test('only the pod’s own logs are synced', () => {
     {},
   );
   assert.deepEqual(plan.map((p) => p.name).sort(), [
+    'bootlog.txt',
     'drive_0279.csv',
     'drive_2026-10-11_12-45.csv',
     'drive_2026-10-11_23-09.csv.nge',
