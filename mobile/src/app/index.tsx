@@ -12,6 +12,7 @@ import { LogKeyError } from '@/lib/logtext';
 import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, weekLabel } from '@/lib/weeks';
 import { saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
+import { type ListFacts, loadListFacts } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import { type CsvSummary, isEncryptedName, isGpxName, isStub, litresPer100, type TripFiles } from '@/lib/trips';
 import { S, themed } from '@/theme';
@@ -27,6 +28,8 @@ type Sums = Record<string, GpxStats | CsvSummary>;
 // read the cache itself stayed unread after its summary had landed.
 export default function TripsScreen() {
   const [trips, setTrips] = useState<TripFiles[]>([]);
+  // Settings, "Trip list" - read again on each focus, so a change shows on return.
+  const [facts, setFacts] = useState(loadListFacts);
   const [sums, setSums] = useState<Sums>({});
   // Why a file could not be read - an encrypted log without the right key.
   const [problems, setProblems] = useState<Record<string, string>>({});
@@ -60,6 +63,7 @@ export default function TripsScreen() {
         }
       }
       setTrips(list);
+      setFacts(loadListFacts());
       setNames(forgetStaleTitles(list));
       setSums(have);
       setProblems({});
@@ -189,7 +193,15 @@ export default function TripsScreen() {
               </Text>
             </Text>
             {w.items.map((r) => (
-              <TripRow key={r.t.key} t={r.t} g={r.g} c={r.c} problem={r.problem} name={r.name} />
+              <TripRow
+                key={r.t.key}
+                t={r.t}
+                g={r.g}
+                c={r.c}
+                problem={r.problem}
+                name={r.name}
+                facts={facts}
+              />
             ))}
           </View>
         ))
@@ -214,12 +226,14 @@ function TripRow({
   c,
   problem,
   name,
+  facts,
 }: {
   t: TripFiles;
   g?: GpxStats;
   c?: CsvSummary;
   problem?: string;
   name: string | null;
+  facts: ListFacts;
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
@@ -249,9 +263,10 @@ function TripRow({
       <View style={styles.facts}>
         {secs !== null ? <Fact label={t('time')} value={duration(secs)} /> : null}
         {g ? <Fact label={t('top')} value={`${Math.round(g.maxKmh)} km/h`} /> : null}
-        {c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
-        {c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
-        {per100 !== null ? <Fact label={t('fuel')} value={`${per100.toFixed(1)} l/100`} /> : null}
+        {facts.boost && c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
+        {facts.oil && c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
+        {facts.fuelL && c?.fuelL != null && c.fuelL > 0 ? <Fact label={t('fuel')} value={`${c.fuelL.toFixed(1)} l`} /> : null}
+        {facts.per100 && per100 !== null ? <Fact label={t('consumption')} value={`${per100.toFixed(1)} l/100`} /> : null}
       </View>
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}

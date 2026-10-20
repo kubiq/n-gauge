@@ -21,7 +21,8 @@ export const trips: Record<string, string> = {
   // "Boost" in Czech too - what drivers call it ("plnicí tlak" read oddly).
   'boost': 'boost',
   'oil': 'olej',
-  'fuel': 'spotřeba',
+  'fuel': 'palivo',
+  'consumption': 'spotřeba',
   'No GPS track - car data only.': 'Bez trasy GPS - jen data z auta.',
 
   // app/trip/[key].tsx - one drive

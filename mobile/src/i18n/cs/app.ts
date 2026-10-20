@@ -45,6 +45,11 @@ export const app: Record<string, string> = {
   Manage: 'Spravovat',
   'Set up': 'Nastavit',
 
+  // Trip list (trip-list-card.tsx); its switches reuse the drive screen's labels
+  'Trip list': 'Seznam jízd',
+  'Shown beside each drive in the list. A drive’s own screen always shows them all.':
+    'Zobrazí se u každé jízdy v seznamu. Obrazovka jízdy je ukazuje vždy všechny.',
+
   // Gauge connection (connection-card.tsx)
   'Gauge connection': 'Připojení k budíku',
   'Disconnect after syncing': 'Po synchronizaci odpojit',

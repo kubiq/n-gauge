@@ -5,6 +5,7 @@ import { LogKeyCard } from '@/components/log-key-card';
 import { LogsFolderCard } from '@/components/logs-folder-card';
 import { PlacesCard } from '@/components/places-card';
 import { ThemeCard } from '@/components/theme-card';
+import { TripListCard } from '@/components/trip-list-card';
 import { Screen } from '@/components/ui';
 
 // This phone's settings: the language, the theme, leaving the gauge's WiFi
@@ -16,6 +17,7 @@ export default function SettingsScreen() {
     <Screen>
       <LanguageCard />
       <ThemeCard />
+      <TripListCard />
       <ConnectionCard />
       <LogKeyCard />
       <LogsFolderCard />

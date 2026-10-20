@@ -59,6 +59,28 @@ export function saveDisconnectAfterSync(on: boolean): void {
   } else keepConnectedFile.write('1');
 }
 
+// Which optional figures a drive shows in the trips list (Settings, "Trip
+// list"). All on unless switched off; a missing or unreadable file is that,
+// and a figure added later is on for a phone that saved the rest.
+const listFactsFile = new File(Paths.document, 'list-facts.json');
+
+export type ListFacts = { boost: boolean; oil: boolean; fuelL: boolean; per100: boolean };
+const LIST_FACTS_DEFAULT: ListFacts = { boost: true, oil: true, fuelL: true, per100: true };
+
+export function loadListFacts(): ListFacts {
+  try {
+    return listFactsFile.exists
+      ? { ...LIST_FACTS_DEFAULT, ...JSON.parse(listFactsFile.textSync()) }
+      : LIST_FACTS_DEFAULT;
+  } catch {
+    return LIST_FACTS_DEFAULT;
+  }
+}
+
+export function saveListFacts(f: ListFacts): void {
+  listFactsFile.write(JSON.stringify(f));
+}
+
 // The gauge's firmware build as last read from it, and when - kept, since the
 // app is on the gauge's WiFi only for a sync (Settings, About shows it).
 const gaugeFwFile = new File(Paths.document, 'gauge-fw.json');
