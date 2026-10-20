@@ -154,6 +154,26 @@ test('pointAt: standing still between two close points is the earlier one', () =
   assert.equal(pointAt(tr, 500)?.[3], 70);   // after the end: parked at the last point
 });
 
+// The carrier PCB's GPS ran at 1 Hz (2026-10-19..20) while the gauge wrote a
+// point every 40 ms: each fix 25 times. A 14 km drive read 2 km - every
+// 1 s step looked like 500 m/s, coming 40 ms after its last copy.
+test('gpx: a fix written many times counts once, the step from it is real', () => {
+  const t0 = Date.parse('2026-10-20T17:00:00Z');
+  const iso = (ms: number) => new Date(ms).toISOString().replace(/\.(\d\d)\dZ$/, '.$1Z');
+  const points: string[] = [];
+  const deg = 20 / 111_195;                       // 20 m of latitude: 72 km/h for a second
+  for (let ms = 0; ms < 60_000; ms += 40) {
+    const fix = Math.floor(ms / 1000);            // a new position once a second
+    points.push(pt(50 + fix * deg, 14, iso(t0 + ms), 20));
+  }
+  for (let ms = 60_000; ms < 90_000; ms += 40)    // parked: the same point for 30 s
+    points.push(pt(50 + 59 * deg, 14, iso(t0 + ms), 0));
+  const s = parseGpx(gpx(points));
+  assert.ok(Math.abs(s.distanceM - 59 * 20) < 5, `distance ${s.distanceM}`);
+  assert.equal(s.end! - s.start!, 90_000 - 40);   // the parked end is kept
+  assert.ok(s.movingS > 55 && s.movingS <= 60, `moving ${s.movingS}`);
+});
+
 test('gpx: points without a clock still count distance', () => {
   const s = parseGpx(gpx([pt(50.0, 14.0, '', 10), pt(50.001, 14.0, '', 10)]));
   assert.equal(s.start, null);

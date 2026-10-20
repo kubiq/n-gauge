@@ -71,13 +71,27 @@ const TRKPT =
   /<trkpt lat="(-?[\d.]+)" lon="(-?[\d.]+)">(?:<ele>[^<]*<\/ele>)?<time>([^<]*)<\/time>.*?(?:<(?:gpxtpx:)?speed>([\d.]+)<\/(?:gpxtpx:)?speed>|<\/trkpt>)/g;
 
 export function parseGpx(text: string): GpxSummary {
-  // Pass 0: every point, with its trkseg.
-  type Pt = { lat: number; lon: number; t: number; kmh: number; seg: number };
+  // Pass 0: every point, with its trkseg - but one per FIX. A point at
+  // exactly the previous one's position is the same fix written again: the
+  // gauge writes points every 40 ms whether or not the receiver has moved on,
+  // and a receiver at 1 Hz (the carrier PCB, 2026-10-19..20: 95 % repeats)
+  // gave runs of 25 copies. Kept, the first new fix after a run came 40 ms
+  // after the last copy and a whole second's travel away - 500 m/s, a
+  // "glitch" - so nearly every step was thrown out: 2 km for a 14 km drive.
+  // The first copy keeps its time (the step is measured from it); the last
+  // copy's time is kept as tEnd, so a drive ending parked keeps its end.
+  type Pt = { lat: number; lon: number; t: number; tEnd: number; kmh: number; seg: number };
   const pts: Pt[] = [];
   text.split('<trkseg>').forEach((seg, si) => {
     TRKPT.lastIndex = 0;
     for (let m = TRKPT.exec(seg); m; m = TRKPT.exec(seg)) {
-      pts.push({ lat: +m[1], lon: +m[2], t: m[3] ? Date.parse(m[3]) : NaN, kmh: m[4] ? +m[4] * 3.6 : NaN, seg: si });
+      const lat = +m[1], lon = +m[2], t = m[3] ? Date.parse(m[3]) : NaN;
+      const last = pts[pts.length - 1];
+      if (last && last.seg === si && last.lat === lat && last.lon === lon) {
+        if (!Number.isNaN(t)) last.tEnd = t;
+        continue;
+      }
+      pts.push({ lat, lon, t, tEnd: t, kmh: m[4] ? +m[4] * 3.6 : NaN, seg: si });
     }
   });
   // Plausible to go from a to b? Without times (no clock yet) it cannot be
@@ -130,7 +144,7 @@ export function parseGpx(text: string): GpxSummary {
       const p = pts[k];
       if (!Number.isNaN(p.t)) {
         if (s.start === null) s.start = p.t;
-        s.end = p.t;
+        s.end = p.tEnd;
       }
       // No distance across a trkseg; across a dropped run or a gap, only a
       // step the car could have made.
