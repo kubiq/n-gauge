@@ -522,6 +522,11 @@
 // Was 1 minute while measuring sleep current on the bench, which is the one
 // task a long window gets in the way of - drop it back if that comes up again.
 #define COLD_BOOT_AWAKE_MS 300000
+// GNSS speed at or above this holds sleep off like a touch does, for the
+// "Sleep after" window: a moving car is not parked, even with a silent bus
+// (a broken CAN wire, 2026-10-19). Well above position-noise speed at a
+// standstill, well below any real driving.
+#define SLEEP_HOLD_MOVING_KMH 10.0f
 // Safety net only: if the CAN-RX edge wake were misconfigured, this is the
 // longest the board could stay asleep with the engine running. Long enough to
 // be cheap (one boot an hour), short enough that the failure is survivable.

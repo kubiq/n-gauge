@@ -112,6 +112,18 @@ void power_note_activity() {
   lastActivityMs = t ? t : 1;           // 0 is the "never" sentinel
 }
 
+// The car is moving, by the GNSS: a sign of life like a touch, and held for
+// the same "Sleep after" window. The bus going quiet is how the pod decides
+// the car is off - but with a broken CAN wire (2026-10-19: CAN-L, in the car)
+// the bus is quiet while driving, and the pod slept at 95 km/h, woke on
+// motion, heard nothing for a minute, and slept again, every minute. A car
+// the GNSS sees moving is not parked: stay up, and the rim's "not connected
+// to CAN bus" says what is actually wrong.
+static bool movingNow() {
+  return gps.haveFix && gps.speedKmh >= SLEEP_HOLD_MOVING_KMH;
+}
+static uint32_t lastMovingMs = 0;       // 0 = not seen moving since boot
+
 static void goToSleep() {
   // Decide between edge wake and timer wake.
   //
@@ -416,9 +428,15 @@ void power_task() {
 #else
   // A deep-sleep wake still deciding whether the car is really on - see
   // power_boot_check(). Nothing else decides about sleep meanwhile.
+  if (movingNow()) lastMovingMs = millis() ? millis() : 1;
   if (wakeSampling) {
     if (usbAttached()) {
       Serial.println(F("[..] USB host seen on wake - sleep inhibited"));
+      wakeSampling = false;
+    } else if (lastMovingMs != 0) {
+      // Woken, and the car is moving with no bus: a drive with a CAN fault,
+      // not a parked car. Up, and the ordinary rules below take over.
+      Serial.println(F("[..] moving with no CAN traffic - staying awake"));
       wakeSampling = false;
     } else if (obd.lastFrameMs != 0) {
       fruitlessWakes = 0;               // a real drive: forget the backoff
@@ -483,6 +501,11 @@ void power_task() {
   // someone stands at the door reading tyre pressures.
   if (lastActivityMs != 0 &&
       (int32_t)(now - lastActivityMs) < (int32_t)idleSleepMs()) {
+    return;
+  }
+  // Moving, whatever the bus says - see movingNow().
+  if (lastMovingMs != 0 &&
+      (int32_t)(now - lastMovingMs) < (int32_t)idleSleepMs()) {
     return;
   }
 
