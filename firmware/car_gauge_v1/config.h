@@ -198,6 +198,9 @@
 // What is asked, and how often, is the `schedule` table in obd.cpp.
 #define OBD_REQ_GAP_MS      5
 #define OBD_REQ_TIMEOUT_MS  150
+// After a bus-off recovery the driver must be started again; a start that
+// fails is retried this often, never given up (obd.cpp, "controller health").
+#define CAN_START_RETRY_MS  1000
 // The oil DID (oil, and coolant as the dash shows it) once a second: both
 // change by well under 1 °C/s, and the over-temp warnings can afford 1 s.
 // Every other slot goes to the 6-PID request, so boost gets nearly all of

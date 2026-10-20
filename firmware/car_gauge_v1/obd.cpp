@@ -421,6 +421,7 @@ static void obdPoll() {
   // explicitly. Without this the gauge would just freeze on stale values after
   // a bad connector or a bus that slept while we stayed powered - with no clue
   // on screen as to why. Seen on the bench: txOk stuck at 6 forever.
+  static bool needStart = false;          // recovered, not yet started again
   uint32_t alerts = 0;
   if (twai_read_alerts(&alerts, 0) == ESP_OK) {
     if (alerts & TWAI_ALERT_RX_QUEUE_FULL) obd.rxOverflows++;
@@ -431,12 +432,20 @@ static void obdPoll() {
       obd.busOff = true;
       twai_initiate_recovery();       // takes 128 idle bus occurrences
     }
-    if (alerts & TWAI_ALERT_BUS_RECOVERED) {
-      // Recovery leaves the driver STOPPED; it must be started again.
-      if (twai_start() == ESP_OK) {
-        obd.busOff = false;
-        obd.recoveries++;
-      }
+    // Recovery leaves the driver STOPPED; it must be started again.
+    if (alerts & TWAI_ALERT_BUS_RECOVERED) needStart = true;
+  }
+  // Until it actually starts. A single attempt on the RECOVERED alert left
+  // CAN dead for good if twai_start() failed: busOff stayed true, and the
+  // alert does not come again - only a reboot brought the gauge back.
+  static uint32_t lastStartTryMs = 0;
+  if (needStart && (lastStartTryMs == 0 || now - lastStartTryMs >= CAN_START_RETRY_MS)) {
+    lastStartTryMs = now ? now : 1;
+    if (twai_start() == ESP_OK) {
+      needStart = false;
+      lastStartTryMs = 0;
+      obd.busOff = false;
+      obd.recoveries++;
     }
   }
 
