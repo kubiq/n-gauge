@@ -666,6 +666,13 @@
 // without end.
 #define SLEEP_LOG_PATH        "/sleeplog.txt"
 #define SLEEP_LOG_MAX_BYTES   262144
+// The boot log (bootlog.cpp): one line per boot that stays up, written this
+// long after boot - once the GPS has been found and configured, and has run
+// long enough for its fix rate to be measured.
+#define BOOT_LOG_PATH         "/bootlog.txt"
+#define BOOT_LOG_MAX_BYTES    262144
+#define BOOT_LOG_AFTER_MS     30000
+#define BOOT_LOG_RATE_FROM_MS 20000   // fix rate measured from here to AFTER_MS
 
 // How much goes on the card (LogLevel in logger.h; a phone setting): 0 off,
 // 1 trips (GPX), 2 normal (+ drive CSV), 3 full (+ the raw diagnostic hex

@@ -26,6 +26,7 @@
 #include "laps.h"
 #include "calc.h"         // calc_drive_update: AP off while driving
 #include "bench.h"        // the desk tools; empty in the car's build
+#include "bootlog.h"      // one line per boot on the card
 #include "prof.h"         // FRAME_STATS timing; nothing in the car's build
 
 
@@ -553,6 +554,7 @@ void loop() {
     PROF_SCOPE(bspLoopStat);  // the pass, the idle sleep excluded
     const uint32_t now = millis();
     passTiming(now);
+    bootlog_task(now);
     bench_task(now);
     // No gps_task() and no logger_task() here: the GNSS and the logger run on
     // their own tasks on core 0, as CAN does.

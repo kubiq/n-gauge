@@ -41,6 +41,11 @@ struct GpsState {
   uint32_t baud      = 0;       // rate we ended up talking at
   bool     timeSet   = false;   // system clock has been set from NMEA UTC
   bool     configured = false;  // module accepted our rate/message config
+  // How the last configuration attempt went: 0 not tried, 1 ACK, 2 NAK (it
+  // heard and refused), 3 no answer (our TX not reaching its RX). For the
+  // boot log - a module left at its 1 Hz default looks fine on screen.
+  uint8_t  configAck = 0;
+  uint32_t fixes     = 0;       // positions published since boot - their rate
 };
 
 extern GpsState gps;

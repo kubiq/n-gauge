@@ -307,6 +307,7 @@ static void gpsConfigure() {
   // change sent to it anyway.
   const UbxAck ack = ubxAwaitAck(1200);
   gps.configured = (ack == ACK_OK);
+  gps.configAck  = ack == ACK_OK ? 1 : ack == ACK_NAK ? 2 : 3;
   if (!gps.configured) {
     // The two failures point at different faults, which is why ubxAwaitAck
     // distinguishes them: silence means our TX is not reaching the module,
@@ -536,6 +537,7 @@ static void gpsPoll() {
     posTimeOk  = tOk;
     __sync_synchronize();
     posSeq = posSeq + 1;                          // even: consistent
+    gps.fixes = gps.fixes + 1;                    // this task is the only writer
   }
   gps.haveFix = fix;
 

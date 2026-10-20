@@ -202,24 +202,24 @@ void logger_start() {
   xTaskCreatePinnedToCore(loggerTaskLoop, "logger", 8192, NULL, 1, NULL, 0);
 }
 
-void logger_note_sleep(const char *decision, int wakeCause, int canRx,
-                       unsigned long fruitless) {
+// One line, stamped with the UTC time (or "no-clock"), appended to a small
+// plain-text log on the card - the sleep log and the boot log.
+//
+// Bounded: one line per sleep or boot is tiny, but parked on the backoff
+// timer the sleep log gains a few hundred lines a night, forever. Stop
+// growing rather than silently filling the card that the drive logs need.
+static void appendLine(const char *path, size_t maxBytes, const char *line) {
   LoggerSdLock lock;
   if (!cardOk) return;
-
-  // Bounded: one line per sleep is tiny, but parked on the backoff timer this
-  // appends a few hundred lines a night, forever. Stop growing rather than
-  // silently filling the card that the drive logs need.
-  if (SD_MMC.exists(SLEEP_LOG_PATH)) {
-    File probe = SD_MMC.open(SLEEP_LOG_PATH, FILE_READ);
+  if (SD_MMC.exists(path)) {
+    File probe = SD_MMC.open(path, FILE_READ);
     if (probe) {
       const size_t sz = probe.size();
       probe.close();
-      if (sz > SLEEP_LOG_MAX_BYTES) return;
+      if (sz > maxBytes) return;
     }
   }
-
-  File f = SD_MMC.open(SLEEP_LOG_PATH, FILE_APPEND);
+  File f = SD_MMC.open(path, FILE_APPEND);
   if (!f) return;
   char utc[24] = "no-clock";
   if (clock_valid()) {
@@ -228,12 +228,23 @@ void logger_note_sleep(const char *decision, int wakeCause, int canRx,
     gmtime_r(&t, &tm);
     strftime(utc, sizeof(utc), "%Y-%m-%dT%H:%M:%SZ", &tm);
   }
-  // awakeMs says how long this wake cost us - the number that decides whether
-  // parked current is acceptable.
-  f.printf("%s awakeMs=%lu wakeCause=%d canRx=%d fruitless=%lu %s\n",
-           utc, (unsigned long)millis(), wakeCause, canRx, fruitless, decision);
+  f.printf("%s %s\n", utc, line);
   f.flush();
   f.close();
+}
+
+void logger_note_sleep(const char *decision, int wakeCause, int canRx,
+                       unsigned long fruitless) {
+  // awakeMs says how long this wake cost us - the number that decides whether
+  // parked current is acceptable.
+  char line[200];
+  snprintf(line, sizeof(line), "awakeMs=%lu wakeCause=%d canRx=%d fruitless=%lu %s",
+           (unsigned long)millis(), wakeCause, canRx, fruitless, decision);
+  appendLine(SLEEP_LOG_PATH, SLEEP_LOG_MAX_BYTES, line);
+}
+
+void logger_note_boot(const char *line) {
+  appendLine(BOOT_LOG_PATH, BOOT_LOG_MAX_BYTES, line);
 }
 
 // Before sleep or a reboot: close everything and stop for good - the task

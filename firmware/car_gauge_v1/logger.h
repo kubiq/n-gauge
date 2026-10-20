@@ -66,6 +66,12 @@ void logger_close();
 void logger_note_sleep(const char *decision, int wakeCause, int canRx,
                        unsigned long fruitless);
 
+// One line per boot that stays up, appended to /bootlog.txt (bootlog.cpp
+// writes it): what came up and how - the GPS's configuration and real fix
+// rate, the clock, CAN, the card, RAM. The serial console says all of it at
+// boot, but the pod in the car has no console; this is the car's record.
+void logger_note_boot(const char *line);
+
 // Distance for the current trip, in km.
 //
 // Lives here rather than in gps.cpp because it is summed only over fixes that
