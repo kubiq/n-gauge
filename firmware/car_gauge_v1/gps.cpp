@@ -54,7 +54,18 @@ static uint32_t posFixMs  = 0;
 static bool     posTimeOk = false;
 
 bool gps_read_fix(GpsFix *out) {
-  for (int tries = 0; tries < 8; tries++) {
+  // Retried for a while, not a fixed number of times. The writer holds the
+  // seqlock for a few instructions - but it runs at priority 4 on core 0 and
+  // the CAN task (5) can pre-empt it mid-update, for as long as a CAN frame
+  // takes to handle. Eight tight retries from core 1 spanned a microsecond or
+  // two and gave up on a perfectly good fix; GPS_READ_WAIT_US covers the
+  // pre-emption, with a short pause between tries so they do not hammer.
+  const uint32_t t0 = micros();
+  for (bool first = true;; first = false) {
+    if (!first) {
+      if (micros() - t0 >= GPS_READ_WAIT_US) break;
+      delayMicroseconds(5);
+    }
     const uint32_t s1 = posSeq;
     if (s1 == 0) return false;                  // nothing published yet
     if (s1 & 1) continue;                       // writer mid-update; retry
@@ -71,8 +82,7 @@ bool gps_read_fix(GpsFix *out) {
     *out = f;
     return true;
   }
-  // The writer publishes at 25 Hz and holds the lock for a few instructions,
-  // so eight collisions in a row means something is badly wrong. Refusing is
+  // Still mid-update after all that: something is badly wrong. Refusing is
   // safer than returning a position we know might be torn.
   return false;
 }

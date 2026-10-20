@@ -125,6 +125,7 @@
 #define GPS_TARGET_BAUD    115200
 #define GPS_BAUD_TRY_MS    2500   // no NMEA for this long -> try the next baud
 #define GPS_LINK_STALE_MS  3000   // no NMEA for this long -> the link is down
+#define GPS_READ_WAIT_US   2000   // a fix read waits this long for the writer
 
 // The GNSS runs on its own task on core 0, like CAN, so its UBX handshakes
 // cannot stall the renderer. These two are the task's pacing.
