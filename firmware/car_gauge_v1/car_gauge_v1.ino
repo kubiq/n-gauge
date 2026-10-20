@@ -62,11 +62,10 @@ static void ui_update_gmeter_raw(float gx, float gy, float gz) {
 }
 
 #if AP_DRIVE_OFF
-// WiFi AP down while driving, back up once stopped - see AP_DRIVE_OFF.
+// Driving, for the AP - see AP_DRIVE_OFF.
 static CalcDrive apDrive = {};
-static bool apDroppedForDrive = false;   // we took it down, so we restore it
 
-static void apDriveTask(uint32_t now) {
+static bool apDriving(uint32_t now) {
   bool  fix = gps.haveFix;
   float kmh = gps.speedKmh;
   const int benchKmh = bench_ap_kmh();   // -1 outside a bench build
@@ -75,31 +74,8 @@ static void apDriveTask(uint32_t now) {
   const bool driving = calc_drive_update(&apDrive, fix, kmh, now,
                                          AP_DRIVE_ON_KMH, AP_DRIVE_ON_MS,
                                          AP_DRIVE_OFF_KMH, AP_DRIVE_OFF_MS);
-  if (!driving) {
-    // Until it is really up: web_start() declines when internal RAM is short
-    // (AP_MIN_INTERNAL_HEAP), and with the flag cleared before trying, one
-    // refusal left the AP down until a reboot (2026-10-12..17, every drive).
-    // So try again every AP_RETRY_MS - safe, as it checks before it allocates.
-    static uint32_t lastTryMs = 0;
-    if (apDroppedForDrive && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {
-      lastTryMs = now ? now : 1;
-      web_start();
-      if (web_is_up()) {
-        apDroppedForDrive = false;
-        lastTryMs = 0;
-        Serial.println(F("[..] stopped - WiFi AP back up"));
-      }
-    }
-    return;
-  }
-  if (!wasDriving) Serial.println(F("[..] driving"));
-  // Checked every pass, not only on the transition: if a phone was connected
-  // when the drive started, the AP goes down once it disconnects.
-  if (!apDroppedForDrive && web_is_up() && web_clients() == 0) {
-    apDroppedForDrive = true;
-    Serial.println(F("[..] driving - WiFi AP down until stopped"));
-    web_stop();
-  }
+  if (driving != wasDriving) Serial.println(driving ? F("[..] driving") : F("[..] stopped"));
+  return driving;
 }
 #endif
 
@@ -498,23 +474,44 @@ static void usbTask() {
   ui_update_usbdisk(usbdisk_host_connected(), usbdisk_state() == USBDISK_SHARED);
 }
 
+// The WiFi AP: ONE rule for whether it should be up, and one path that gets
+// it there.
+//
+// Wanted once this boot is known to stay up - right away on a cold boot,
+// after the bus check on a deep-sleep wake, so a wake that goes straight back
+// to sleep never spends ~46 KB of internal RAM and a radio start-up on an AP
+// nobody sees - and not while driving (AP_DRIVE_OFF), unless a phone is on it.
+//
+// Wanted and down is retried every AP_RETRY_MS: web_start() declines when
+// internal RAM is short (AP_MIN_INTERNAL_HEAP), and checks before it
+// allocates. There used to be two paths, and each lost the AP its own way:
+// after a drive the "we took it down" flag was cleared before trying, so one
+// refusal kept the AP down until a reboot (2026-10-12..17, every drive); at
+// boot the start was marked done before trying, with the same result
+// (2026-10-19 review, A4).
 static void apTask(uint32_t now) {
   (void)now;
 #if WIFI_AP_ALWAYS
-  // Once, as soon as this boot is known to stay up: right away on a cold
-  // boot, after the bus check on a deep-sleep wake - so a wake that goes
-  // straight back to sleep never spends ~46 KB of internal RAM and a radio
-  // start-up on an AP nobody sees. Was the end of setup(), behind a blocking
-  // bus check that froze the boot splash.
-  static bool apStarted = false;
-  if (!apStarted && !power_wake_pending()) {
-    apStarted = true;
-    web_start();
-    bootMark("ap");
-  }
-#endif
+  bool want = !power_wake_pending();
 #if AP_DRIVE_OFF
-  apDriveTask(now);
+  // A connected phone keeps it up: the AP goes down once it disconnects.
+  if (apDriving(now) && web_clients() == 0) want = false;
+#endif
+  static uint32_t lastTryMs = 0;           // 0 = not tried since it was last up
+  if (want && !web_is_up() && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {
+    static bool firstTry = true;
+    if (firstTry) { firstTry = false; bootMark("ap"); }
+    lastTryMs = now ? now : 1;
+    web_start();
+    if (web_is_up()) {
+      lastTryMs = 0;
+      Serial.println(F("[..] WiFi AP up"));
+    }
+  } else if (!want && web_is_up()) {
+    lastTryMs = 0;
+    Serial.println(F("[..] driving - WiFi AP down until stopped"));
+    web_stop();
+  }
 #endif
   web_task();
 }
