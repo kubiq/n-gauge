@@ -6,6 +6,7 @@
 #if BENCH_CONSOLE || FRAME_STATS || WOM_BENCH
 #include <Arduino.h>
 #include "esp_heap_caps.h"   // 'h'
+#include "esp_task_wdt.h"    // 'x' waits 15 s
 #include "bsp.h"
 #include "obd.h"
 #include "rtc.h"
@@ -90,6 +91,21 @@ static void benchCommands(uint32_t now) {
   if (cmd == 's') benchSynth = !benchSynth;
   // 'b' runs the render benchmark.
   if (cmd == 'b') ui_bench();
+  // 'x' holds GPS_TX_GPIO low as a plain output for 15 s, then restarts: with
+  // a meter on the GPS module's RX pin, 0 V proves the ESP drives that line,
+  // 3.3 V that it does not (the module's own pull-up is what reads). An idle
+  // UART line is high either way, so a steady 3.3 V says nothing by itself
+  // (2026-10-21: the carrier's GPS never ACKed its configuration).
+  if (cmd == 'x') {
+    Serial.printf("[..] bench: GPIO%d held LOW for 15 s - measure the GPS module's RX pin now\n",
+                  GPS_TX_GPIO);
+    pinMode(GPS_TX_GPIO, OUTPUT);
+    digitalWrite(GPS_TX_GPIO, LOW);
+    for (int i = 0; i < 15; i++) { delay(1000); esp_task_wdt_reset(); }
+    Serial.println(F("[..] bench: done - restarting to give the pin back to the GPS UART"));
+    Serial.flush();
+    ESP.restart();
+  }
 }
 #endif
 
