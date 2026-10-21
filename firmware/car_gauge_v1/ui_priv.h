@@ -66,6 +66,11 @@ lv_obj_t *make_icon_row(lv_obj_t *parent, int dy, const lv_image_dsc_t *icon, lv
 void fix_value_width(lv_obj_t *label, const char *pattern);
 void show_no_value(lv_obj_t *label);
 void show_value_style(lv_obj_t *label, lv_color_t c);
+// For updates: set a colour only when it differs. Any style set invalidates
+// the whole object, unchanged value or not - an arc's whole bounding box.
+void set_arc_color(lv_obj_t *arc, lv_color_t c);
+void set_text_color(lv_obj_t *label, lv_color_t c);
+void set_recolor(lv_obj_t *img, lv_color_t c);
 lv_obj_t *make_name(lv_obj_t *parent, const char *txt, int dy);
 
 // ---- the screens: each builds and returns its own ---------------------------

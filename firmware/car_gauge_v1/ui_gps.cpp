@@ -61,17 +61,17 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
   if (!linkUp) {                       // no NMEA at all: wiring or baud
     show_no_value(gpsSpeed);
     lv_label_set_text(gpsState, "no module");
-    lv_obj_set_style_text_color(gpsState, COL_BAD, 0);
+    set_text_color(gpsState, COL_BAD);
     return;
   }
   if (!haveFix) {                      // talking, but no sky view yet
     show_no_value(gpsSpeed);
     lv_label_set_text_fmt(gpsState, "searching  %d sats", sats);
-    lv_obj_set_style_text_color(gpsState, COL_BLUE, 0);
+    set_text_color(gpsState, COL_BLUE);
     return;
   }
   lv_label_set_text_fmt(gpsSpeed, "%d", (int)(speedKmh + 0.5f));
-  lv_obj_set_style_text_color(gpsSpeed, COL_GOOD, 0);
+  show_value_style(gpsSpeed, COL_GOOD);
   lv_label_set_text_fmt(gpsState, "fix  %d sats", sats);
-  lv_obj_set_style_text_color(gpsState, COL_GOOD, 0);
+  set_text_color(gpsState, COL_GOOD);
 }

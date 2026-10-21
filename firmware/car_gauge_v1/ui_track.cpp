@@ -175,7 +175,7 @@ void ui_update_track(const LapInfo *li) {
       const int32_t a = delta < 0 ? -delta : delta;
       lv_label_set_text_fmt(trkDelta, "%s%ld.%ld", delta < 0 ? "-" : delta > 0 ? "+" : "",
                             (long)(a / 10), (long)(a % 10));
-      lv_obj_set_style_text_color(trkDelta, delta < 0 ? COL_GOOD : delta > 0 ? COL_BAD : COL_INK, 0);
+      set_text_color(trkDelta, delta < 0 ? COL_GOOD : delta > 0 ? COL_BAD : COL_INK);
     }
     lastDelta = delta;
   }

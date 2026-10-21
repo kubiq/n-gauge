@@ -5,6 +5,9 @@
 
 #include <SDL2/SDL.h>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include "ui.h"           // ui_current_view(), for SIM_INVALIDATE
 
 #include "Arduino.h"
 #include "bsp.h"
@@ -50,6 +53,20 @@ void bsp_lvgl_init() {
   // it is its driver data's first field.
   SDL_SetWindowResizable(*(SDL_Window **)lv_display_get_driver_data(d), SDL_FALSE);
   lv_sdl_mouse_create();
+  // SIM_INVALIDATE=<pixels>: print every invalidated area at least that big,
+  // with the screen it is on - what a redraw costs on the pod is mostly the
+  // area pushed over QSPI, so a needlessly large one is the thing to find.
+  if (const char *s = std::getenv("SIM_INVALIDATE")) {
+    static long minPx = std::atol(s);
+    lv_display_add_event_cb(d, [](lv_event_t *e) {
+      const lv_area_t *a = (const lv_area_t *)lv_event_get_param(e);
+      const long px = (long)lv_area_get_width(a) * lv_area_get_height(a);
+      if (px >= minPx)
+        std::printf("[inv] %7.1f s view %d  %3dx%-3d at %3d,%-3d (%ld px)\n", millis() / 1000.0,
+                    (int)ui_current_view(), (int)lv_area_get_width(a), (int)lv_area_get_height(a),
+                    (int)a->x1, (int)a->y1, px);
+    }, LV_EVENT_INVALIDATE_AREA, nullptr);
+  }
 }
 void bsp_display_off() {}
 void bsp_display_set_brightness(uint8_t) {}

@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -98,6 +99,9 @@ int main(int argc, char **argv) {
   setup();
   SDL_AddEventWatch(onEvent, nullptr);
   if (shots_on()) { rebase(); speed = 20.0; }   // nobody watching: no need to wait
+  // SIM_SPEED=20: replay faster from the start - with SIM_INVALIDATE, to read
+  // a whole drive's redraws without sitting through it.
+  if (const char *s = std::getenv("SIM_SPEED")) { rebase(); speed = std::atof(s) > 0 ? std::atof(s) : 1.0; }
   for (;;) {
     const double t = simNowMs() - replayOffsetMs;
     if (t >= 0) replay_feed((uint32_t)t);

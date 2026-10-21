@@ -155,13 +155,34 @@ void fix_value_width(lv_obj_t *label, const char *pattern) {
 // and in the value's colour they read as a value, not as "nothing yet".
 void show_no_value(lv_obj_t *label) {
   lv_label_set_text(label, "--");
-  lv_obj_set_style_text_color(label, COL_DIM, 0);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  set_text_color(label, COL_DIM);
+  if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_CENTER)
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 }
 // Back to a reading: left-aligned (see fix_value_width), in its colour.
 void show_value_style(lv_obj_t *label, lv_color_t c) {
-  lv_obj_set_style_text_color(label, c, 0);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+  set_text_color(label, c);
+  if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_LEFT)
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+}
+
+// Colours set only when they change. Setting a style property invalidates the
+// whole object even when the value is the one it already has - for an arc,
+// its whole bounding box: 377x377 for the coolant ring. The temperatures
+// screen set both rings' colours on every degree, which on the pod was a
+// ~110 ms pass (two full-panel pushes) every few seconds of every drive
+// (loopMaxMs, 2026-10-20 drives; found replaying them with SIM_INVALIDATE).
+void set_arc_color(lv_obj_t *arc, lv_color_t c) {
+  if (!lv_color_eq(lv_obj_get_style_arc_color(arc, LV_PART_INDICATOR), c))
+    lv_obj_set_style_arc_color(arc, c, LV_PART_INDICATOR);
+}
+void set_text_color(lv_obj_t *label, lv_color_t c) {
+  if (!lv_color_eq(lv_obj_get_style_text_color(label, 0), c))
+    lv_obj_set_style_text_color(label, c, 0);
+}
+void set_recolor(lv_obj_t *img, lv_color_t c) {
+  if (!lv_color_eq(lv_obj_get_style_image_recolor(img, 0), c))
+    lv_obj_set_style_image_recolor(img, c, 0);
 }
 
 lv_obj_t* make_name(lv_obj_t *parent, const char *txt, int dy) {
