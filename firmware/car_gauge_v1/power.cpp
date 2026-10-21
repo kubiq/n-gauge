@@ -9,7 +9,7 @@
 // recessive (HIGH) and any traffic pulls it dominant (LOW), so the transceiver
 // is the wake source: the board sleeps until the car talks, then wakes in
 // microseconds. The previous timer-only design woke every SLEEP_POLL_SEC and
-// paid for a FULL COLD BOOT each time - panel, LVGL, touch, IMU, audio, SD
+// paid for a FULL COLD BOOT each time - panel, LVGL, touch, IMU, SD
 // mount, CAN install, GPS UART - which at a 2 s poll is roughly a 50 % duty
 // cycle. That is not sleeping, and it also flashed the screen every 2 s.
 //

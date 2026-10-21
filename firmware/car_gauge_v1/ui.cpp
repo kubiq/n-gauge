@@ -1,8 +1,7 @@
 // ============================================================================
 // ui.cpp  —  LVGL UI.  466x466 round AMOLED. Builds every screen and switches
 //   between them; the screens themselves are ui_<screen>.cpp - see ui_priv.h.
-//   Uses LVGL ~9.x API. If Waveshare's example ships LVGL 8.x, the only
-//   likely tweaks are lv_scr_load -> lv_screen_load and a couple of enum names.
+//   LVGL 9 (as the sim builds it too).
 // ============================================================================
 #include "ui_priv.h"
 #include "settings.h"   // the cycle order, settings.views

@@ -5,7 +5,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Live values, updated as replies arrive. NaN/­sentinel until first valid read.
+// Live values, updated as replies arrive. A value means something only with
+// its have* flag set, and is current only while its *Ms stamp is fresh - ask
+// obd_*_fresh(), not the flag: a flag stays set after the value goes stale.
 struct ObdState {
   bool     linkUp        = false;   // TWAI driver started
   bool     haveOil       = false;

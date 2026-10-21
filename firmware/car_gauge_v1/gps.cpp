@@ -612,11 +612,12 @@ static void gpsPoll() {
 // blocking costs nothing.
 //
 // Thread safety: every GpsState field is 32 bits or smaller and naturally
-// aligned, so loads and stores are atomic on Xtensa and no lock is needed -
-// the same argument obd.h makes for ObdState. That is precisely why position
-// is stored as int32 degrees x 1e7 rather than double: an 8-byte double is NOT
-// atomic, and a reader on core 1 could have caught a half-updated coordinate
-// and logged a position that never existed.
+// aligned, so each one alone is read and written atomically on Xtensa - the
+// same argument obd.h makes for ObdState. That is why position is stored as
+// int32 degrees x 1e7 rather than double: an 8-byte double is NOT atomic. But
+// one field at a time is not enough for a position, whose lat and lon must
+// come from the same fix: those go under the seqlock above, and readers use
+// gps_read_position() / gps_read_fix(), never the fields.
 #if BENCH_CONSOLE
 // Bench 'p': does the module take input at all, and which protocol? The
 // carrier's GPS never ACKed its UBX config though its RX pin is driven

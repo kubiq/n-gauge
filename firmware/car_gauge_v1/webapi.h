@@ -6,16 +6,21 @@
 //   handled by stopping it as part of the sleep sequence instead: parked, the
 //   board sleeps and the AP goes with it.
 //
-//   GET  /              mobile settings page
-//   GET  /api/settings  current settings as JSON
-//   GET  /api/live      live telemetry as JSON (oil/boost/coolant/gps/tyres)
-//   POST /save          form post from the page; applies + persists
-//   GET  /files         read-only listing of the SD card
-//   GET  /dl?f=NAME     download a drive log or GPX track
+//   GET  /, /car, /device  the settings pages (Gauge, Car, Device)
+//   POST /save             form post from a page or the app; applies + persists
+//   POST /update           a firmware image (ota.h)
+//   POST /api/clock        set the clock from the phone (UTC epoch)
+//   GET  /api/settings     current settings as JSON
+//   GET  /api/live         live telemetry and health as JSON
+//   GET  /files            read-only listing of the SD card, for a browser
+//   GET  /api/files?p=N    the card for the app's sync, paged JSON
+//   GET  /dl?f=NAME        one card file, Range supported (its own task)
+//   POST /api/delete       f=NAME: a drive log, from the app only
 //
-//   Read-only by design: there is no delete endpoint. A drive log is often the
-//   only copy of a run that cannot easily be repeated, and the AP password is
-//   the only thing guarding this server.
+//   The pages are read-only on purpose: a drive log is often the only copy of
+//   a run that cannot easily be repeated. Deleting is the app's, for drive
+//   logs only, behind its confirmation and after it holds a copy - see
+//   handleDelete.
 // ============================================================================
 #pragma once
 #include <stdbool.h>

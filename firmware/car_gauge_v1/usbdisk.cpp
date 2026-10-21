@@ -99,8 +99,9 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
 
 // The drive is READ-ONLY (2026-10-12). Even with nothing copied, the PC
 // writes - the FAT "in use" flag, access dates of the files a file manager
-// previews - and there is no reason to let it: deleting logs is done with
-// the card in a reader. TinyUSB refuses writes to a write-protected LUN
+// previews - and there is no reason to let it: logs are deleted from the
+// phone app (/api/delete), or with the card in a reader. TinyUSB refuses
+// writes to a write-protected LUN
 // before calling this; it answers the same anyway.
 bool tud_msc_is_writable_cb(uint8_t lun) { (void)lun; return false; }
 

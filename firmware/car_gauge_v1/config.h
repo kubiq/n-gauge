@@ -182,8 +182,9 @@
 #define GPS_WAKE_SETTLE_MS 50
 
 // ---- Buttons ---------------------------------------------------------------
-// The board's "programmable buttons". Confirm GPIOs from Waveshare BSP.
-#define BTN_NEXT_GPIO      0      // TODO: verify — cycle gauge screens
+// The board's BOOT button, on GPIO0 - verified: it wakes the pod from sleep
+// (power.cpp's ext1 mask) and pages the screens.
+#define BTN_NEXT_GPIO      0
 #define BTN_NEXT_ACTIVE_LOW 1
 
 // ---- CAN / OBD -------------------------------------------------------------
@@ -207,11 +208,11 @@
 // them: ~65/s expected (was 9.5/s on the 50 ms timer).
 #define OIL_POLL_MS         1000
 // The fast request: six Mode 01 PIDs in ONE request to the engine ECU, which
-// answers all of them in one reply (benchmark: "41 0B xx 05 xx 0D xx 43 xx xx
-// 33 xx"). 0x0B MAP (boost), 0x05 coolant sensor (logged), 0x0D speed (the
-// gear), 0x43 absolute load (torque estimate), 0x0C RPM (track log), 0x49
-// accelerator pedal. Sent to 0x7E0, not the broadcast 0x7DF, so the gearbox
-// ECU does not answer too. Six is the most Mode 01 allows per request.
+// answers all of them in one reply ("41 0B xx 5E xx xx 0D xx ..."). 0x0B MAP
+// (boost), 0x5E engine fuel rate, 0x0D speed (the gear), 0x43 absolute load
+// (torque estimate), 0x0C RPM (track log), 0x49 accelerator pedal. Sent to
+// 0x7E0, not the broadcast 0x7DF, so the gearbox ECU does not answer too. Six
+// is the most Mode 01 allows per request.
 // RPM took baro's place (2026-10-08): baro, the zero for boost, changes only
 // with weather and altitude, so it has its own slow entry (BARO_POLL_MS).
 // 0x5E engine fuel rate took 0x05's (2026-10-16): the raw coolant sensor is
@@ -235,8 +236,8 @@
 #define OBD_VOLTS_PIDS      { 0x42, 0x59 }
 #define VOLTS_POLL_MS       1000
 // Once a second, for the logs (2026-10-16), all in the ECU's supported list
-// (the 2026-10-03 probe) but not yet seen answering: 0x05 the raw coolant
-// sensor (from the fast request), 0x34 lambda measured by the wideband O2
+// (the 2026-10-03 probe) and all answering on the drives since: 0x05 the raw
+// coolant sensor (from the fast request), 0x34 lambda measured by the wideband O2
 // sensor and 0x44 the lambda the ECU asks for (rich under full throttle),
 // 0x46 outside air, 0x2F the fuel tank, 0x3C the catalyst. Six, the most a
 // request takes; the reply is multi-frame.
@@ -491,14 +492,14 @@
 
 // ---- Thresholds (°C) -------------------------------------------------------
 #define OIL_READY_C        90     // below this = "cold, take it easy"; at/above = ready
-#define OIL_WARN_C         120    // audible over-temp guard trips here
-#define COOLANT_WARN_C     110    // optional coolant guard (Mode01 0x05)
+#define OIL_WARN_C         120    // the over-temp warning (red rim) trips here
+#define COOLANT_WARN_C     110    // the same for coolant (the dashboard's, E001 byte 25)
 // Hysteresis on every temperature state change. Oil temp dithers by a degree
 // around any threshold, so a bare comparison makes the label and arc colour
 // flip on alternate updates - observed on the car as the screen "flashing" at
-// 89-90 °C. A state, once entered, needs this much movement to leave again.
-// It also stops the over-temp beep chattering at the alarm point, which the
-// alarm code always claimed the caller handled but nothing actually did.
+// 89-90 °C. A state, once entered, needs this much movement to leave again -
+// the over-temp warning included, which would otherwise flicker on and off at
+// its threshold.
 #define STATE_HYST_C       3
 
 // ---- Power management (Option B: OBD 12V + sleep-on-idle) ------------------
@@ -660,8 +661,8 @@
 #endif
 
 // ---- Drive logging (onboard microSD) ---------------------------------------
-// Decoded values, plus the raw TPMS payload as hex (its byte layout is still
-// unsolved). There is no longer a separate promiscuous frame-capture sketch -
+// Decoded values, plus (at the Full log level) the raw TPMS and oil payloads
+// as hex, so a decoding can be checked or redone offline. There is no longer a separate promiscuous frame-capture sketch -
 // if full raw CAN capture is ever needed again, recover can_sniffer_sd from
 // git history (last present in commit 54255f0).
 // 2 Hz is plenty for temperatures and still catches boost/g transients.
@@ -711,6 +712,8 @@
 // ⚠ MUST stay comfortably above GPX_IDLE_POINT_MS: while parked, points are
 // deliberately 5 s apart, and a threshold below that would split the track on
 // every single idle point.
+#define GPX_SEGMENT_GAP_MS    10000
+
 // GPX point validation. Measured against trip_0004, which sprayed spikes
 // across the map coming out of a tunnel:
 //   - no filter:                 86 jumps implying >250 km/h, worst 12920
@@ -725,16 +728,15 @@
 #define GPX_MAX_REJECT_RUN 20     // then accept anyway, in case the reference
                                   // point is the bad one
 
-#define GPX_SEGMENT_GAP_MS    10000
-
 // GPX trackpoint spacing. Matched to the nav rate so the smoothness we asked
-// the module for actually reaches the file. At 10 Hz a point is ~120 bytes,
-// so a track costs roughly 4 MB/hour - fine on a multi-GB card. Raise this if
-// you would rather have smaller files for daily driving.
+// the module for actually reaches the file. At 25 Hz a point is ~220 bytes
+// (the speed extension included), so a track costs roughly 20 MB per hour
+// driven - fine on a multi-GB card. Raise this if you would rather have
+// smaller files for daily driving.
 #define GPX_POINT_MS          GPS_NAV_RATE_MS
-// Flushing on every point would mean 10 SD flushes a second, which stalls the
-// render loop badly. Flush on this cadence instead: between flushes the copy
-// on the card can be behind, but each flush leaves it valid and complete.
+// Flushing on every point would mean 25 SD flushes a second, which stalls the
+// logger badly. Flush on this cadence instead: between flushes the copy on the
+// card can be behind, but each flush leaves it valid and complete.
 #define GPX_FLUSH_MS          2000
 
 // ---- Screens -------------------------------------------------------------
@@ -784,7 +786,7 @@
 // point of WPA2 is lost the moment the key is published. On first boot a
 // random one is generated into NVS instead (settings.cpp), shown on the WiFi
 // screen so it can be read in the car, and changeable from the phone.
-#define WIFI_AP_PASS_LEN   10     // 10 chars from a 32-char alphabet = ~50 bits
+#define WIFI_AP_PASS_LEN   10     // 10 chars from a 31-char alphabet = ~49 bits
 // Deliberately excludes 0/O/1/l/I and similar - this gets typed on a phone
 // from a screen, in a car, possibly in the dark.
 #define WIFI_AP_PASS_ALPHABET "abcdefghjkmnpqrstuvwxyz23456789"
@@ -985,12 +987,6 @@
 #define NIGHT_LAT_DEFAULT        49.8
 #define NIGHT_LON_DEFAULT        15.5
 
-// POSIX TZ rule, editable from the phone. GPS gives UTC; this converts it to
-// local time INCLUDING daylight saving, so it needs changing twice a year
-// only if you use a bare offset instead of a rule. Default = Czechia.
-//   Czechia/CET:  CET-1CEST,M3.5.0,M10.5.0/3
-//   UK:           GMT0BST,M3.5.0/1,M10.5.0
-//   fixed +2, no DST: <+02>-2
 // Local time = UTC + this many whole hours, optionally with the EU summer-time
 // rule on top. Both are editable from the phone; the POSIX TZ string libc
 // actually wants is built from them in settings.cpp. Czechia is +1 with DST.

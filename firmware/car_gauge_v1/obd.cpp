@@ -102,7 +102,13 @@ void obd_init() {
   g.rx_queue_len = 32;
   g.tx_queue_len = 10;
   twai_timing_config_t t = TWAI_TIMING_CONFIG_500KBITS();
-  twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();  // narrow to 0x7E8 later
+  // Accept everything, and keep it that way - it is load-bearing for sleep,
+  // not a filter left for later. After a wake the pod listens WAKE_SAMPLE_MS
+  // for a live bus before it has sent a single request (power.cpp), so what
+  // it must see then is whatever frame woke it, not a reply to itself. A
+  // filter narrowed to the replies (0x7E8, 0x7A8) would find nothing there,
+  // and the pod would go back to sleep with the car running.
+  twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
   obd.linkUp = (twai_driver_install(&g, &t, &f) == ESP_OK) &&
                (twai_start() == ESP_OK);
   if (!obd.linkUp) return;

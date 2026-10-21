@@ -22,8 +22,8 @@ bool power_wake_pending();
 // Records WHEN, not how much is left, matching lastClientMs and
 // obd.lastFrameMs. A remaining-time counter decremented in loop() would tie the
 // timeout to frame rate rather than to time - loop() runs at a few hundred Hz
-// but unevenly, stretched by LVGL rendering and SD writes - and a single shared
-// counter would be a cross-core read-modify-write, since the CAN task on the
-// other core is one of the things that has to reset it. A 32-bit timestamp
-// store is naturally atomic, so this is safe to call from anywhere.
+// but unevenly, stretched by LVGL rendering and SD writes. Called by the UI on
+// a touch; CAN traffic keeps the pod awake on its own, through
+// obd.lastFrameMs. A 32-bit timestamp store is naturally atomic, so this is
+// safe to call from any task.
 void power_note_activity();

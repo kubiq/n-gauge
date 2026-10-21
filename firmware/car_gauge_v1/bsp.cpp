@@ -297,9 +297,9 @@ void bsp_display_set_brightness(uint8_t b) {
 // Returns false when there is no fresh sample, and hands back the last good
 // one rather than zeros.
 //
-// This is called twice per loop - once for the g-meter, once for the CSV - and
-// the QMI8658 produces one sample per millisecond, so the second caller
-// routinely found nothing new. Returning 0,0,0 then wrote a plausible-looking
+// Once per loop pass now (the logger takes that sample via logger_note_raw_g),
+// but it used to be called twice - once for the g-meter, once for the CSV -
+// and the second caller routinely found nothing new. Returning 0,0,0 then wrote a plausible-looking
 // "0.000,0.000,0.000" into the very columns added so the mounting angle could
 // be derived offline, and snapped the g-meter dot to dead centre at the
 // minimum size. A logged zero is indistinguishable from a real reading, which

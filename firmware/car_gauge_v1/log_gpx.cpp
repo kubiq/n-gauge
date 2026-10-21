@@ -59,7 +59,7 @@ static const char GPX_TAIL[] = "</trkseg></trk></gpx>\n";
 // good enough.
 //
 // Encrypted, no closing tags: a sealed record cannot be overwritten in place,
-// and the readers add them (the app's cleanGpx, the PC tool).
+// and the reader adds them (the app's cleanGpx).
 static void gpxWriteTail(LogFile &lf) {
   if (lf.enc) return;
   gpxTailPos = lf.f.position();

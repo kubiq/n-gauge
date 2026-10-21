@@ -156,7 +156,7 @@ static inline void logcrypt_fingerprint(char out[13], const uint8_t pub[32]) {
   out[12] = '\0';
 }
 
-// ---- reader (tests, and the reference for the app and the PC tool) --------
+// ---- reader (the tests, and the reference for the app's logcrypt.ts) -------
 // The first segment header at or after `from`, or n if there is none. A
 // header's first 10 bytes are fixed (type, length 37, "NGE1", version) - and
 // a chance match is harmless: its records would fail their MACs.

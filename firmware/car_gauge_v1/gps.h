@@ -81,10 +81,11 @@ void gps_init();   // open the UART, and wake a parked module
 // on the loop's core that froze the renderer mid-animation.
 //
 // Thread safety: every GpsState field is 32 bits or smaller and naturally
-// aligned, so loads and stores are atomic on Xtensa and no lock is needed.
-// Position is int32 degrees x 1e7 specifically to keep that true - an 8-byte
-// double is not atomic, and a torn read would log a position that never
-// existed.
+// aligned, so each one alone is read atomically on Xtensa - no lock for a
+// single field. Position is int32 degrees x 1e7 to keep that true (an 8-byte
+// double is not atomic), but a position is two fields from one fix, so it is
+// published under a seqlock: read it with gps_read_position() or
+// gps_read_fix(), which never hand back lat from one fix and lon from the next.
 
 // Put the module into backup mode before deep sleep (UBX-RXM-PMREQ), so it
 // stops computing 25 fixes a second for a parked car. Measured at 17.2 mA of a

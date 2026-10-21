@@ -14,11 +14,11 @@
 // here because a scan on its own only proves "something is there", and two of
 // these are easy to misidentify from their register contents alone.
 //
-//   0x18  ES8311      audio codec (speaker out)              - driven
+//   0x18  ES8311      audio codec (speaker out)              - NOT driven (no audio)
 //   0x20  TCA9554PWR  8-bit I/O expander                     - NOT driven
 //   0x34  AXP2101     PMU                                    - NOT driven
 //   0x40  ES7210      4-channel mic ADC (the AEC front end)   - NOT driven
-//   0x51  PCF85063    RTC, battery-backed through the AXP2101 - NOT driven
+//   0x51  PCF85063    RTC, battery-backed through the AXP2101 - driven (rtc.cpp)
 //   0x5A  CST9217     capacitive touch                       - driven
 //   0x6B  QMI8658     6-axis IMU                             - driven
 //   0x7E  nothing.    A phantom ACK in the I2C-reserved 0x78-0x7F range; it
@@ -35,7 +35,7 @@
 // through it must be POLLED. Note the PWR button is only reachable this way;
 // the BOOT button (BTN_NEXT_GPIO, GPIO0) is a plain GPIO and needs no I2C.
 
-void bsp_init();          // AXP2101 PMU, I2C bus, CO5300 AMOLED, touch, backlight on
+void bsp_init();          // I2C bus, CO5300 AMOLED, touch, IMU, backlight on (the PMU is left at its defaults)
 void bsp_lvgl_init();     // register LVGL display + flush cb + tick + input dev
 void bsp_display_off();   // AMOLED + backlight off (for sleep; a wake is a
                           // full boot, so there is no matching "on")

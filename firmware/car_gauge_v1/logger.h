@@ -22,7 +22,8 @@ void logger_init();   // mount the card; no CSV yet - see logger_start()
 //
 // It samples at LOG_INTERVAL_MS. The CSV is created on the first row after
 // the first CAN frame, named by its start time when the clock is set
-// (drive_2026-09-25_14-32.csv), else numbered - so a boot or a parked wake
+// (drive_2026-09-25_14-32_3fa81c.csv - the last part is the session, one per
+// boot or wake), else numbered - so a boot or a parked wake
 // with the car off leaves no file behind.
 //
 // It also writes a GPX track per trip, alongside the CSV. Opened lazily on
@@ -124,8 +125,8 @@ void logger_note_raw_g(float gx, float gy, float gz);
 void logger_note_loop_us(uint32_t us);
 
 // The SD card lent to the PC as a USB drive (usbdisk.cpp): suspend closes
-// every file and stops all card access; resume remounts and logging goes on
-// in a new file. logger_card_shared() is true in between. Suspend is false,
+// every file and stops all card access; resume takes it back (no remount: the
+// PC had it read-only) and logging goes on in a new file. logger_card_shared() is true in between. Suspend is false,
 // and nothing changes, when the card is too busy to let go of.
 bool logger_suspend();
 void logger_resume();
