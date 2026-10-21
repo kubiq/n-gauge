@@ -72,6 +72,13 @@ arduino-cli compile --warnings default --fqbn "$FQBN" --output-dir "$OUT" "${BUI
   --build-property "compiler.cpp.extra_flags=$EXTRA_FLAGS" \
   "$REPO/$SKETCH"
 
+# The core also copies every build's binaries into the sketch's own build/,
+# car and bench alike - so that folder held whichever was built last, and on
+# 2026-10-21 a bench image went to the phone as "the car build". The real
+# outputs are $OUT, separate per variant: the copy goes.
+rm -rf "$REPO/$SKETCH/build"
+echo "==> Image: ${OUT#"$REPO"/}/$NAME.ino.bin"
+
 [ "${2:-}" = "flash" ] || { echo "==> Not flashing (pass 'flash' to upload)"; exit 0; }
 
 BOOTAPP="$(find "$HOME/.arduino15/packages/esp32" -name boot_app0.bin | head -1)"
