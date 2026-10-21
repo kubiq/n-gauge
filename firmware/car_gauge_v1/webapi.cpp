@@ -294,28 +294,29 @@ static void otaNotice(size_t bytes) {
 }
 
 static void handleUpdateUpload() {
-  HTTPUpload &up = server.upload();
+  // Not `up`: that name is the file's "the AP is up", which this hid.
+  HTTPUpload &upload = server.upload();
   static size_t shownAt = 0;
-  switch (up.status) {
+  switch (upload.status) {
     case UPLOAD_FILE_START:
-      Serial.printf("[..] firmware upload: %s\n", up.filename.c_str());
+      Serial.printf("[..] firmware upload: %s\n", upload.filename.c_str());
       otaStarted = true;
       otaOk = ota_begin(0);
       shownAt = 0;
       ui_show_notice(otaOk ? "Updating firmware..." : NULL);
       break;
     case UPLOAD_FILE_WRITE:
-      if (otaOk) otaOk = ota_write(up.buf, up.currentSize);
-      if (otaOk && up.totalSize - shownAt >= 256 * 1024) {
-        shownAt = up.totalSize;
-        otaNotice(up.totalSize);
+      if (otaOk) otaOk = ota_write(upload.buf, upload.currentSize);
+      if (otaOk && upload.totalSize - shownAt >= 256 * 1024) {
+        shownAt = upload.totalSize;
+        otaNotice(upload.totalSize);
       }
       esp_task_wdt_reset();
       break;
     case UPLOAD_FILE_END:
       if (otaOk) otaOk = ota_end();
       Serial.printf("[..] firmware upload %s (%u bytes)\n",
-                    otaOk ? "verified" : "FAILED", (unsigned)up.totalSize);
+                    otaOk ? "verified" : "FAILED", (unsigned)upload.totalSize);
       break;
     case UPLOAD_FILE_ABORTED:
       ota_abort();
@@ -553,18 +554,27 @@ static void sendCardBusy() {
   server.send(503, "text/plain", "The SD card is busy - try again in a moment.");
 }
 
+// The card for a phone request, once `lock` was tried: false, with the 503
+// sent, when it is busy, lent to the PC (not ours to touch at all - two
+// writers corrupt the FAT), or missing. 503 for all three, never 404 or
+// 410: the app takes those as "gone" and would drop a file, or a delete it
+// still has pending. One copy of what four handlers each spelled out.
+static bool cardForRequest(const LoggerSdLock &lock) {
+  if (!lock) { sendCardBusy(); return false; }
+  if (logger_card_shared()) {
+    server.send(503, "text/plain", "The SD card is shared with a PC right now - eject it there first.");
+    return false;
+  }
+  if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return false; }
+  return true;
+}
+
 static void handleFiles() {
   const int page = pageArg();
   if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
   // The logger writes from its own task on core 0: take turns with it.
   LoggerSdLock lock(SD_LOCK_WEB_MS);
-  if (!lock) { sendCardBusy(); return; }
-  // The card can be lent to the PC as a USB drive - then it is not ours to
-  // touch at all (two writers corrupt the FAT).
-  if (logger_card_shared()) {
-    server.send(503, "text/plain", "The SD card is shared with a PC right now - eject it there first.");
-    return;
-  }
+  if (!cardForRequest(lock)) return;
   // Streamed rather than built in a buffer: there can be dozens of logs, and
   // a fixed buffer here is how you get silent truncation.
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -581,18 +591,18 @@ static void handleFiles() {
     "button{background:none;border:1px solid #26313C;color:#E5544B;border-radius:6px;padding:6px 10px}"
     "</style></head><body><h2>Files</h2>"));
 
-  // usedBytes() can walk the whole FAT when the free-count hint is stale (a
-  // card pulled from a PC without ejecting) - feed the watchdog after it.
-  uint64_t total = SD_MMC.totalBytes(), used = SD_MMC.usedBytes();
-  esp_task_wdt_reset();
+  // The cached figure (web_sd_space_kb, refreshed once a minute), not a fresh
+  // usedBytes(): that can walk the whole FAT when the free-count hint is
+  // stale (a card pulled from a PC without ejecting), on every page load.
+  uint32_t usedKb, totalKb;
+  web_sd_space_kb(&usedKb, &totalKb);
   char hdr[220];
-  snprintf(hdr, sizeof(hdr),
-           "<p class='sub'>%llu of %llu MB used. The newest log is still being "
+  const int hl = snprintf(hdr, sizeof(hdr),
+           "<p class='sub'>%lu of %lu MB used. The newest log is still being "
            "written, so its last few seconds may be missing.</p>"
            "<table><tr><th>file</th><th>size</th><th></th></tr>",
-           (unsigned long long)(used / 1048576ULL),
-           (unsigned long long)(total / 1048576ULL));
-  server.sendContent(hdr);
+           (unsigned long)(usedKb / 1024), (unsigned long)(totalKb / 1024));
+  server.sendContent(hdr, (size_t)hl);
 
   CardPage list;
   int nFiles = listCardPage(page, FILES_PER_PAGE, &list);
@@ -643,12 +653,7 @@ static void handleFilesJson() {
   const int page = pageArg();
   if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
   LoggerSdLock lock(SD_LOCK_WEB_MS);
-  if (!lock) { sendCardBusy(); return; }
-  if (logger_card_shared()) {
-    server.send(503, "text/plain", "The SD card is shared with a PC right now.");
-    return;
-  }
-  if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return; }
+  if (!cardForRequest(lock)) return;
   CardPage list;
   const int nFiles = listCardPage(page, FILES_JSON_PER_PAGE, &list);
   // An error, not an empty card: the app takes a file missing from the list
@@ -706,15 +711,11 @@ static void handleFilesJson() {
 // so the app takes only "deleted" or 410 as done, and older firmware
 // without this handler never looks like a success.
 static void handleDelete() {
+  // Busy, shared or no card is "not now", not "already gone": with the card
+  // missing, every file looked absent, and a 410 told the app to forget the
+  // pending delete.
   LoggerSdLock lock(SD_LOCK_WEB_MS);
-  if (!lock) { sendCardBusy(); return; }   // not 410: the app keeps it pending
-  if (logger_card_shared()) {
-    server.send(503, "text/plain", "The SD card is shared with a PC right now.");
-    return;
-  }
-  // No card is "not now", not "already gone": with it missing, every file
-  // looked absent, and a 410 told the app to forget the pending delete.
-  if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return; }
+  if (!cardForRequest(lock)) return;
   const String n = server.arg("f");
   if (!safeName(n) || !calc_is_drive_log(n.c_str(), LOGCRYPT_SUFFIX)) {
     server.send(400, "text/plain", "not a drive log");
@@ -842,11 +843,7 @@ static void handleDownload() {
     return;
   }
   LoggerSdLock lock(SD_LOCK_WEB_MS);
-  if (!lock) { sendCardBusy(); return; }
-  if (logger_card_shared()) {
-    server.send(503, "text/plain", "The SD card is shared with a PC right now.");
-    return;
-  }
+  if (!cardForRequest(lock)) return;
   const String n = server.arg("f");
   if (!safeName(n)) { server.send(400, "text/plain", "bad name"); return; }
   File f = SD_MMC.open("/" + n, FILE_READ);
