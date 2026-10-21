@@ -106,6 +106,18 @@ static inline size_t calc_trim_copy(char *dst, size_t dstSize, const char *src) 
   return n;
 }
 
+// A WPA2 passphrase softAP() takes: 8 to maxLen printable ASCII characters
+// (0x20-0x7E, spaces allowed). Anything else - a control character, UTF-8
+// from a phone keyboard - is refused by the WiFi driver, and a refused
+// passphrase saved to NVS would leave the AP down on every boot.
+static inline bool calc_ap_pass_ok(const char *s, size_t maxLen) {
+  if (!s) return false;
+  size_t n = 0;
+  for (; s[n]; n++)
+    if ((unsigned char)s[n] < 0x20 || (unsigned char)s[n] > 0x7E) return false;
+  return n >= 8 && n <= maxLen;
+}
+
 // ---- GPS plausibility -------------------------------------------------------
 // Implied ground speed in km/h between two fixes.
 //
@@ -852,8 +864,12 @@ static inline int calc_parse_page(const char *s, int maxPage) {
 // It covers every name this firmware writes: drive_/trip_/track_ files, dated
 // (drive_2026-09-25_14-32_3fa81c.csv) or numbered (trip_0012_3fa81c.gpx),
 // maybe with the encrypted suffix, and sleeplog.txt.
+//
+// The longest of those is 39 (drive_2026-09-25_14-32_9_3fa81c.csv.nge), so the
+// limit leaves room; it was 40, one character from refusing a real log.
+#define CALC_SAFE_NAME_MAX 47
 static inline bool calc_safe_name(const char *s, size_t len) {
-  if (!s || len == 0 || len > 40) return false;
+  if (!s || len == 0 || len > CALC_SAFE_NAME_MAX) return false;
   for (size_t i = 0; i < len; i++) {
     const char c = s[i];
     const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -879,4 +895,23 @@ static inline bool calc_is_drive_log(const char *name, const char *cryptSuffix) 
   const char *ext = name + len - 4;
   return strncmp(ext, ".gpx", 4) == 0 || strncmp(ext, ".csv", 4) == 0 ||
          strncmp(ext, ".vbo", 4) == 0;
+}
+
+// ---- is a firmware image ours? -------------------------------------------------
+// Looks for `mark` in a stream fed in chunks of any size, a match split across
+// two chunks included. The firmware carries the mark as a string, so any image
+// without it was built from something else. Simple restart on a mismatch, so
+// `mark`'s first character must not appear in it again.
+struct CalcMarkScan {
+  size_t at = 0;      // characters of the mark matched so far
+  bool   seen = false;
+};
+
+static inline void calc_mark_scan(CalcMarkScan *s, const char *mark,
+                                  const uint8_t *d, size_t n) {
+  const size_t len = strlen(mark);
+  for (size_t i = 0; i < n && !s->seen; i++) {
+    if (d[i] == (uint8_t)mark[s->at]) s->seen = ++s->at == len;
+    else s->at = d[i] == (uint8_t)mark[0] ? 1 : 0;
+  }
 }

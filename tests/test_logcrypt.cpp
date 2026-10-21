@@ -124,6 +124,24 @@ static void a_plaintext_file_is_not_mistaken_for_one() {
   CHECK(used == 0);
 }
 
+// A key that would make every file's key public is refused.
+static void low_order_keys_are_refused() {
+  uint8_t sec[32], pub[32];
+  recipient(sec, pub);
+  CHECK(logcrypt_pub_ok(pub));
+  uint8_t bad[32] = { 0 };
+  CHECK(!logcrypt_pub_ok(bad));                              // 0
+  bad[0] = 1;
+  CHECK(!logcrypt_pub_ok(bad));                              // 1
+  static const uint8_t order8[32] = {
+    0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a,
+    0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00 };
+  CHECK(!logcrypt_pub_ok(order8));
+  memset(bad, 0xff, 32);
+  bad[0] = 0xec; bad[31] = 0x7f;                             // p - 1
+  CHECK(!logcrypt_pub_ok(bad));
+}
+
 static void fingerprint_is_12_hex_digits() {
   uint8_t sec[32], pub[32];
   recipient(sec, pub);
@@ -189,6 +207,7 @@ int main() {
   TEST(a_changed_byte_stops_the_reader_there);
   TEST(the_wrong_key_reads_nothing);
   TEST(a_plaintext_file_is_not_mistaken_for_one);
+  TEST(low_order_keys_are_refused);
   TEST(fingerprint_is_12_hex_digits);
   TEST(matches_the_committed_vector);
   TEST_SUMMARY();

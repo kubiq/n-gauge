@@ -5,6 +5,7 @@
 #include "config.h"
 #include "logger.h"     // logger_close() before a reboot
 #include "ui.h"         // ui_show_notice() during an SD install
+#include "calc.h"       // calc_mark_scan()
 #include <Arduino.h>
 #include <Update.h>
 #include "FS.h"
@@ -75,8 +76,20 @@ void ota_task() {
 }
 
 // ---- writing an image ------------------------------------------------------
+// Only this gauge's firmware is installed. The bootloader checks that an
+// image is valid for the chip, nothing more: any ESP32-S3 sketch would be
+// taken, and a wrong .bin picked on the phone would replace the gauge with
+// something that cannot take an update back. The image's own project name
+// does not tell them apart - it is "arduino-lib-builder" for every Arduino
+// sketch - so the firmware carries this string, and an image is accepted only
+// if it carries it too. The scan below is what keeps it in the image. Guards
+// against a mistake, not an attacker: anyone can put the string in a file.
+static const char FIRMWARE_MARK[] = "N-Gauge firmware image";
+static CalcMarkScan markScan;
+
 bool ota_begin(size_t total) {
   lastError[0] = '\0';
+  markScan = CalcMarkScan();
   if (!Update.begin(total ? total : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
     snprintf(lastError, sizeof(lastError), "begin: %s", Update.errorString());
     return false;
@@ -85,6 +98,7 @@ bool ota_begin(size_t total) {
 }
 
 bool ota_write(const uint8_t *data, size_t len) {
+  calc_mark_scan(&markScan, FIRMWARE_MARK, data, len);
   if (Update.write((uint8_t *)data, len) != len) {
     snprintf(lastError, sizeof(lastError), "write: %s", Update.errorString());
     Update.abort();
@@ -94,6 +108,11 @@ bool ota_write(const uint8_t *data, size_t len) {
 }
 
 bool ota_end() {
+  if (!markScan.seen) {
+    snprintf(lastError, sizeof(lastError), "not N Gauge firmware");
+    Update.abort();
+    return false;
+  }
   // end(true): accept the size written so far as the image size. Update
   // checks the image header and its SHA-256 before switching the boot slot.
   if (!Update.end(true)) {

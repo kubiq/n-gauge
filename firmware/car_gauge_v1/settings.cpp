@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "config.h"
 #include "calc.h"
+#include "logcrypt.h"       // logcrypt_pub_ok
 #include "ui.h"             // VIEW_WIFI: never persisted, see settings_save_view
 #include <Preferences.h>
 #include <esp_random.h>
@@ -157,13 +158,14 @@ void settings_load() {
   String pass = prefs.getString("apPass", "");
   strncpy(settings.apPass, pass.c_str(), sizeof(settings.apPass) - 1);
   settings.apPass[sizeof(settings.apPass) - 1] = '\0';
-  // No stored passphrase (first boot or wiped NVS), or one too short for WPA2
-  // - which would make softAP() fail and lock us out entirely. Generate a
+  // No stored passphrase (first boot or wiped NVS), or one WPA2 refuses (too
+  // short, or a character outside printable ASCII, saved before that was
+  // checked) - which would make softAP() fail and lock us out entirely. Generate a
   // random per-device one rather than falling back to a compiled-in default:
   // there isn't one any more, on purpose. Written back below so it survives
   // the next boot, and shown on the WiFi screen so it can be read in the car.
   bool freshPass = false;
-  if (strlen(settings.apPass) < 8) {
+  if (!calc_ap_pass_ok(settings.apPass, sizeof(settings.apPass) - 1)) {
     genApPass(settings.apPass, sizeof(settings.apPass));
     freshPass = true;
   }
@@ -182,9 +184,11 @@ void settings_load() {
   // axis. Reading a new key makes those stale entries fail closed into a
   // fresh auto-zero instead of being trusted.
   settings.gmCal    = prefs.getBool("gmCal3", false);
-  // A 32-byte blob or nothing: anything else stored there is not a key.
+  // A 32-byte blob or nothing: anything else stored there is not a key. Nor
+  // is one that gives every file a public key (stored before the check was).
   settings.logKey = prefs.isKey("logPub") &&
-                    prefs.getBytes("logPub", settings.logPub, sizeof(settings.logPub)) == sizeof(settings.logPub);
+                    prefs.getBytes("logPub", settings.logPub, sizeof(settings.logPub)) == sizeof(settings.logPub) &&
+                    logcrypt_pub_ok(settings.logPub);
   if (!settings.logKey) memset(settings.logPub, 0, sizeof(settings.logPub));
   prefs.end();
   settings_fixup();
@@ -239,7 +243,7 @@ bool settings_set_log_key(const char *hex) {
     memset(settings.logPub, 0, sizeof(settings.logPub));
   } else {
     uint8_t pub[32];
-    if (!calc_parse_hex(hex, pub, sizeof(pub))) return false;
+    if (!calc_parse_hex(hex, pub, sizeof(pub)) || !logcrypt_pub_ok(pub)) return false;
     if (settings.logKey && memcmp(pub, settings.logPub, sizeof(pub)) == 0) return true;
     memcpy(settings.logPub, pub, sizeof(pub));
     settings.logKey = true;
@@ -295,8 +299,7 @@ bool settings_set_ap_ssid(const char *ssid) {
 
 bool settings_set_ap_pass(const char *pass) {
   if (!pass) return false;
-  const size_t n = strlen(pass);
-  if (n < 8 || n > sizeof(settings.apPass) - 1) return false;   // WPA2 minimum
+  if (!calc_ap_pass_ok(pass, sizeof(settings.apPass) - 1)) return false;
   strncpy(settings.apPass, pass, sizeof(settings.apPass) - 1);
   settings.apPass[sizeof(settings.apPass) - 1] = '\0';
   settings_save();

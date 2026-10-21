@@ -131,6 +131,21 @@ static inline void logcrypt_end(LogcryptSeg *s) {
   crypto_wipe(s, sizeof(*s));
 }
 
+// Whether `pub` can be encrypted to. X25519 against a low-order point - all
+// zeros among them - gives an all-zero shared secret whatever our ephemeral
+// key is, so every file would have a key anyone can derive: "encrypted" logs
+// that are not. Clamping clears the cofactor, so one trial with any secret
+// tells: such a point gives zero for every secret, a real key for none.
+static inline bool logcrypt_pub_ok(const uint8_t pub[32]) {
+  uint8_t trial[32], shared[32];
+  memset(trial, 0x5A, sizeof(trial));
+  crypto_x25519(shared, trial, pub);
+  uint8_t any = 0;
+  for (int i = 0; i < 32; i++) any |= shared[i];
+  crypto_wipe(shared, sizeof(shared));
+  return any != 0;
+}
+
 // Fingerprint of a public key, to compare the pod's against the phone's by
 // eye: the first 6 bytes of BLAKE2b-256(pub), as 12 hex digits.
 static inline void logcrypt_fingerprint(char out[13], const uint8_t pub[32]) {

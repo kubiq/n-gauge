@@ -392,20 +392,32 @@ static void handleSave() {
   // WiFi identity last: changing either restarts the AP and drops this
   // connection, so everything else must already be saved by then.
   bool apChanged = false;
+  char oldSsid[sizeof(settings.apSsid)], oldPass[sizeof(settings.apPass)];
+  memcpy(oldSsid, settings.apSsid, sizeof(oldSsid));
+  memcpy(oldPass, settings.apPass, sizeof(oldPass));
   if (server.hasArg("apSsid") && server.arg("apSsid").length() > 0) {
     if (settings_set_ap_ssid(server.arg("apSsid").c_str())) apChanged = true;
     else msg = "Settings saved, but the network name was rejected (1-32 chars).";
   }
   if (server.hasArg("apPass") && server.arg("apPass").length() > 0) {
     if (settings_set_ap_pass(server.arg("apPass").c_str())) apChanged = true;
-    else msg = "Settings saved, but the WiFi password was rejected (needs 8-32 chars).";
+    else msg = "Settings saved, but the WiFi password was rejected (8-32 plain ASCII characters).";
   }
   if (apChanged) {
     server.send(200, "text/plain",
                 "Saved. WiFi changed - reconnect, then rescan the QR on the "
                 "gauge if you changed the password.");
     delay(300);                         // let the response actually go out
-    WiFi.softAP(settings.apSsid, settings.apPass);
+    // Both are checked on the way in, but the driver has the last word. Kept
+    // only once it takes them: a saved pair it refuses is an AP that never
+    // comes up again, on any boot - and the AP is the only way in.
+    if (!WiFi.softAP(settings.apSsid, settings.apPass)) {
+      Serial.println(F("[ERR] softAP refused the new WiFi name/password - keeping the old"));
+      memcpy(settings.apSsid, oldSsid, sizeof(oldSsid));
+      memcpy(settings.apPass, oldPass, sizeof(oldPass));
+      settings_save();
+      WiFi.softAP(settings.apSsid, settings.apPass);
+    }
     return;
   }
   server.send(200, "text/plain", msg);
@@ -447,7 +459,10 @@ static const char *mimeFor(const String &n) {
 // slots, so after deletions the newest log sat mid-list. The names go into
 // one PSRAM table for the sort - a card of logs can be thousands of names,
 // and internal RAM is what WiFi runs on.
-static constexpr size_t CARD_NAME_MAX = 48;   // safeName() admits up to 40
+// A table slot, NUL included. A name that does not fit is stored empty rather
+// than cut: a cut name could pass safeName() and stand for another file.
+static constexpr size_t CARD_NAME_MAX = 48;
+static_assert(CARD_NAME_MAX > CALC_SAFE_NAME_MAX, "every safe name must fit a slot");
 
 static int byCardOrder(const void *a, const void *b) {
   return calc_card_order((const char *)a, (const char *)b);
@@ -477,8 +492,12 @@ static int listCardPage(int page, int perPage, String *names, int *nShown) {
     for (String n = root.getNextFileName(&isDir); n.length(); n = root.getNextFileName(&isDir)) {
       if (isDir) continue;
       // Pass 0 counts; pass 1 fills the table (as many as were counted).
-      if (pass == 1 && i < nFiles)
-        strlcpy(table + i * CARD_NAME_MAX, n.c_str() + (n[0] == '/'), CARD_NAME_MAX);
+      if (pass == 1 && i < nFiles) {
+        const char *bare = n.c_str() + (n[0] == '/');
+        char *slot = table + i * CARD_NAME_MAX;
+        if (strlen(bare) < CARD_NAME_MAX) strcpy(slot, bare);
+        else slot[0] = '\0';
+      }
       i++;
       if ((i & 31) == 0) esp_task_wdt_reset();   // bounded by the file count
     }
@@ -554,6 +573,9 @@ static void handleFiles() {
     nFiles = 0;
   }
   for (int k = 0; k < nShown; k++) {
+    // Card names go into HTML and a link: only ones safeName() admits, which
+    // carry no markup and are the only ones /dl would serve anyway.
+    if (!safeName(names[k])) continue;
     const long size = cardFileSize(names[k]);
     char row[240];
     snprintf(row, sizeof(row),

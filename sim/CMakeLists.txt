@@ -39,6 +39,7 @@ add_executable(gauge-sim
   ${FW}/obd_fresh.cpp
   ${FW}/laps.cpp
   ${FW}/settings.cpp
+  ${FW}/monocypher.c    # settings.cpp checks a log key (logcrypt_pub_ok)
   ${FW_IMAGES})
 target_include_directories(gauge-sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/stubs ${FW})
 target_compile_options(gauge-sim PRIVATE -Wno-unused-function -Wno-unused-variable)

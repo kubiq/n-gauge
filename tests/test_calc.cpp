@@ -763,8 +763,21 @@ static void hex_parses_exactly_or_not_at_all() {
   CHECK(keep[0] == 9 && keep[3] == 9);             // untouched on failure
 }
 
+// A passphrase the WiFi driver would refuse must never be saved.
+static void ap_pass_is_8_to_max_printable_ascii() {
+  CHECK(calc_ap_pass_ok("12345678", 32));
+  CHECK(calc_ap_pass_ok("with spaces ~!", 32));
+  CHECK(!calc_ap_pass_ok("1234567", 32));
+  CHECK(!calc_ap_pass_ok("123456789", 8));
+  CHECK(!calc_ap_pass_ok("tab\there1", 32));
+  CHECK(!calc_ap_pass_ok("heslo\xc5\xa1\xc5\xa1\xc5\xa1", 32));     // UTF-8
+  CHECK(!calc_ap_pass_ok("del\x7f" "chars", 32));
+  CHECK(!calc_ap_pass_ok(nullptr, 32));
+}
+
 int main() {
   printf("test_calc\n");
+  TEST(ap_pass_is_8_to_max_printable_ascii);
   TEST(fresh_ages_out_and_survives_the_wrap);
   TEST(clock_fix_steps_only_when_it_must);
   TEST(hex_parses_exactly_or_not_at_all);

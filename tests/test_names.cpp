@@ -44,8 +44,11 @@ static void header_breaking_and_odd_characters_are_refused() {
 static void empty_and_overlong_are_refused() {
   CHECK(!safe(""));
   CHECK(!calc_safe_name(nullptr, 3));
-  CHECK(safe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));     // 40
-  CHECK(!safe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));   // 41
+  char s[CALC_SAFE_NAME_MAX + 2];
+  memset(s, 'a', sizeof(s) - 1);
+  s[sizeof(s) - 1] = '\0';
+  CHECK(!calc_safe_name(s, CALC_SAFE_NAME_MAX + 1));
+  CHECK(calc_safe_name(s, CALC_SAFE_NAME_MAX));
 }
 
 static bool log(const char *s) { return calc_is_drive_log(s, LOGCRYPT_SUFFIX); }
@@ -87,8 +90,27 @@ static void page_numbers_are_digits_in_range() {
   CHECK(100000LL * 50 < 2147483647LL);
 }
 
+// The firmware update's "is this ours" check.
+static bool scan(const char *mark, const char *data, size_t chunk) {
+  CalcMarkScan s;
+  const size_t n = strlen(data);
+  for (size_t i = 0; i < n; i += chunk)
+    calc_mark_scan(&s, mark, (const uint8_t *)data + i, n - i < chunk ? n - i : chunk);
+  return s.seen;
+}
+
+static void the_firmware_mark_is_found_however_the_image_is_chunked() {
+  const char *img = "\xE9\x05junk N-Gaug N-Gauge fw tail";
+  for (size_t chunk = 1; chunk <= strlen(img); chunk++)
+    CHECK(scan("N-Gauge fw", img, chunk));
+  CHECK(scan("N-Gauge fw", "NN-Gauge fw", 3));          // a restart on the first char
+  CHECK(!scan("N-Gauge fw", "another sketch, N-Gauge f", 4));
+  CHECK(!scan("N-Gauge fw", "", 4));
+}
+
 int main() {
   printf("test_names\n");
+  TEST(the_firmware_mark_is_found_however_the_image_is_chunked);
   TEST(page_numbers_are_digits_in_range);
   TEST(every_name_the_firmware_writes_is_safe);
   TEST(separators_and_parent_dirs_are_refused);
