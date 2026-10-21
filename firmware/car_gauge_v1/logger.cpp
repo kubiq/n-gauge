@@ -89,6 +89,8 @@ static volatile bool stopped = false;
 
 void logger_init() {
   if (!sdLock) sdLock = xSemaphoreCreateRecursiveMutex();
+  // From setup(), and the AP only starts from loop(): the radio is not up yet.
+  logsink_seed();
   // The batches in PSRAM (see log_sink.cpp), once, before any writer runs.
   // Without them logging stays off, and the "no SD card" fault says nothing
   // is being logged.

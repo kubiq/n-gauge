@@ -58,6 +58,8 @@ void logfile_commit(LogFile &lf);
 void logfile_end(LogFile &lf);
 // Each logger pass: stir the entropy pool the segment keys come from.
 void logsink_stir();
+// Once per boot, before WiFi starts: seed that pool with true randomness.
+void logsink_seed();
 
 // ---- names (log_names.cpp) --------------------------------------------------
 // A new session id, once per boot or wake: every file it writes carries it.

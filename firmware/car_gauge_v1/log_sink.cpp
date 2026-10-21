@@ -6,6 +6,8 @@
 #include "settings.h"   // logKey / logPub: whether, and to whom, to encrypt
 #include "webapi.h"     // web_is_up(): the RNG is true-random with the radio on
 #include <esp_random.h>
+#include <esp_attr.h>           // RTC_DATA_ATTR
+#include <bootloader_random.h>  // the RNG's entropy source with the radio off
 #include <esp_heap_caps.h>
 #include <stdarg.h>
 
@@ -23,8 +25,27 @@
 // may open at the first fix. So RNG output is stirred into a pool on every
 // pass with the AP up, and each secret is BLAKE2b(pool, fresh RNG output); the
 // pool is then ratcheted, so the secret cannot be recomputed from it later.
-static uint8_t  entropy[32];
+//
+// After a deep-sleep wake the AP is often not up yet when the first file
+// opens, and a plain static pool started from zeros: those keys came from the
+// RNG with no entropy source at all. So the pool is kept in RTC memory across
+// sleep, and seeded at every boot from the RNG with the SAR ADC noise source
+// switched on (logsink_seed) - in setup(), before the radio exists, because
+// that source must not run alongside WiFi or the ADC.
+static RTC_DATA_ATTR uint8_t entropy[32];
 static uint32_t entropyStirs = 0;
+static bool     entropySeeded = false;
+
+void logsink_seed() {
+  uint8_t m[32 + 32];
+  memcpy(m, entropy, 32);
+  bootloader_random_enable();
+  esp_fill_random(m + 32, 32);
+  bootloader_random_disable();
+  crypto_blake2b(entropy, sizeof(entropy), m, sizeof(m));
+  crypto_wipe(m, sizeof(m));
+  entropySeeded = true;
+}
 
 void logsink_stir() {
   if (!web_is_up()) return;
@@ -45,8 +66,8 @@ static void ephSecret(uint8_t out[32]) {
   m[0] ^= 0x01;                                    // a different input for the ratchet
   crypto_blake2b(entropy, sizeof(entropy), m, sizeof(m));
   crypto_wipe(m, sizeof(m));
-  if (entropyStirs == 0)
-    Serial.println(F("[..] log key from the RNG with the radio off - the AP was never up this boot"));
+  if (!entropySeeded && entropyStirs == 0)
+    Serial.println(F("[ERR] log key from an unseeded RNG - logsink_seed() never ran"));
 }
 
 // Where the logs' RAM is, and why (2026-10-17). The batch buffers (each
