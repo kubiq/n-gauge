@@ -93,6 +93,9 @@ enum UiFault : uint8_t {
                               // full or failing (logger_write_failed)       (amber)
 };
 #define FAULT_COUNT 6   // bits in UiFault - the notice's text table has one each
+// A fault added without raising FAULT_COUNT would have no text, and its bit
+// would never be found by the notice (ui_notice.cpp).
+static_assert(FAULT_SD_WRITE == 1u << (FAULT_COUNT - 1), "FAULT_COUNT is the last bit + 1");
 // The faults shown red; the rest are amber.
 #define FAULTS_RED (FAULT_OIL_HOT | FAULT_COOL_HOT | FAULT_CAN)
 

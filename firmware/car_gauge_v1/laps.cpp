@@ -14,7 +14,8 @@
 // ---- session state that must survive deep sleep ----------------------------
 // A pit stop with the engine off lets the pod sleep after five minutes, and a
 // track-day session should not end because of it. RTC_DATA_ATTR keeps these
-// across sleep; a power cycle clears them, which is someone unplugging the pod.
+// across sleep, and only sleep: every other restart (power, watchdog, crash,
+// update) starts them from their initial values - see laps.h.
 RTC_DATA_ATTR static bool     searching = false;   // START tapped, line not found yet
 RTC_DATA_ATTR static bool     gateSet   = false;   // the line is known
 RTC_DATA_ATTR static int32_t  gateLat = 0, gateLon = 0;

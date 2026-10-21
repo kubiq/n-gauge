@@ -207,8 +207,14 @@ static void noticeRedraw() {
     "SD card full or failing",            // FAULT_SD_WRITE
   };
   static_assert(sizeof(text) / sizeof(text[0]) == FAULT_COUNT, "one text per UiFault bit");
+  // Bounded: a selection with no bit the table knows - none should reach
+  // here - hides the notice rather than walking off the end of text[].
   int idx = 0;
-  while (!(noticeSel & (1u << idx))) idx++;
+  while (idx < FAULT_COUNT && !(noticeSel & (1u << idx))) idx++;
+  if (idx >= FAULT_COUNT) {
+    lv_obj_add_flag(noticeRing, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
   char what[40];
   snprintf(what, sizeof(what), text[idx],
            idx == 0 ? noticeOilC : idx == 1 ? noticeCoolC : 0);
@@ -217,7 +223,7 @@ static void noticeRedraw() {
   // others and that tapping moves through them. Replaces the old "+N", which
   // said others existed but gave no way to read them.
   int count = 0, pos = 0;
-  for (int b = 0; b < 8; b++) {
+  for (int b = 0; b < FAULT_COUNT; b++) {
     if (!(noticeShown & (1u << b))) continue;
     count++;
     if (b <= idx) pos = count;

@@ -16,7 +16,9 @@
 // fix's time outright would be up to 40 ms out.
 //
 // The gate and the best/last laps survive deep sleep (a pit stop long enough
-// for the pod to sleep does not end the session). A power cycle clears them.
+// for the pod to sleep does not end the session) - and nothing else: any
+// other restart clears them, a watchdog reset, a crash or a firmware update
+// as much as a power cycle. RTC memory is only kept across a deep-sleep wake.
 // ============================================================================
 #pragma once
 #include <stdint.h>

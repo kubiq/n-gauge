@@ -404,6 +404,10 @@
 // The screen, the coolant warning and the CSV's coolantC use this; PID 0x05
 // is still polled and logged (coolantPid05C) as the raw sensor. Note the
 // warning therefore trips ~2-3 °C (of PID 0x05) later than before.
+// Rounded, where the oil above truncates - on purpose, not a slip: oil's
+// formula was validated against truncated readings and stays as it was (see
+// tests/test_formulas.cpp); coolant is new and has no such history. So the
+// two read up to 1 °C apart for the same raw byte.
 #define COOLANT_FROM_E001        1
 #define COOLANT_MODE22_OFFSET    25
 #define COOLANT_FROM_MODE22(d)   ((int)lroundf((d)[COOLANT_MODE22_OFFSET] * 0.7435f - 49.2f))

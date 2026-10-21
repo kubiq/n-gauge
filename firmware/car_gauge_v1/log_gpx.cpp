@@ -89,7 +89,8 @@ static void gpxCommit() {
 // stop is several wakes. Resetting per wake would zero the trip at every stop,
 // and resetting per GPX file would do the same, since each wake opens a new
 // one. A power cycle DOES clear it, which is correct - that is someone
-// unplugging the pod.
+// unplugging the pod. So does any other restart that is not a wake (a
+// watchdog reset, a crash, an update): RTC memory is kept across sleep only.
 //
 // float rather than double: 24 bits of mantissa still resolves ~0.06 m at
 // 1000 km, far finer than the fixes being summed.

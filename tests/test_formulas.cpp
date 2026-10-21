@@ -59,7 +59,10 @@ static void oil_mode22_offset_is_the_oil_byte_not_coolant() {
 
   // Byte 25 = 0x9E = 158 -> 68 C, i.e. coolant. This is the value the gauge
   // wrongly showed while the dashboard read ~50 C - the original bug report.
-  CHECK_EQ((int)(payload[25] * 0.7435f - 49.2f), 68);
+  // Through the coolant macro itself, which reads that byte: a copy of the
+  // formula here passed whatever the macro did.
+  CHECK_EQ(COOLANT_FROM_MODE22(payload), 68);
+  CHECK(COOLANT_MODE22_OFFSET == 25);
 
   // Both bytes share the 101-193 raw range, i.e. the same encoding - which is
   // why the formula did not need refitting when the offset moved.

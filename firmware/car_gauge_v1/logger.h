@@ -98,7 +98,7 @@ void logger_note_boot(const char *line);
 // noise at a standstill does not accumulate. Survives deep sleep, so a fuel
 // stop does not reset it. Resets after settings.tripGapMin minutes without an
 // accepted point (default TRIP_GAP_MIN, editable from the settings page), or on
-// a power cycle.
+// any restart that is not a deep-sleep wake (power, watchdog, crash, update).
 float logger_trip_km();
 
 // How much is logged - settings.logLevel. Each level adds to the one below.
