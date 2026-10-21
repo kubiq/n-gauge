@@ -4,6 +4,7 @@
 // file pages: a name that gets through is opened, served or deleted.
 // ============================================================================
 #include "test.h"
+#include <string>
 #include "../firmware/car_gauge_v1/calc.h"
 #include "../firmware/car_gauge_v1/logcrypt.h"   // LOGCRYPT_SUFFIX, as the firmware uses it
 
@@ -108,8 +109,76 @@ static void the_firmware_mark_is_found_however_the_image_is_chunked() {
   CHECK(!scan("N-Gauge fw", "", 4));
 }
 
+// Form values from a query string or a urlencoded body (the web server hands
+// them over raw since esp_http_server).
+static void form_values_are_found_and_decoded() {
+  char v[32];
+  const char *f = "a=1&apSsid=my+car%21&empty=&flag&tz=UTC%2B1&bad=%zz%4";
+  CHECK(calc_form_value(f, "a", v, sizeof(v)) && strcmp(v, "1") == 0);
+  CHECK(calc_form_value(f, "apSsid", v, sizeof(v)) && strcmp(v, "my car!") == 0);
+  CHECK(calc_form_value(f, "empty", v, sizeof(v)) && v[0] == '\0');
+  CHECK(calc_form_value(f, "flag", v, sizeof(v)) && v[0] == '\0');
+  CHECK(calc_form_value(f, "tz", v, sizeof(v)) && strcmp(v, "UTC+1") == 0);
+  CHECK(calc_form_value(f, "bad", v, sizeof(v)) && strcmp(v, "%zz%4") == 0);   // not escapes: as sent
+  CHECK(!calc_form_value(f, "ap", v, sizeof(v)));          // a prefix is not the key
+  CHECK(!calc_form_value(f, "missing", v, sizeof(v)) && v[0] == '\0');
+  char small[4];
+  CHECK(calc_form_value(f, "apSsid", small, sizeof(small)) && strcmp(small, "my ") == 0);
+  CHECK(!calc_form_value("", "a", v, sizeof(v)));
+}
+
+static void multipart_boundary_from_the_header() {
+  char b[72];
+  CHECK(calc_multipart_boundary("multipart/form-data; boundary=----WebKitX1", b, sizeof(b)) &&
+        strcmp(b, "----WebKitX1") == 0);
+  CHECK(calc_multipart_boundary("multipart/form-data; boundary=\"a b\"; x=y", b, sizeof(b)) &&
+        strcmp(b, "a b") == 0);
+  CHECK(!calc_multipart_boundary("application/octet-stream", b, sizeof(b)));
+  CHECK(!calc_multipart_boundary("multipart/form-data", b, sizeof(b)));
+}
+
+// The content of the first part, whatever the chunking - including content
+// that holds a CR LF, "--", and the start of the boundary.
+static std::string multipart_read(const std::string &body, const char *boundary, size_t chunk,
+                                  bool *ended) {
+  CalcMultipart m;
+  CHECK(calc_multipart_begin(&m, boundary));
+  std::string out;
+  bool done = false;
+  for (size_t i = 0; i < body.size() && !done; i += chunk) {
+    const size_t n = body.size() - i < chunk ? body.size() - i : chunk;
+    done = calc_multipart_feed(&m, (const uint8_t *)body.data() + i, n,
+                               [&](const uint8_t *d, size_t k) { out.append((const char *)d, k); });
+  }
+  *ended = done;
+  return out;
+}
+
+static void multipart_content_streams_out_in_any_chunks() {
+  const char *B = "XyZ123";
+  const std::string content = std::string("\xE9\x00\x01 a\r\nb\r\n--Xy\r\n--XyZ12 end\r", 32);
+  const std::string body = std::string("--") + B + "\r\n"
+      "Content-Disposition: form-data; name=\"fw\"; filename=\"fw.bin\"\r\n"
+      "Content-Type: application/octet-stream\r\n\r\n" +
+      content + "\r\n--" + B + "--\r\n";
+  for (size_t chunk = 1; chunk <= body.size(); chunk++) {
+    bool ended = false;
+    const std::string got = multipart_read(body, B, chunk, &ended);
+    CHECK(got == content);
+    CHECK(ended);
+  }
+  // A body cut before its closing boundary: what came, and not ended.
+  bool ended = true;
+  const std::string cut = body.substr(0, body.size() - 20);
+  CHECK(multipart_read(cut, B, 7, &ended).size() <= content.size());
+  CHECK(!ended);
+}
+
 int main() {
   printf("test_names\n");
+  TEST(form_values_are_found_and_decoded);
+  TEST(multipart_boundary_from_the_header);
+  TEST(multipart_content_streams_out_in_any_chunks);
   TEST(the_firmware_mark_is_found_however_the_image_is_chunked);
   TEST(page_numbers_are_digits_in_range);
   TEST(every_name_the_firmware_writes_is_safe);

@@ -86,8 +86,8 @@ static SemaphoreHandle_t sdLock = nullptr;
 void logger_sd_lock()   { if (sdLock) xSemaphoreTakeRecursive(sdLock, portMAX_DELAY); }
 void logger_sd_unlock() { if (sdLock) xSemaphoreGiveRecursive(sdLock); }
 
-// Half a second at a time, the watchdog fed in between - the callers are on
-// the loop's task, which it watches.
+// Half a second at a time, the watchdog fed in between when the caller is
+// watched - loop() is; the web server's task is not (taskwdt_feed).
 bool logger_sd_lock_for(uint32_t ms) {
   if (!sdLock) return true;          // before logger_init: nothing else uses the card
   const uint32_t t0 = millis();
@@ -95,7 +95,7 @@ bool logger_sd_lock_for(uint32_t ms) {
     const uint32_t waited = millis() - t0;
     const uint32_t step = ms - waited < 500 ? ms - waited : 500;
     if (xSemaphoreTakeRecursive(sdLock, pdMS_TO_TICKS(step)) == pdTRUE) return true;
-    esp_task_wdt_reset();
+    taskwdt_feed();
     if (millis() - t0 >= ms) {
       Serial.println(F("[ERR] SD card busy - a save has held it too long"));
       return false;

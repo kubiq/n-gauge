@@ -29,8 +29,8 @@
 void web_start();           // bring it up (no-op if already up)
 void web_stop();            // bring it down; called before deep sleep
 bool web_is_up();
-// A /dl transfer is running on its own task, with a card file open: the
-// card is not to be unmounted or lent to the PC meanwhile.
+// A /dl transfer is running (on the web server's task), with a card file
+// open: the card is not to be unmounted or lent to the PC meanwhile.
 bool web_download_active();
 // Times since boot web_start() declined: under AP_MIN_INTERNAL_HEAP free.
 uint32_t web_ap_refused();
@@ -43,4 +43,7 @@ const char *web_ip();       // AP IP as text, "" when down
 const char *web_reset_text();   // why the gauge last started, in a word
 // SD space in KB, cached for a minute; 0/0 with no card or while shared.
 void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb);
-void web_task();            // call often while up; cheap no-op when down
+// Every loop() pass: what the server's handlers hand to loop() - settings and
+// clock changes, notices, the AP restart, the reboot after an update - and
+// the captive portal's DNS. The server itself runs on its own task.
+void web_task();

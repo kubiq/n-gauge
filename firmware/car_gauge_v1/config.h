@@ -344,9 +344,8 @@
 // Everything but the screen runs on core 0, so loop() on core 1 (priority 1)
 // renders undisturbed. One table, because the priorities only mean something
 // against each other: CAN first (its replies arrive back to back and the
-// queue must not overflow), then the GNSS UART, then the card. The logger and
-// the download share priority 1 and spend most of their time waiting on the
-// card or the socket. Stacks in bytes.
+// queue must not overflow), then the GNSS UART, then the web server, then the
+// card - the logger spends most of its time waiting on it. Stacks in bytes.
 #define TASK_CORE             0
 #define TASK_OBD_PRIO         5
 #define TASK_OBD_STACK        4096
@@ -354,8 +353,11 @@
 #define TASK_GPS_STACK        6144
 #define TASK_LOGGER_PRIO      1
 #define TASK_LOGGER_STACK     8192
-#define TASK_DL_PRIO          1
-#define TASK_DL_STACK         4096
+// The web server, above the logger (a page should not wait out a save) and
+// below the GNSS. Its stack in internal RAM, not PSRAM: a firmware update
+// writes flash from it, which a PSRAM stack cannot.
+#define TASK_WEB_PRIO         2
+#define TASK_WEB_STACK        8192
 
 // ---- Oil temperature -------------------------------------------------------
 // Mode 22 DID 0xE001, from the Car Scanner "i30 N" PID profile. The standard
@@ -985,11 +987,19 @@
 // until LVGL's pool was moved to PSRAM (see lv_conf.h).
 #define AP_MIN_INTERNAL_HEAP (80 * 1024)
 
-// Log downloads: a client that has taken nothing for DL_CLIENT_TIMEOUT_MS is
-// dropped (webapi.cpp's sendAll - well inside the 8 s watchdog), and a whole
-// transfer has a ceiling so one request cannot occupy the loop forever.
-#define DL_CLIENT_TIMEOUT_MS 1500
+// The web server (esp_http_server, its own task - webapi.cpp). A client that
+// sends nothing for WEB_RECV_TIMEOUT_S, or takes nothing for
+// WEB_SEND_TIMEOUT_S, is dropped. A download also has a ceiling, so one
+// request cannot hold the server forever.
+#define WEB_RECV_TIMEOUT_S   5
+#define WEB_SEND_TIMEOUT_S   2
 #define DL_MAX_MS            120000
+// A handler that must run on loop() (it touches the screen, I2C or settings
+// the loop reads) waits at most this long for it, then answers 503.
+#define WEB_LOOP_WAIT_MS     3000
+// The request headers the server takes: the core's 1 KB default is short of a
+// desktop browser's.
+#define WEB_MAX_HDR_LEN      2048
 
 // NOTE: the values below are DEFAULTS ONLY. Anything editable from the phone
 // lives in settings.h/NVS at runtime - change it there, not here, unless you

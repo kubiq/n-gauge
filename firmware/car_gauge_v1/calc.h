@@ -942,3 +942,131 @@ static inline void calc_mark_scan(CalcMarkScan *s, const char *mark,
     else s->at = d[i] == (uint8_t)mark[0] ? 1 : 0;
   }
 }
+
+// ---- a request's form values -----------------------------------------------------
+// `form` is "a=1&b=x%20y" - a query string, or an x-www-form-urlencoded body.
+// The value of `key`, URL-decoded ('+' is a space, %XX a byte), into out
+// (cut to outLen - 1). False when the key is absent; a key with no '=' is
+// present with "" (an HTML checkbox can send that). Keys compare as sent.
+// The web server hands these over raw; WebServer used to decode them.
+static inline int calc_hex_digit(char c) {
+  return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+       : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+static inline bool calc_form_value(const char *form, const char *key, char *out, size_t outLen) {
+  if (out && outLen) out[0] = '\0';
+  if (!form || !key) return false;
+  const size_t kl = strlen(key);
+  for (const char *p = form; *p;) {
+    const char *end = strchr(p, '&');
+    if (!end) end = p + strlen(p);
+    const char *eq = (const char *)memchr(p, '=', (size_t)(end - p));
+    const char *kEnd = eq ? eq : end;
+    if ((size_t)(kEnd - p) == kl && strncmp(p, key, kl) == 0) {
+      size_t o = 0;
+      for (const char *v = eq ? eq + 1 : end; v < end && out && o + 1 < outLen; v++) {
+        int h, l;
+        if (*v == '+') out[o++] = ' ';
+        else if (*v == '%' && end - v >= 3 &&
+                 (h = calc_hex_digit(v[1])) >= 0 && (l = calc_hex_digit(v[2])) >= 0) {
+          out[o++] = (char)(h * 16 + l);
+          v += 2;
+        } else {
+          out[o++] = *v;
+        }
+      }
+      if (out && outLen) out[o] = '\0';
+      return true;
+    }
+    p = *end ? end + 1 : end;
+  }
+  return false;
+}
+
+// ---- a multipart upload, streamed --------------------------------------------------
+// A firmware image arrives as multipart/form-data - the Device page's form
+// and the app both send it so - and is far too big to hold: it is passed on
+// as it streams in. The boundary is from the Content-Type header
+// (calc_multipart_boundary). Only the FIRST part's content is wanted (both
+// senders have just the one); the rest of the body is ignored.
+//
+// The body is "--B\r\n" headers "\r\n\r\n" content "\r\n--B..." - matched as
+// a delimiter "\r\n--B" with a "\r\n" taken as read before the body, so the
+// first boundary needs no special case. A delimiter split over two chunks,
+// and content bytes that only start like one, are handled: a partly matched
+// delimiter is held back and handed on when it turns out not to be one.
+// Boundaries cannot contain CR, so a mismatch restarts on '\r' alone.
+struct CalcMultipart {
+  char   delim[80];    // "\r\n--" + boundary
+  size_t dlen = 0;
+  size_t match = 0;    // delimiter characters matched so far
+  int    state = 0;    // 0 preamble, 1 part headers, 2 content, 3 done
+  uint32_t hdrTail = 0;   // the last 4 header bytes, for "\r\n\r\n"
+};
+
+// The boundary from a Content-Type value: false if it is not multipart or
+// has none (or one too long for CalcMultipart). Quotes are taken off.
+static inline bool calc_multipart_boundary(const char *ct, char *out, size_t outLen) {
+  if (!ct || strncmp(ct, "multipart/", 10) != 0) return false;
+  const char *b = strstr(ct, "boundary=");
+  if (!b) return false;
+  b += 9;
+  const bool quoted = *b == '"';
+  if (quoted) b++;
+  size_t n = 0;
+  while (b[n] && (quoted ? b[n] != '"' : (b[n] != ';' && b[n] != ' '))) n++;
+  if (n == 0 || n + 1 > outLen) return false;
+  memcpy(out, b, n);
+  out[n] = '\0';
+  return true;
+}
+
+static inline bool calc_multipart_begin(CalcMultipart *m, const char *boundary) {
+  const size_t bl = strlen(boundary);
+  if (bl == 0 || bl + 5 > sizeof(m->delim)) return false;
+  memcpy(m->delim, "\r\n--", 4);
+  memcpy(m->delim + 4, boundary, bl + 1);
+  m->dlen = bl + 4;
+  m->match = 2;              // the "\r\n" before the body
+  m->state = 0;
+  m->hdrTail = 0;
+  return true;
+}
+
+// Feeds `n` body bytes; `emit(const uint8_t *, size_t)` gets the content.
+// True once the content has ended (its closing delimiter seen).
+template <typename Emit>
+static inline bool calc_multipart_feed(CalcMultipart *m, const uint8_t *d, size_t n, Emit emit) {
+  size_t runStart = 0;               // content bytes from here are emitted as a run
+  for (size_t i = 0; i < n && m->state != 3; i++) {
+    const uint8_t c = d[i];
+    if (m->state == 1) {             // part headers, up to the blank line
+      m->hdrTail = (m->hdrTail << 8) | c;
+      if (m->hdrTail == 0x0D0A0D0Au) { m->state = 2; runStart = i + 1; }
+      continue;
+    }
+    if (c == (uint8_t)m->delim[m->match]) {
+      if (m->state == 2 && m->match == 0 && i > runStart) emit(d + runStart, i - runStart);
+      if (++m->match == m->dlen) {   // a whole delimiter
+        m->match = 0;
+        if (m->state == 0) { m->state = 1; m->hdrTail = 0; }
+        else m->state = 3;
+      }
+      runStart = i + 1;
+      continue;
+    }
+    if (m->match > 0) {              // it was not one after all
+      if (m->state == 2) {
+        // Held back so far: what matched before this pass - the part that
+        // came in an earlier chunk, or earlier in this one.
+        emit((const uint8_t *)m->delim, m->match);
+      }
+      m->match = 0;
+      runStart = i;
+      if (c == (uint8_t)m->delim[0]) { m->match = 1; runStart = i + 1; continue; }
+    }
+  }
+  if (m->state == 2 && m->match == 0 && runStart < n) emit(d + runStart, n - runStart);
+  return m->state == 3;
+}
