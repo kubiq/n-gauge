@@ -104,7 +104,10 @@ static volatile bool writeFailed = false;
 
 void logfile_check_write(const LogFile &lf, size_t wrote, size_t want) {
   if (wrote == want) return;
-  if (!writeFailed)
+  // A pulled card fails even ftell(): the position reads as (size_t)-1.
+  if (!writeFailed && want == (size_t)-1)
+    Serial.printf("[ERR] SD write to %s failed - the card is not answering\n", lf.path);
+  else if (!writeFailed)
     Serial.printf("[ERR] SD write to %s came up short (%u of %u bytes)\n",
                   lf.path, (unsigned)wrote, (unsigned)want);
   writeFailed = true;
@@ -145,9 +148,17 @@ void logfile_drain(LogFile &lf) {
   if (lf.afterDrain) lf.afterDrain(lf);
 }
 
+// A batch smaller than the file's stdio buffer reaches the card only here, in
+// flush() - which returns nothing (Arduino's File drops fflush's result). So
+// it is checked by its effect: flushed, the size on the card covers the write
+// position. With the card pulled, or a flush that failed, it does not
+// (2026-10-21, the card pulled on the bench: nothing noticed, the log went on
+// "writing" for minutes). size() is a stat() of the path, ~1 ms.
 void logfile_commit(LogFile &lf) {
   logfile_drain(lf);
   lf.f.flush();
+  const size_t pos = lf.f.position(), size = lf.f.size();
+  if (size < pos) logfile_check_write(lf, size, pos);
 }
 
 bool logfile_vprintf(LogFile &lf, const char *fmt, va_list ap) {
