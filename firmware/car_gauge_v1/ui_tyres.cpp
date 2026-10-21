@@ -89,15 +89,14 @@ void ui_update_tpms(const bool have[WHEEL_COUNT], const float bar[WHEEL_COUNT],
 
   for (int i = 0; i < WHEEL_COUNT; i++) {
     if (!have[i]) {                       // sensor asleep / not reporting yet
-      lv_label_set_text(tyreVal[i], "--");
-      lv_obj_set_style_text_color(tyreVal[i], COL_LINE, 0);
+      show_no_value(tyreVal[i]);
       lv_label_set_text(tyreTemp[i], "");
       continue;
     }
     lv_label_set_text_fmt(tyreVal[i], "%.1f", bar[i]);
     // The pressure's own colour is the warning. There used to be a wheel
     // marker coloured green/red as well; the car picture replaced it.
-    lv_obj_set_style_text_color(tyreVal[i], bad[i] ? COL_BAD : COL_INK, 0);
-    lv_label_set_text_fmt(tyreTemp[i], "%d C", tempC[i]);
+    show_value_style(tyreVal[i], bad[i] ? COL_BAD : COL_INK);
+    lv_label_set_text_fmt(tyreTemp[i], "%d\xC2\xB0" "C", tempC[i]);
   }
 }

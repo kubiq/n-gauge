@@ -150,3 +150,5 @@ bool ui_boot_take_touch();
 // whether it reads "Stop sharing" instead). Call again to refresh.
 void ui_boot_show_bench(const char *text, bool shared);
 void ui_boot_anim_end();
+// The splash (or the bench page) is still on screen.
+bool ui_boot_splash_up();

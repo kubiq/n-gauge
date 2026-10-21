@@ -230,7 +230,47 @@ void ui_update_track(const LapInfo *li) {
     }
   }
 
+  // The arc: hidden with no reference or not timing; otherwise the part of
+  // the best lap driven so far, filling up to the line. Shown or hidden only
+  // on a change - clearing HIDDEN invalidates the whole object (the WiFi
+  // screen's 7 Hz lesson).
+  static int lastArc = -2;
+  int arc = -1;
+  if (li->state == LAP_TIMING && li->refM > 0.0f) {
+    const float left = calc_lap_left_m(li->refM, li->lapM);
+    arc = (int)floorf((li->refM - left) / li->refM * TRACK_ARC_STEPS);
+    if (arc < 0) arc = 0;
+    if (arc > TRACK_ARC_STEPS) arc = TRACK_ARC_STEPS;
+  }
+  if (arc != lastArc) {
+    if ((arc < 0) != (lastArc < 0) || lastArc == -2) {
+      if (arc < 0) lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
+      else         lv_obj_clear_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (arc >= 0) lv_arc_set_value(trkLeft, arc);
+    lastArc = arc;
+  }
+
   // Status: a transient message if one is up, otherwise what to do next.
+  // Formatted only when what it shows changes - the key holds exactly that,
+  // at the resolution each line rounds to - not on every loop pass.
+  int32_t detail = 0;
+  if (li->state == LAP_IDLE) {
+    detail = li->gaveUp;
+  } else if (li->state == LAP_SEARCH) {
+    detail = li->searchM > 0.0f ? 1 + (int32_t)(li->searchM / 100.0f) : 0;
+  } else if (li->state == LAP_TIMING) {
+    const float left = calc_lap_left_m(li->refM, li->lapM);
+    detail = li->refM <= 0.0f ? -1
+           : left < 1000.0f   ? (int32_t)(left / 10.0f)
+           : 1000000 + (int32_t)(left / 100.0f);
+  }
+  static const char *keyMsg = "\x01";               // never a real message
+  static int32_t keyState = -1, keyLaps = -1, keyDetail = -1;
+  if (trkMsg == keyMsg && (int32_t)li->state == keyState && (int32_t)li->laps == keyLaps &&
+      detail == keyDetail)
+    return;
+  keyMsg = trkMsg; keyState = (int32_t)li->state; keyLaps = (int32_t)li->laps; keyDetail = detail;
   char s[48];
   if (trkMsg) {
     snprintf(s, sizeof(s), "%s", trkMsg);
@@ -263,27 +303,6 @@ void ui_update_track(const LapInfo *li) {
         break;
       }
     }
-  }
-
-  // The arc: hidden with no reference or not timing; otherwise the part of
-  // the best lap driven so far, filling up to the line. Shown or hidden only
-  // on a change - clearing HIDDEN invalidates the whole object (the WiFi
-  // screen's 7 Hz lesson).
-  static int lastArc = -2;
-  int arc = -1;
-  if (li->state == LAP_TIMING && li->refM > 0.0f) {
-    const float left = calc_lap_left_m(li->refM, li->lapM);
-    arc = (int)floorf((li->refM - left) / li->refM * TRACK_ARC_STEPS);
-    if (arc < 0) arc = 0;
-    if (arc > TRACK_ARC_STEPS) arc = TRACK_ARC_STEPS;
-  }
-  if (arc != lastArc) {
-    if ((arc < 0) != (lastArc < 0) || lastArc == -2) {
-      if (arc < 0) lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
-      else         lv_obj_clear_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
-    }
-    if (arc >= 0) lv_arc_set_value(trkLeft, arc);
-    lastArc = arc;
   }
   static char lastS[48] = "\x01";                   // never matches real text
   if (strcmp(s, lastS) != 0) {

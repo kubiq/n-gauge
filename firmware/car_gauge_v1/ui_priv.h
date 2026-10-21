@@ -82,8 +82,7 @@ void ui_build_notice();        // ui_notice.cpp: the rim, on lv_layer_top
 // The WiFi screen's and the bench page's "Share SD card" buttons are the same
 // tap (ui_wifi.cpp; read with ui_take_share_tap()).
 void ui_share_btn_cb(lv_event_t *e);
-// The boot splash is up: the rim stays hidden meanwhile (ui_boot.cpp).
-bool ui_boot_splash_up();
+// ui_boot_splash_up() (ui.h): the rim stays hidden while the splash is up.
 
 #if BENCH_CONSOLE
 // For ui_bench() (ui_bench.cpp), which times screens from the inside.

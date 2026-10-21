@@ -12,7 +12,7 @@ extern "C" const lv_image_dsc_t icon_coolant;
 static lv_obj_t *oilArc, *oilVal, *oilState, *oilIcon;
 static lv_obj_t *coolIcon;
 // coolant widgets
-static lv_obj_t *coolArc, *coolVal, *coolState;
+static lv_obj_t *coolArc, *coolVal;
 
 // Whether the car is answering at all - says WHY a value is missing on the
 // oil screen's state line. Set from loop() via ui_set_car_talking().
@@ -52,10 +52,9 @@ lv_obj_t *ui_build_temps() {
     lv_obj_set_size(ic, 50, 40);
     lv_image_set_inner_align(ic, LV_IMAGE_ALIGN_CENTER);
   }
+  // One state line for both: coolant has none of its own - an over-temp
+  // coolant shows as a red inner arc, and this line carries the wording.
   oilState = make_name(s, "", 84);
-  // Coolant has no separate state line any more - an over-temp coolant shows
-  // as a red inner arc, and the oil state line carries the wording.
-  coolState = oilState;
   return s;
 }
 
@@ -81,8 +80,7 @@ void ui_update_oil(bool have, int tempC, bool cold, bool overOil, bool overCool)
     lv_arc_set_value(oilArc, 0);
     lv_obj_set_style_arc_color(oilArc, COL_OIL, LV_PART_INDICATOR);
     lv_obj_set_style_image_recolor(oilIcon, COL_DIM, 0);
-    // The state line is SHARED with coolant (coolState aliases oilState), so
-    // blanking it unconditionally threw away a coolant over-temp warning
+    // The state line is SHARED with coolant, so blanking it unconditionally threw away a coolant over-temp warning
     // whenever the oil DID stopped answering - and coolant is the failure that
     // wrecks an engine fastest. Keep the warning if coolant is still over.
     if (overCool) {

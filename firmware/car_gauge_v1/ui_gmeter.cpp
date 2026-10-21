@@ -98,7 +98,7 @@ lv_obj_t *ui_build_gmeter() {
                          COL_BLUE, (lv_opa_t)(40 + 160 * (1.0f - age)));
   }
   gDot   = make_dot(s, 26, COL_GOOD, LV_OPA_COVER);
-  gLabel = make_name(s, "G-FORCE", 150);
+  gLabel = make_name(s, "0.00 g", 150);   // the figure, from the first sample on
   return s;
 }
 

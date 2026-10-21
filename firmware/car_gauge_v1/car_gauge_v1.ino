@@ -307,7 +307,9 @@ static void benchPageText(char *b, size_t n, uint32_t now) {
 // On the bench (a PC on USB) it is a status page instead, with no timeout:
 // the gauges mean nothing at the desk.
 static void bootSplashTask(uint32_t now, bool canGrace) {
-  if (!ui_boot_anim_done()) return;
+  // Gone already: nothing to hold - and no bench page text to build, which
+  // this went on doing once a second, for a page no longer there.
+  if (!ui_boot_splash_up() || !ui_boot_anim_done()) return;
   const bool bench   = usbdisk_host_connected();
   const bool reading = obd_oil_fresh() || obd_coolant_fresh() || obd_boost_fresh() ||
                        obd_rpm_fresh() || obd_speed_fresh();

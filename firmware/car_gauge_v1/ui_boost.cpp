@@ -70,7 +70,7 @@ void ui_update_boost(bool have, float bar) {
 
   // Compare at display resolution (2 dp) - a float that differs in the 5th
   // decimal would defeat the guard while changing nothing on screen.
-  const int centi = (int)(bar * 100.0f + (bar < 0 ? -0.5f : 0.5f));
+  const int centi = (int)(bar * 100.0f + 0.5f);
   if (have != lastHave || centi != lastCenti) {
     // The symbol only changes with data present/absent - set it then, not on
     // every sample, since each style change redraws it.
@@ -91,8 +91,8 @@ void ui_update_boost(bool have, float bar) {
     lv_label_set_text_fmt(boostVal, "%.2f", bar);
     // Start from where the arc IS, not from the last sample, so a sample that
     // lands mid-glide bends the motion instead of snapping back.
-    from = arcCenti == INT32_MIN ? (bar < 0 ? 0.0f : bar) : arcCenti / 100.0f;
-    to = bar < 0 ? 0.0f : bar;
+    from = arcCenti == INT32_MIN ? bar : arcCenti / 100.0f;
+    to = bar;                                 // never below 0: clamped above
     glideStart = now;
   }
   if (!have) return;
@@ -117,12 +117,11 @@ void ui_update_torque(bool have, float nm) {
   const bool haveChanged = have != lastHave || lastNm == INT32_MIN;
   lastHave = have; lastNm = r;
   if (!have) {
-    lv_label_set_text(torqueVal, "--");
-    lv_obj_set_style_text_color(torqueVal, COL_DIM, 0);
+    show_no_value(torqueVal);
     lv_arc_set_value(torqueArc, 0);
     return;
   }
-  if (haveChanged) lv_obj_set_style_text_color(torqueVal, COL_INK, 0);
+  if (haveChanged) show_value_style(torqueVal, COL_INK);
   lv_arc_set_value(torqueArc, r > TORQUE_ARC_MAX_NM ? TORQUE_ARC_MAX_NM : r);
   lv_label_set_text_fmt(torqueVal, "~%d Nm", r);
 }
