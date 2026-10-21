@@ -736,6 +736,21 @@ static void range_garbage_means_whole_file() {
 
 // Stale must read as no data - and the age is unsigned arithmetic, so it
 // holds when millis() wraps after ~49.7 days of uptime.
+static void elapsed_and_deadlines_survive_the_wrap() {
+  CHECK(calc_elapsed(1500, 1000, 500));
+  CHECK(!calc_elapsed(1499, 1000, 500));
+  CHECK(calc_elapsed(100, 0xFFFFFF00u, 356));        // across the wrap: 356 ms
+  CHECK(!calc_elapsed(100, 0xFFFFFF00u, 357));
+  // A stamp from the other core, a millisecond after this core's `now`: not
+  // 49 days ago. The unsigned form said it was, and power.cpp slept mid-drive.
+  CHECK(!calc_elapsed(1000, 1001, 30000));
+  CHECK(calc_fresh(true, 1001, 1000, 3000));
+  CHECK(calc_reached(2000, 2000));
+  CHECK(!calc_reached(1999, 2000));
+  CHECK(calc_reached(10, 0xFFFFFFF0u));               // the deadline was before the wrap
+  CHECK(!calc_reached(0xFFFFFFF0u, 10));              // and still ahead of it
+}
+
 static void fresh_ages_out_and_survives_the_wrap() {
   CHECK(calc_fresh(true, 1000, 1500, 3000));
   CHECK(!calc_fresh(true, 1000, 4000, 3000));      // exactly max age: stale
@@ -791,6 +806,7 @@ int main() {
   printf("test_calc\n");
   TEST(ap_pass_is_8_to_max_printable_ascii);
   TEST(fresh_ages_out_and_survives_the_wrap);
+  TEST(elapsed_and_deadlines_survive_the_wrap);
   TEST(clock_fix_steps_only_when_it_must);
   TEST(hex_parses_exactly_or_not_at_all);
   TEST(range_reads_the_three_forms);

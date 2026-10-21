@@ -39,7 +39,7 @@ bool vbolog_init() { return logfile_alloc(vbo, VBO_BUF_N); }
 bool vbolog_failed() { return vboFailed; }
 void vbolog_card_back() { vboFailed = false; }
 
-const char *vbolog_path() { return vbo.path; }
+const char *vbolog_path() { return vbo.open ? vbo.path : ""; }
 
 static float gLateral = 0, gLongitudinal = 0;
 void logger_note_g(float lateral, float longitudinal) {

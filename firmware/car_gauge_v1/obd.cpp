@@ -460,7 +460,7 @@ static void obdPoll() {
   if (obd.busOff) return;
 
   const uint32_t lastCar = obd.lastFrameMs;
-  const bool carOn = lastCar != 0 && (int32_t)(now - lastCar) < (int32_t)OBD_STALE_MS;
+  const bool carOn = calc_fresh(lastCar != 0, lastCar, now, OBD_STALE_MS);
 
   // Pace our own requests: one in flight, the next OBD_REQ_GAP_MS after its
   // reply, or after OBD_REQ_TIMEOUT_MS without one - and never mid-transfer.

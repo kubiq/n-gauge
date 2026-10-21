@@ -35,6 +35,7 @@
 #include "ui.h"           // ui_show_notice(): the sleep reason, on the panel
 #include "settings.h"     // settings_log_sleep(): the sleep reason, in NVS
 #include "ota.h"          // ota_confirm(): a wake is a reboot
+#include "calc.h"         // calc_elapsed(): every idle window
 
 // Survives deep sleep (RTC memory), unlike everything else: each wake is a
 // fresh boot, so this is the only way to notice that we keep waking up for
@@ -442,8 +443,8 @@ void power_task() {
       fruitlessWakes = 0;               // a real drive: forget the backoff
       motionFruitless = 0;
       wakeSampling = false;             // bus is alive -> stay up
-    } else if ((int32_t)(millis() - wakeSampleT0) >=
-               (int32_t)(wakeByMotion ? MOTION_WAKE_SAMPLE_MS : WAKE_SAMPLE_MS)) {
+    } else if (calc_elapsed(millis(), wakeSampleT0,
+                            wakeByMotion ? MOTION_WAKE_SAMPLE_MS : WAKE_SAMPLE_MS)) {
       // Only a CAN-caused wake that found nothing counts as chatter. This
       // used to count EVERY empty wake - including the hourly safety-timer
       // wakes, which are supposed to find nothing while parked - so after
@@ -487,8 +488,7 @@ void power_task() {
     lastClientMs = now ? now : 1;       // 0 is the "never" sentinel
     return;
   }
-  if (lastClientMs != 0 &&
-      (int32_t)(now - lastClientMs) < (int32_t)idleSleepMs()) {
+  if (lastClientMs != 0 && !calc_elapsed(now, lastClientMs, idleSleepMs())) {
     return;                            // recently disconnected: full window
   }
 
@@ -499,29 +499,26 @@ void power_task() {
   // going dark 20 s after power-up while they were being cycled - but the same
   // thing would happen in the car with the engine off, which is exactly when
   // someone stands at the door reading tyre pressures.
-  if (lastActivityMs != 0 &&
-      (int32_t)(now - lastActivityMs) < (int32_t)idleSleepMs()) {
+  if (lastActivityMs != 0 && !calc_elapsed(now, lastActivityMs, idleSleepMs())) {
     return;
   }
   // Moving, whatever the bus says - see movingNow().
-  if (lastMovingMs != 0 &&
-      (int32_t)(now - lastMovingMs) < (int32_t)idleSleepMs()) {
+  if (lastMovingMs != 0 && !calc_elapsed(now, lastMovingMs, idleSleepMs())) {
     return;
   }
 
   // The bus has been alive at some point: normal key-off path.
   //
-  // Snapshot the timestamp ONCE and compare as signed. obd.lastFrameMs is
-  // written from the CAN task on the other core for every frame received, so
-  // it can be a millisecond NEWER than the `now` sampled above. Unsigned,
-  // `now - last` then underflows to ~4.29e9, sails past the idle window and
-  // deep-sleeps the gauge while the bus is maximally alive - blanking the
-  // screen mid-drive and splitting the log in two. Signed arithmetic makes a
-  // negative delta simply inert. Rare, timing-dependent, and untestable, which
-  // is exactly why it has to be closed by construction.
+  // Snapshot the timestamp ONCE and compare as signed (calc_elapsed).
+  // obd.lastFrameMs is written from the CAN task on the other core for every
+  // frame received, so it can be a millisecond NEWER than the `now` sampled
+  // above. Unsigned, `now - last` then underflows to ~4.29e9, sails past the
+  // idle window and deep-sleeps the gauge while the bus is maximally alive -
+  // blanking the screen mid-drive and splitting the log in two. Signed, a
+  // negative delta is simply inert - now tested (test_calc.cpp).
   const uint32_t lastFrame = obd.lastFrameMs;
   if (lastFrame != 0) {
-    if ((int32_t)(now - lastFrame) > (int32_t)idleSleepMs()) goToSleep();
+    if (calc_elapsed(now, lastFrame, idleSleepMs())) goToSleep();
     return;
   }
 

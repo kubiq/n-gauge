@@ -31,7 +31,7 @@ bool csvlog_init() { return logfile_alloc(csv, CSV_BUF_N); }
 bool csvlog_failed() { return csvFailed; }
 void csvlog_card_back() { csvFailed = false; }
 
-const char *csvlog_path() { return csv.path; }
+const char *csvlog_path() { return csv.open ? csv.path : ""; }
 
 // The loop's latest raw IMU sample, for gx/gy/gz - set from core 1.
 static volatile float rawGx = 0, rawGy = 0, rawGz = 0;
@@ -157,7 +157,7 @@ static const CsvCol COLS[] = {
   // The raw coolant sensor (PID 0x05). coolantC above is the dashboard's
   // value (DID 0xE001 byte 25) since 2026-10-03 - see COOLANT_FROM_E001.
   {"coolantPid05C", [](const CsvRow &) {
-    if (obd.havePid05 && (int32_t)(millis() - obd.pid05Ms) < (int32_t)OBD_STALE_MS)
+    if (calc_fresh(obd.havePid05, obd.pid05Ms, millis(), OBD_STALE_MS))
       put("%d", obd.coolantPid05C);
   }},
   // Absolute load, for calibrating a torque estimate (one full-throttle pull

@@ -355,8 +355,8 @@ static void faultsTask(uint32_t now, bool canGrace) {
 static void gaugesTask(uint32_t now) {
   // The same "car on" test as obd.cpp's schedule: lastFrameMs counts every
   // frame except the TPMS module's, which answers with the car parked too.
-  ui_set_car_talking(obd.lastFrameMs != 0 &&
-                     (int32_t)(now - obd.lastFrameMs) < (int32_t)OBD_STALE_MS);
+  const uint32_t lastFrame = obd.lastFrameMs;     // once: the CAN task writes it
+  ui_set_car_talking(calc_fresh(lastFrame != 0, lastFrame, now, OBD_STALE_MS));
   // Oil first: it owns the state line that the coolant arc shares.
   ui_update_oil(obd_oil_fresh(), obd.oilTempC, tempCold, tempOverOil, tempOverCool);
   ui_update_coolant(obd_coolant_fresh(), obd.coolantC, tempOverCool);
@@ -456,7 +456,7 @@ static void viewTask(uint32_t now) {
       : 1.0f - (float)(now - wifiShownAt) / (float)WIFI_VIEW_MAX_MS);
   if (v == VIEW_WIFI) {
     if (wifiShownAt == 0) wifiShownAt = now ? now : 1;
-    else if ((int32_t)(now - wifiShownAt) >= (int32_t)WIFI_VIEW_MAX_MS) {
+    else if (calc_elapsed(now, wifiShownAt, WIFI_VIEW_MAX_MS)) {
       wifiShownAt = 0;
       ui_set_view((GaugeView)settings.lastView);
       // Belt and braces: if that did not take, force a known view rather

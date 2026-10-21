@@ -72,7 +72,7 @@ bool gpxlog_init() {
   return logfile_alloc(gpx, GPX_BUF_N);
 }
 
-const char *gpxlog_path() { return gpx.path; }
+const char *gpxlog_path() { return gpx.open ? gpx.path : ""; }
 
 // Flushed even with the batch empty: a point that did not fit drained it
 // unflushed (logfile_printf), and this is what then puts it on the card.

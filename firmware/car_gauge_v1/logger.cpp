@@ -364,9 +364,12 @@ void logger_close() {
   else Serial.println(F("[ERR] logs not closed - the card stayed busy"));
 }
 
-// Is this card file (a plain name, no slash) one the logger is writing to,
-// or will write to again this session? /api/delete refuses those. Read
-// under LoggerSdLock: the paths change only while it is held.
+// Is this card file (a plain name, no slash) one the logger has open?
+// /api/delete refuses those. The paths are "" for a closed file: a log this
+// session closed is never written again - the next one gets a new name - and
+// refusing it (as this did, by the last path each writer had) answered a
+// delete from the app with 409 until the next wake. Read under LoggerSdLock:
+// the paths change only while it is held.
 bool logger_is_open(const char *name) {
   for (const char *p : {csvlog_path(), gpxlog_path(), vbolog_path()})
     if (p[0] == '/' && strcmp(p + 1, name) == 0) return true;

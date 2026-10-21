@@ -104,7 +104,7 @@ void csvlog_close();
 void csvlog_note_pass_us(uint32_t us);   // the logger pass, for logMaxMs
 bool csvlog_failed();
 void csvlog_card_back();
-const char *csvlog_path();
+const char *csvlog_path();          // the open file's path; "" when none is open
 
 bool gpxlog_init();
 void gpxlog_task();                 // per GNSS fix; also counts the trip

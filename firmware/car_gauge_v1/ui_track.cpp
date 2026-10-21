@@ -56,7 +56,7 @@ static void track_btn_cb(lv_event_t *e) {
     return;
   }
 
-  if (!(trkConfirm == TRK_CONFIRM_STOP && (int32_t)(now - trkConfirmUntil) < 0)) {
+  if (!(trkConfirm == TRK_CONFIRM_STOP && !calc_reached(now, trkConfirmUntil))) {
     trkConfirm      = TRK_CONFIRM_STOP;
     trkConfirmUntil = now + TRACK_CONFIRM_MS;
     trkFlash("tap STOP again to end the session");
@@ -148,8 +148,8 @@ static void fmtLap(char *out, size_t n, uint32_t ms, int digits) {
 
 void ui_update_track(const LapInfo *li) {
   const uint32_t now = lv_tick_get();
-  if (trkMsg && (int32_t)(now - trkMsgUntil) >= 0) trkMsg = NULL;
-  if (trkConfirm != TRK_CONFIRM_NONE && (int32_t)(now - trkConfirmUntil) >= 0) {
+  if (trkMsg && calc_reached(now, trkMsgUntil)) trkMsg = NULL;
+  if (trkConfirm != TRK_CONFIRM_NONE && calc_reached(now, trkConfirmUntil)) {
     trkConfirm = TRK_CONFIRM_NONE;
   }
 

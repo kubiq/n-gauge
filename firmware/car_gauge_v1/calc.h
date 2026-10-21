@@ -833,10 +833,30 @@ static inline CalcClockFix calc_clock_fix(long long sysUs, long long gnssUs, boo
 // ---- is a reading current? -----------------------------------------------------
 // Stale data must present as NO data: a number that has stopped changing looks
 // exactly like a steady reading. `have` = it ever arrived; `stampMs` = when
-// it last did. Unsigned subtraction, so it holds across the millis() wrap.
+// it last did. Signed, as calc_elapsed() below: the stamps are written on the
+// CAN and GNSS tasks' core, and one a millisecond newer than `nowMs` is fresh,
+// not 49 days old (unsigned, the screen blinked "--" for that pass).
 static inline bool calc_fresh(bool have, uint32_t stampMs, uint32_t nowMs,
                               uint32_t maxAgeMs) {
-  return have && (nowMs - stampMs < maxAgeMs);
+  return have && (int32_t)(nowMs - stampMs) < (int32_t)maxAgeMs;
+}
+
+// ---- elapsed time, one way -----------------------------------------------------
+// The firmware compared millis() stamps two ways - unsigned (now - t >= X)
+// and signed ((int32_t)(now - t) < (int32_t)X) - and they differ exactly
+// where it matters: a stamp written by a task on the other core can be a
+// millisecond NEWER than the `now` this core sampled. Unsigned, now - t then
+// underflows to ~4.29e9 and "long ago" - power.cpp once slept the gauge
+// mid-drive that way. Signed, it is a small negative: "just now". So these
+// are signed, and THE way; wrap-safe across the 49-day millis() wrap, for
+// spans under 2^31 ms (24 days).
+// At least `ms` since `since`; a `since` in the future has not elapsed.
+static inline bool calc_elapsed(uint32_t nowMs, uint32_t sinceMs, uint32_t ms) {
+  return (int32_t)(nowMs - sinceMs) >= (int32_t)ms;
+}
+// `deadlineMs` reached (a time set as now + something), within 2^31 ms of it.
+static inline bool calc_reached(uint32_t nowMs, uint32_t deadlineMs) {
+  return (int32_t)(nowMs - deadlineMs) >= 0;
 }
 
 // ---- a page number from the phone ---------------------------------------------

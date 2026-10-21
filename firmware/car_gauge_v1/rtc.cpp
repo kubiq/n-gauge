@@ -291,7 +291,7 @@ void rtc_task() {
 
   static uint32_t lastCheckMs = 0;
   const uint32_t now = millis();
-  if (lastCheckMs != 0 && (int32_t)(now - lastCheckMs) < (int32_t)RTC_SYNC_CHECK_MS) {
+  if (lastCheckMs != 0 && !calc_elapsed(now, lastCheckMs, RTC_SYNC_CHECK_MS)) {
     return;
   }
   lastCheckMs = now ? now : 1;

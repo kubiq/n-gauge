@@ -799,7 +799,7 @@ static void dlTask(void *) {
     const int fd = dlJob.client.fd();
     const uint32_t deadline = millis() + DL_MAX_MS;
     uint32_t sinceYield = 0;
-    while (fd >= 0 && dlJob.left && !dlAbort && (int32_t)(millis() - deadline) < 0) {
+    while (fd >= 0 && dlJob.left && !dlAbort && !calc_reached(millis(), deadline)) {
       size_t got = 0;
       {
         LoggerSdLock lock(SD_LOCK_WEB_MS);

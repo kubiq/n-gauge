@@ -421,7 +421,7 @@ void gps_park() {
   parkReq  = true;
 
   const uint32_t t0 = millis();
-  while (!parkDone && (int32_t)(millis() - t0) < (int32_t)GPS_PARK_ACK_MS) {
+  while (!parkDone && !calc_elapsed(millis(), t0, GPS_PARK_ACK_MS)) {
     delay(2);
   }
 
