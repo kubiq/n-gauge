@@ -71,6 +71,7 @@ void power_note_activity() {}
 void logger_init() {}
 void logger_start() {}
 void logger_sd_lock() {}
+bool logger_sd_lock_for(uint32_t) { return true; }
 void logger_sd_unlock() {}
 bool logger_card_ok() { return true; }
 void bootlog_task(uint32_t) {}   // no card to write the boot log to
@@ -82,7 +83,7 @@ float logger_trip_km() { return sim_trip_km(); }
 void logger_note_g(float, float) {}
 void logger_note_raw_g(float, float, float) {}
 void logger_note_loop_us(uint32_t) {}
-void logger_suspend() {}
+bool logger_suspend() { return true; }
 void logger_resume() {}
 bool logger_card_shared() { return false; }
 bool logger_is_open(const char *) { return false; }

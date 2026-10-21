@@ -138,12 +138,14 @@ void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb) {
   static bool have = false;
   if (!logger_card_ok() || logger_card_shared()) { *usedKb = *totalKb = 0; return; }
   if (!have || millis() - atMs >= 60000) {
-    LoggerSdLock lock;
-    total = (uint32_t)(SD_MMC.totalBytes() / 1024);
-    used  = (uint32_t)(SD_MMC.usedBytes() / 1024);
-    esp_task_wdt_reset();
-    atMs = millis();
-    have = true;
+    LoggerSdLock lock(have ? 0 : SD_LOCK_WEB_MS);   // a known figure does not wait
+    if (lock) {
+      total = (uint32_t)(SD_MMC.totalBytes() / 1024);
+      used  = (uint32_t)(SD_MMC.usedBytes() / 1024);
+      esp_task_wdt_reset();
+      atMs = millis();
+      have = true;
+    }
   }
   *usedKb = used;
   *totalKb = total;
@@ -384,8 +386,10 @@ static void handleSave() {
   // key; it closes its files on the change and starts the next ones under it.
   String msg = "Saved.";
   if (server.hasArg("logPub")) {
-    LoggerSdLock lock;
-    if (!settings_set_log_key(server.arg("logPub").c_str()))
+    LoggerSdLock lock(SD_LOCK_WEB_MS);
+    if (!lock)
+      msg = "Settings saved, but not the log key: the SD card is busy - try again.";
+    else if (!settings_set_log_key(server.arg("logPub").c_str()))
       msg = "Settings saved, but the log key was rejected (64 hex digits, or off).";
   }
 
@@ -525,11 +529,18 @@ static long cardFileSize(const String &name) {
   return stat(("/sdcard/" + name).c_str(), &st) == 0 ? (long)st.st_size : -1;
 }
 
+// A save on a stalling card holds the SD lock: the phone is told to come back,
+// rather than the loop waiting on it into the watchdog (see LoggerSdLock).
+static void sendCardBusy() {
+  server.send(503, "text/plain", "The SD card is busy - try again in a moment.");
+}
+
 static void handleFiles() {
   const int page = pageArg();
   if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
   // The logger writes from its own task on core 0: take turns with it.
-  LoggerSdLock lock;
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock) { sendCardBusy(); return; }
   // The card can be lent to the PC as a USB drive - then it is not ours to
   // touch at all (two writers corrupt the FAT).
   if (logger_card_shared()) {
@@ -613,7 +624,8 @@ static void handleFiles() {
 static void handleFilesJson() {
   const int page = pageArg();
   if (page < 0) { server.send(400, "text/plain", "bad page"); return; }
-  LoggerSdLock lock;
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock) { sendCardBusy(); return; }
   if (logger_card_shared()) {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;
@@ -676,7 +688,8 @@ static void handleFilesJson() {
 // so the app takes only "deleted" or 410 as done, and older firmware
 // without this handler never looks like a success.
 static void handleDelete() {
-  LoggerSdLock lock;
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock) { sendCardBusy(); return; }   // not 410: the app keeps it pending
   if (logger_card_shared()) {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;
@@ -734,7 +747,8 @@ static bool sendAll(int fd, const uint8_t *p, size_t n) {
 static void handleDownload() {
   // Held for the whole download: the logger pauses meanwhile (rows of that
   // time are skipped, the files themselves stay consistent).
-  LoggerSdLock lock;
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock) { sendCardBusy(); return; }
   if (logger_card_shared()) {
     server.send(503, "text/plain", "The SD card is shared with a PC right now.");
     return;

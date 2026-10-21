@@ -138,7 +138,7 @@ UsbDiskState usbdisk_state() { return state; }
 bool usbdisk_share() {
   if (state == USBDISK_SHARED || !usbdisk_host_connected() || !logger_card_ok()) return false;
   // Close every file and stop all card access BEFORE the PC can see it.
-  logger_suspend();
+  if (!logger_suspend()) return false;
   // The whole card, not SD_MMC.numSectors(): that is the FAT volume's size
   // (totalBytes / sector), which leaves out the partition offset and FAT's
   // own areas - the PC was told 8192 sectors too few, and Linux truncated

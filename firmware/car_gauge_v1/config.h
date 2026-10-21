@@ -661,9 +661,15 @@
 // if full raw CAN capture is ever needed again, recover can_sniffer_sd from
 // git history (last present in commit 54255f0).
 // 2 Hz is plenty for temperatures and still catches boost/g transients.
+// A write to the card that fails remounts it (logger.cpp): at most this many
+// times per boot - a full card fails every write, and each remount starts new
+// files - and no sooner than this after the last try. Past the limit the logs
+// stop with the "can't write" fault, the card stays up for the phone to free.
+#define SD_REMOUNT_MAX        3
+#define SD_REMOUNT_RETRY_MS   10000
 // One line per deep sleep, so the parked wake/sleep behaviour can be read off
-// the card after a drive. Capped because parked nights would otherwise grow it
-// without end.
+// the card after a drive. Moved aside to a numbered file when full (logger.cpp)
+// - parked nights would otherwise grow it without end.
 #define SLEEP_LOG_PATH        "/sleeplog.txt"
 #define SLEEP_LOG_MAX_BYTES   262144
 // The boot log (bootlog.cpp): one line per boot that stays up, written this

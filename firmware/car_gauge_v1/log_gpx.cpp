@@ -44,6 +44,7 @@ static constexpr size_t GPX_BUF_N = 12288;
 static LogFile  gpx;
 static bool     gpxOpenFailed = false;  // stop retrying a hopeless open
 static uint32_t gpxLastWriteMs = 0;
+static bool     gpxDirty = false;      // points since the last commit
 RTC_DATA_ATTR static int nextTripN = 0;
 // Byte offset of the point insertion position, i.e. just past the last
 // trackpoint and before the closing tags.
@@ -62,7 +63,7 @@ static const char GPX_TAIL[] = "</trkseg></trk></gpx>\n";
 static void gpxWriteTail(LogFile &lf) {
   if (lf.enc) return;
   gpxTailPos = lf.f.position();
-  lf.f.print(GPX_TAIL);
+  logfile_check_write(lf, lf.f.print(GPX_TAIL), sizeof(GPX_TAIL) - 1);
   lf.f.seek(gpxTailPos);
 }
 
@@ -78,6 +79,7 @@ const char *gpxlog_path() { return gpx.path; }
 static void gpxCommit() {
   if (!gpx.open) return;
   logfile_commit(gpx);
+  gpxDirty = false;
 }
 
 // ---- trip distance ---------------------------------------------------------
@@ -175,6 +177,15 @@ bool gpxlog_failed() { return gpxOpenFailed; }
 // normal bench configuration. Deciding what counts as a real point has nothing
 // to do with whether it can be stored.
 void gpxlog_task() {
+  // The time half of "commit on size or on time", up here, before anything
+  // can return. Down by the point it only ran when a point was accepted: a
+  // fix lost in a tunnel or a garage left up to 2 s of points (12 KB) in RAM
+  // for as long as the fix stayed away - lost if the power went meanwhile.
+  const uint32_t now = millis();
+  if (gpxDirty && now - gpxLastWriteMs >= GPX_FLUSH_MS) {
+    gpxLastWriteMs = now;
+    gpxCommit();
+  }
   if (!gps.haveFix) return;            // nothing worth recording yet
 
   // ONE snapshot of the fix, used for every decision below and for the point
@@ -226,7 +237,6 @@ void gpxlog_task() {
   if (!calc_gpx_gate(&gate, &lim, fixClock, log_idle(), gps.sats, gps.hdop,
                      posLat, posLon, gps.speedKmh, &step))
     return;
-  const uint32_t now = millis();          // for the batch's save timing below
 
   // Trip distance, summed HERE and only here - past every gate, so a tunnel
   // spike that would have added kilometres nobody drove has already been
@@ -237,7 +247,7 @@ void gpxlog_task() {
   tripNoteTime(step.recent);
 
   // ---- everything below writes the point, and needs a card ----------------
-  if (!logger_card_ok()) return;       // no card
+  if (!log_may_write()) return;        // no card, or writes given up on
   if (settings.logLevel < LOG_TRIPS) return;   // logging off: count, don't write
   if (gpxOpenFailed) return;           // see gpxOpen(): do not retry forever
   if (!gpx.open) gpxOpen();            // lazily, on the first accepted point
@@ -280,8 +290,10 @@ void gpxlog_task() {
       "</gpxtpx:TrackPointExtension></extensions></trkpt>\n",
       latS, lonS, posAlt, stamp, gps.sats, gps.hdop,
       gps.speedKmh / 3.6f);             // m/s, per the TrackPointExtension schema
+  gpxDirty = true;
 
-  // Commit on size or on time, whichever comes first.
+  // Commit on size, or on time - checked here too, so a steady 25 Hz commits
+  // on the pass of the point rather than the next one.
   if (gpx.len > GPX_BUF_N - 256 || now - gpxLastWriteMs >= GPX_FLUSH_MS) {
     gpxLastWriteMs = now;
     gpxCommit();
@@ -295,7 +307,7 @@ void gpxlog_close() {
     // Advance past the tail we keep rewinding over, so the closing tags
     // are the real end of the file, then close.
     gpx.f.seek(gpxTailPos);
-    gpx.f.print(GPX_TAIL);
+    logfile_check_write(gpx, gpx.f.print(GPX_TAIL), sizeof(GPX_TAIL) - 1);
   }
   gpx.f.flush();
   gpx.f.close();

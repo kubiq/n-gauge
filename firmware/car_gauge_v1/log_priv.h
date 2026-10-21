@@ -56,6 +56,12 @@ void logfile_drain(LogFile &lf);
 void logfile_commit(LogFile &lf);
 // Closed: the segment ends (its key is wiped).
 void logfile_end(LogFile &lf);
+// Every write to the card goes through here or reports here: `wrote` short of
+// `want` is a card error (a stdio write spills the file buffer, so a failing
+// card shows on the next write). The logger task takes the news
+// (logsink_take_failure) and remounts the card.
+void logfile_check_write(const LogFile &lf, size_t wrote, size_t want);
+bool logsink_take_failure();
 // Each logger pass: stir the entropy pool the segment keys come from.
 void logsink_stir();
 // Once per boot, before WiFi starts: seed that pool with true randomness.
@@ -76,6 +82,8 @@ bool lognames_dated(const char *prefix, const char *ext, time_t t,
                     char *out, size_t n);
 
 // ---- shared by the writers (logger.cpp) -------------------------------------
+// A card is mounted and writes have not been given up on (SD_REMOUNT_MAX).
+bool log_may_write();
 // Parked a while (with a GPS fix): the writers thin out.
 bool log_idle();
 // Gear from rpm / OBD speed (calc_gear): 1..8, 0 = none (shifting, clutch

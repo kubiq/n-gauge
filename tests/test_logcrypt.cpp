@@ -109,6 +109,19 @@ static void a_changed_byte_stops_the_reader_there() {
   CHECK(used == second);
 }
 
+// A write that failed mid-block on a card error, then the pod carried on in a
+// new segment: the reader skips the broken block and reads the rest.
+static void a_broken_block_is_skipped_to_the_next_segment() {
+  uint8_t sec[32], pub[32];
+  recipient(sec, pub);
+  const std::string seg = write_file(pub, ROWS + 1, 2, 1);
+  const std::string broken = seg.substr(0, seg.size() - 7);   // last record cut
+  const std::string f = broken + seg + std::string("\x02\x10\x00\x00\x00junk", 9) + seg;
+  size_t used = 0;
+  CHECK(read_back(f, sec, &used) == ",1000,85\n,1000,85\n,1500,86\n,1000,85\n,1500,86\n");
+  CHECK(used == f.size());
+}
+
 static void the_wrong_key_reads_nothing() {
   uint8_t sec[32], pub[32], other[32];
   recipient(sec, pub);
@@ -205,6 +218,7 @@ int main() {
   TEST(two_segments_read_in_order);
   TEST(a_cut_off_record_ends_the_file_cleanly);
   TEST(a_changed_byte_stops_the_reader_there);
+  TEST(a_broken_block_is_skipped_to_the_next_segment);
   TEST(the_wrong_key_reads_nothing);
   TEST(a_plaintext_file_is_not_mistaken_for_one);
   TEST(low_order_keys_are_refused);

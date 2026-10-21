@@ -97,6 +97,25 @@ bool logfile_alloc(LogFile &lf, size_t cap) {
   return lf.buf != nullptr;
 }
 
+// The write results used to be ignored: a card that failed mid-drive went on
+// "logging" into nothing, with no fault on screen, and a broken encrypted
+// block made the readers stop there and drop the rest of the file.
+static volatile bool writeFailed = false;
+
+void logfile_check_write(const LogFile &lf, size_t wrote, size_t want) {
+  if (wrote == want) return;
+  if (!writeFailed)
+    Serial.printf("[ERR] SD write to %s came up short (%u of %u bytes)\n",
+                  lf.path, (unsigned)wrote, (unsigned)want);
+  writeFailed = true;
+}
+
+bool logsink_take_failure() {
+  const bool f = writeFailed;
+  writeFailed = false;
+  return f;
+}
+
 void logfile_begin(LogFile &lf) {
   lf.len = 0;
   lf.enc = settings.logKey;
@@ -104,7 +123,7 @@ void logfile_begin(LogFile &lf) {
   uint8_t eph[32], head[LOGCRYPT_HEADER_LEN];
   ephSecret(eph);
   logcrypt_begin(&lf.seg, settings.logPub, eph, head);   // wipes eph
-  lf.f.write(head, sizeof(head));
+  logfile_check_write(lf, lf.f.write(head, sizeof(head)), sizeof(head));
 }
 
 // IO_CHUNK at a time through ioBuf: sealed into it, or copied - the copy is
@@ -118,7 +137,7 @@ void logfile_drain(LogFile &lf) {
     size_t len = k;
     if (lf.enc) len = logcrypt_seal(&lf.seg, p, k, ioBuf);
     else        memcpy(ioBuf, p, k);
-    lf.f.write(ioBuf, len);
+    logfile_check_write(lf, lf.f.write(ioBuf, len), len);
     p += k;
     n -= k;
   }

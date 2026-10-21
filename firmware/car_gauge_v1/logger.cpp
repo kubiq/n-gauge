@@ -12,6 +12,7 @@
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // logLevel, and the key generation
 #include "SD_MMC.h"
+#include "esp_task_wdt.h"   // fed while waiting for the SD lock
 
 // FAT file times in UTC, not local time. FatFs asks get_fattime() for the
 // stamp, and ESP-IDF's version uses localtime() - which is what the FAT spec
@@ -37,10 +38,15 @@ extern "C" uint32_t __wrap_get_fattime(void) {
 
 static bool cardOk = false;     // card mounted; a file may not be open yet
 static bool bufsOk = false;     // every writer has its batch: logging may start
+// Writes failed and remounting did not help (SD_REMOUNT_MAX): the writers
+// stay off, the card stays up for the phone. Cleared when it comes back from
+// the PC, which may have freed space.
+static bool writesOff = false;
 
 bool logger_card_ok()   { return cardOk; }
+bool log_may_write()    { return cardOk && !writesOff; }
 bool logger_write_failed() {
-  return cardOk && (csvlog_failed() || gpxlog_failed() || vbolog_failed());
+  return cardOk && (writesOff || csvlog_failed() || gpxlog_failed() || vbolog_failed());
 }
 
 // ---- idle throttle --------------------------------------------------------
@@ -77,6 +83,23 @@ int log_gear() {
 static SemaphoreHandle_t sdLock = nullptr;
 void logger_sd_lock()   { if (sdLock) xSemaphoreTakeRecursive(sdLock, portMAX_DELAY); }
 void logger_sd_unlock() { if (sdLock) xSemaphoreGiveRecursive(sdLock); }
+
+// Half a second at a time, the watchdog fed in between - the callers are on
+// the loop's task, which it watches.
+bool logger_sd_lock_for(uint32_t ms) {
+  if (!sdLock) return true;          // before logger_init: nothing else uses the card
+  const uint32_t t0 = millis();
+  for (;;) {
+    const uint32_t waited = millis() - t0;
+    const uint32_t step = ms - waited < 500 ? ms - waited : 500;
+    if (xSemaphoreTakeRecursive(sdLock, pdMS_TO_TICKS(step)) == pdTRUE) return true;
+    esp_task_wdt_reset();
+    if (millis() - t0 >= ms) {
+      Serial.println(F("[ERR] SD card busy - a save has held it too long"));
+      return false;
+    }
+  }
+}
 
 // Set by logger_close() (sleep, reboot): the task stops opening files, so
 // nothing reopens one between the close and the power going.
@@ -126,20 +149,26 @@ static void closeAll() {
   csvlog_close();
 }
 
-void logger_suspend() {
-  LoggerSdLock lock;
+bool logger_suspend() {
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock) return false;           // mid-save on a stalled card: not now
   closeAll();
   cardOk = false;
   sharedWithPc = true;
+  return true;
 }
 
 // The card is back. No remount: the PC had it read-only (usbdisk.cpp), so
 // FATFS's cached view still holds - and unmounting while a last read from the
 // PC might still be in disk_read() is a race not worth having. Logging
 // resumes in a new file on its own.
+//
+// The lock without a limit: while the PC had the card, the logger task did
+// not touch it (cardOk false), so it holds the lock for a moment at most.
 void logger_resume() {
   LoggerSdLock lock;
   sharedWithPc = false;
+  writesOff = false;
   cardOk = bufsOk;   // never without the buffers to write through
   // The PC may have freed space: every writer may try its file again.
   csvlog_card_back();
@@ -150,7 +179,53 @@ void logger_resume() {
 
 bool logger_card_shared() { return sharedWithPc; }
 
+// ---- a write that failed -----------------------------------------------------
+// A loose card, a voltage dip, a card going bad: the writes come up short
+// (logfile_check_write). The files are closed - each ends at its last good
+// block, which every reader takes - the card is unmounted and mounted again,
+// and the writers start new files. Mounting fails while the card is gone:
+// tried again every SD_REMOUNT_RETRY_MS, the "no SD card" fault meanwhile.
+static uint8_t  remounts = 0;
+static bool     remountWanted = false;
+static uint32_t remountTriedMs = 0;
+
+static void cardRecover() {
+  const uint32_t now = millis();
+  if (remountTriedMs && now - remountTriedMs < SD_REMOUNT_RETRY_MS) return;
+  remountTriedMs = now;
+  closeAll();                        // what still reaches the card, does
+  if (remounts >= SD_REMOUNT_MAX) {
+    // Failing again after every remount is a full card, or a dying one:
+    // stop writing rather than leave a new empty file every few seconds.
+    Serial.println(F("[ERR] SD writes keep failing - logging stopped (full card?)"));
+    writesOff = true;
+    remountWanted = false;
+    logsink_take_failure();
+    return;
+  }
+  remounts++;
+  SD_MMC.end();
+  cardOk = SD_MMC.begin("/sdcard", /*1-bit*/true);
+  logsink_take_failure();            // the closing writes' own failures
+  if (!cardOk) {
+    Serial.println(F("[ERR] SD card lost - trying again shortly"));
+    remounts--;                      // a card being reseated is not a failing one
+    return;
+  }
+  remountWanted = false;
+  csvlog_card_back();
+  gpxlog_card_back();
+  vbolog_card_back();
+  Serial.printf("[OK] SD card remounted (%u of %u)\n", remounts, SD_REMOUNT_MAX);
+}
+
 static void loggerTask() {
+  if (logsink_take_failure()) {
+    remountWanted = true;
+    cardOk = false;                  // no writer touches it until it is back
+  }
+  if (remountWanted && !sharedWithPc) cardRecover();
+
   // A level change from the phone closes every open file, so it applies at
   // once rather than at the next drive; whatever the new level allows opens
   // again as a new file.
@@ -171,10 +246,10 @@ static void loggerTask() {
   logsink_stir();
 
   gpxlog_task();             // its own cadence, independent of the CSV
-  if (cardOk && settings.logLevel >= LOG_TRIPS)
+  if (log_may_write() && settings.logLevel >= LOG_TRIPS)
     vbolog_task();           // per GNSS fix, like the GPX - not the CSV's rate
 
-  if (!cardOk) return;
+  if (!log_may_write()) return;
   if (settings.logLevel < LOG_NORMAL) return;          // no drive CSV
   csvlog_task();
 }
@@ -208,17 +283,33 @@ void logger_start() {
 // plain-text log on the card - the sleep log and the boot log.
 //
 // Bounded: one line per sleep or boot is tiny, but parked on the backoff
-// timer the sleep log gains a few hundred lines a night, forever. Stop
-// growing rather than silently filling the card that the drive logs need.
+// timer the sleep log gains a few hundred lines a night. A full one is moved
+// aside to the first free numbered name ("/sleeplog.txt" ->
+// "/sleeplog_0001.txt") and a new one started. It used to just stop growing -
+// at 256 KB, about a week parked, so the record of every later sleep was lost.
+// The moved ones are small and few (~13 MB a year); the app pulls each once.
+static bool rotateFull(const char *path) {
+  const char *dot = strrchr(path, '.');
+  if (!dot) return false;
+  char to[40];
+  for (int k = 1; k <= 999; k++) {
+    snprintf(to, sizeof(to), "%.*s_%04d%s", (int)(dot - path), path, k, dot);
+    if (!SD_MMC.exists(to)) return SD_MMC.rename(path, to);
+  }
+  return false;
+}
+
 static void appendLine(const char *path, size_t maxBytes, const char *line) {
-  LoggerSdLock lock;
-  if (!cardOk) return;
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  if (!lock || !cardOk) return;      // a line lost, rather than the pod
   if (SD_MMC.exists(path)) {
     File probe = SD_MMC.open(path, FILE_READ);
     if (probe) {
       const size_t sz = probe.size();
       probe.close();
-      if (sz > maxBytes) return;
+      // Can't move it aside: stop growing, as before, rather than fill the
+      // card the drive logs need.
+      if (sz > maxBytes && !rotateFull(path)) return;
     }
   }
   File f = SD_MMC.open(path, FILE_APPEND);
@@ -251,10 +342,16 @@ void logger_note_boot(const char *line) {
 
 // Before sleep or a reboot: close everything and stop for good - the task
 // must not open a new file between this and the power going.
+//
+// Stopped even when the lock never comes: the task sees it on its next pass.
+// The files are then left as their last save had them - what a power cut
+// would leave, which every format here is written to survive - and the pod
+// still sleeps, instead of the watchdog rebooting it awake.
 void logger_close() {
-  LoggerSdLock lock;
-  closeAll();
   stopped = true;
+  LoggerSdLock lock(SD_LOCK_CLOSE_MS);
+  if (lock) closeAll();
+  else Serial.println(F("[ERR] logs not closed - the card stayed busy"));
 }
 
 // Is this card file (a plain name, no slash) one the logger is writing to,

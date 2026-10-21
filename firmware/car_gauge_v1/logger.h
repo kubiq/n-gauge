@@ -32,15 +32,30 @@ void logger_init();   // mount the card; no CSV yet - see logger_start()
 void logger_start();
 
 // Anything on core 1 that touches the card takes this lock (the logger's own
-// public functions already do). Waits at most for one save in progress.
+// public functions already do). Normally that waits for one save in progress
+// - but a card that stalls can hold a save, and so the lock, for seconds, and
+// a wait on the loop's core longer than the watchdog's 8 s reboots the pod.
+// So core 1 takes it with a limit, LoggerSdLock lock(ms), feeding the watchdog
+// while it waits, and checks it: if (!lock) the card is busy - a 503 for the
+// phone, or skip it. The plain LoggerSdLock() waits for good; only for where
+// the logger cannot be in a save (its own task; the card lent to the PC).
 void logger_sd_lock();
+bool logger_sd_lock_for(uint32_t ms);
 void logger_sd_unlock();
 struct LoggerSdLock {
-  LoggerSdLock()  { logger_sd_lock(); }
-  ~LoggerSdLock() { logger_sd_unlock(); }
+  LoggerSdLock() : held(true) { logger_sd_lock(); }
+  explicit LoggerSdLock(uint32_t ms) : held(logger_sd_lock_for(ms)) {}
+  ~LoggerSdLock() { if (held) logger_sd_unlock(); }
+  explicit operator bool() const { return held; }
   LoggerSdLock(const LoggerSdLock &) = delete;
   LoggerSdLock &operator=(const LoggerSdLock &) = delete;
+ private:
+  const bool held;
 };
+// How long the phone's pages wait for the card before answering 503.
+#define SD_LOCK_WEB_MS    3000
+// How long sleep waits to close the files before sleeping anyway.
+#define SD_LOCK_CLOSE_MS  6000
 // Just "is a card mounted" - for telling the driver the card is missing. Not
 // "is a log open": with a card, no file exists until the car is on.
 bool logger_card_ok();
@@ -110,8 +125,9 @@ void logger_note_loop_us(uint32_t us);
 
 // The SD card lent to the PC as a USB drive (usbdisk.cpp): suspend closes
 // every file and stops all card access; resume remounts and logging goes on
-// in a new file. logger_card_shared() is true in between.
-void logger_suspend();
+// in a new file. logger_card_shared() is true in between. Suspend is false,
+// and nothing changes, when the card is too busy to let go of.
+bool logger_suspend();
 void logger_resume();
 bool logger_card_shared();
 

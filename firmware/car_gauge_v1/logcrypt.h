@@ -24,8 +24,8 @@
 //   AEAD  = XChaCha20-Poly1305 (Monocypher's crypto_aead_lock), the header
 //           body as associated data
 // Files stay append-only: the sync's {name, size} and Range resume work as
-// before. A record cut short by a power loss fails its MAC; the reader stops
-// there with everything before it intact.
+// before. A record cut short by a power loss fails its MAC; the reader skips
+// to the next segment header, if any, with everything before it intact.
 //
 // Monocypher (monocypher.c/.h, 4.0.2, BSD-2-Clause or CC0, see
 // monocypher-LICENCE.md) rather than the core's mbedTLS: that build has no
@@ -157,24 +157,47 @@ static inline void logcrypt_fingerprint(char out[13], const uint8_t pub[32]) {
 }
 
 // ---- reader (tests, and the reference for the app and the PC tool) --------
+// The first segment header at or after `from`, or n if there is none. A
+// header's first 10 bytes are fixed (type, length 37, "NGE1", version) - and
+// a chance match is harmless: its records would fail their MACs.
+static inline size_t logcrypt_next_header(const uint8_t *file, size_t n, size_t from) {
+  for (size_t i = from; i + LOGCRYPT_BLOCK_HEAD + 5 <= n; i++)
+    if (file[i] == LOGCRYPT_TYPE_HEADER && logcrypt_get_u32(file + i + 1) == LOGCRYPT_HEADER_BODY &&
+        memcmp(file + i + LOGCRYPT_BLOCK_HEAD, LOGCRYPT_MAGIC, 4) == 0 &&
+        file[i + LOGCRYPT_BLOCK_HEAD + 4] == LOGCRYPT_VERSION)
+      return i;
+  return n;
+}
+
 // Walks a whole file, decrypting record by record into out (out_cap bytes).
 // Returns the plaintext length; *consumed says how far the file was valid -
-// less than its size when it ends in a cut-off or corrupt block, which the
-// reader treats as the end. -1 if out is too small.
+// less than its size when it ends in a cut-off or corrupt block. -1 if out is
+// too small.
+//
+// A bad block is not necessarily the end: a write that failed mid-block (a
+// card error) leaves a broken block with good segments after it, and the
+// reader carries on from the next segment header. Only what follows the bad
+// block in its own segment is lost - its record count is gone with it.
 static inline long logcrypt_open(const uint8_t *file, size_t n, const uint8_t recipient_secret[32],
                                  uint8_t *out, size_t out_cap, size_t *consumed) {
   uint8_t recipient_pub[32];
   crypto_x25519_public_key(recipient_pub, recipient_secret);
   LogcryptSeg s;
   memset(&s, 0, sizeof(s));
-  size_t at = 0, len = 0;
+  size_t at = 0, len = 0, valid = 0;
   while (at + LOGCRYPT_BLOCK_HEAD <= n) {
     const uint8_t type = file[at];
     const uint32_t body = logcrypt_get_u32(file + at + 1);
-    if (body > LOGCRYPT_MAX_RECORD || at + LOGCRYPT_BLOCK_HEAD + body > n) break;
+    bool ok = body <= LOGCRYPT_MAX_RECORD && at + LOGCRYPT_BLOCK_HEAD + body <= n;
     const uint8_t *b = file + at + LOGCRYPT_BLOCK_HEAD;
-    if (type == LOGCRYPT_TYPE_HEADER) {
-      if (body != LOGCRYPT_HEADER_BODY || memcmp(b, LOGCRYPT_MAGIC, 4) != 0 || b[4] != LOGCRYPT_VERSION) break;
+    if (!ok) {
+      // cut short, or a garbled length
+    } else if (type == LOGCRYPT_TYPE_HEADER) {
+      ok = body == LOGCRYPT_HEADER_BODY && memcmp(b, LOGCRYPT_MAGIC, 4) == 0 && b[4] == LOGCRYPT_VERSION;
+    } else {
+      ok = type == LOGCRYPT_TYPE_RECORD && s.active && body >= LOGCRYPT_MAC_LEN;
+    }
+    if (ok && type == LOGCRYPT_TYPE_HEADER) {
       uint8_t shared[32];
       crypto_x25519(shared, recipient_secret, b + 5);
       logcrypt_derive(s.key, shared, b + 5, recipient_pub);
@@ -182,20 +205,27 @@ static inline long logcrypt_open(const uint8_t *file, size_t n, const uint8_t re
       memcpy(s.ad, b, LOGCRYPT_HEADER_BODY);
       s.counter = 0;
       s.active = true;
-    } else if (type == LOGCRYPT_TYPE_RECORD && s.active && body >= LOGCRYPT_MAC_LEN) {
+    } else if (ok) {
       const size_t m = body - LOGCRYPT_MAC_LEN;
       if (len + m > out_cap) { crypto_wipe(&s, sizeof(s)); return -1; }
       uint8_t nonce[24];
       logcrypt_nonce(nonce, s.counter);
-      if (crypto_aead_unlock(out + len, b + m, s.key, nonce, s.ad, sizeof(s.ad), b, m) != 0) break;
-      s.counter++;
-      len += m;
-    } else {
-      break;
+      ok = crypto_aead_unlock(out + len, b + m, s.key, nonce, s.ad, sizeof(s.ad), b, m) == 0;
+      if (ok) {
+        s.counter++;
+        len += m;
+      }
+    }
+    if (!ok) {
+      // Skip to the next segment; its own key and count start afresh.
+      s.active = false;
+      at = logcrypt_next_header(file, n, at + 1);
+      continue;
     }
     at += LOGCRYPT_BLOCK_HEAD + body;
+    valid = at;
   }
   crypto_wipe(&s, sizeof(s));
-  if (consumed) *consumed = at;
+  if (consumed) *consumed = valid;
   return (long)len;
 }

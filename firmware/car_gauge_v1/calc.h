@@ -863,7 +863,8 @@ static inline int calc_parse_page(const char *s, int maxPage) {
 // rejects CR/LF (the name is interpolated into a Content-Disposition header).
 // It covers every name this firmware writes: drive_/trip_/track_ files, dated
 // (drive_2026-09-25_14-32_3fa81c.csv) or numbered (trip_0012_3fa81c.gpx),
-// maybe with the encrypted suffix, and sleeplog.txt.
+// maybe with the encrypted suffix, sleeplog.txt and bootlog.txt, and those
+// two moved aside when full (sleeplog_0001.txt).
 //
 // The longest of those is 39 (drive_2026-09-25_14-32_9_3fa81c.csv.nge), so the
 // limit leaves room; it was 40, one character from refusing a real log.
