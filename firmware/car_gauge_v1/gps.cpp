@@ -616,9 +616,51 @@ static void gpsPoll() {
 // is stored as int32 degrees x 1e7 rather than double: an 8-byte double is NOT
 // atomic, and a reader on core 1 could have caught a half-updated coordinate
 // and logged a position that never existed.
+#if BENCH_CONSOLE
+// Bench 'p': does the module take input at all, and which protocol? The
+// carrier's GPS never ACKed its UBX config though its RX pin is driven
+// (2026-10-21). u-blox filters input by protocol per port, so NMEA in may
+// work with UBX in off: an NMEA poll ($PUBX,00 -> a $PUBX reply) and a UBX
+// poll (MON-VER -> B5 62 0A 04) tell "RX dead" from "UBX input off".
+// Runs on this task, which owns the UART - like the park.
+static volatile bool probeReq = false;
+void gps_bench_probe() { probeReq = true; }
+
+static void gpsProbeNow() {
+  struct Try { const char *name; const uint8_t *msg; size_t len; const uint8_t *want; size_t wantLen; };
+  static const uint8_t pubx[] = "$PUBX,00*33\r\n";
+  static const uint8_t pubxWant[] = "$PUBX";
+  static const uint8_t monVer[] = { 0xB5, 0x62, 0x0A, 0x04, 0x00, 0x00, 0x0E, 0x34 };
+  static const uint8_t monVerWant[] = { 0xB5, 0x62, 0x0A, 0x04 };
+  const Try tries[] = {
+    { "NMEA $PUBX,00", pubx, sizeof(pubx) - 1, pubxWant, sizeof(pubxWant) - 1 },
+    { "UBX MON-VER", monVer, sizeof(monVer), monVerWant, sizeof(monVerWant) },
+  };
+  Serial.printf("[..] GPS probe at %lu baud\n", (unsigned long)gps.baud);
+  for (const Try &t : tries) {
+    while (gpsSerial.available()) gpsSerial.read();
+    gpsSerial.write(t.msg, t.len);
+    gpsSerial.flush();
+    size_t matched = 0;
+    bool got = false;
+    const uint32_t t0 = millis();
+    while (!got && millis() - t0 < 2000) {
+      if (!gpsSerial.available()) { delay(1); continue; }
+      const uint8_t c = gpsSerial.read();
+      matched = c == t.want[matched] ? matched + 1 : (c == t.want[0] ? 1 : 0);
+      got = matched == t.wantLen;
+    }
+    Serial.printf("[..] GPS probe %s: %s\n", t.name, got ? "ANSWERED" : "no answer in 2 s");
+  }
+}
+#endif
+
 static void gpsTask(void *arg) {
   (void)arg;
   for (;;) {
+#if BENCH_CONSOLE
+    if (probeReq) { probeReq = false; gpsProbeNow(); }
+#endif
 #if GPS_SLEEP_ON_PARK
     if (parkReq) {
       gpsParkNow();

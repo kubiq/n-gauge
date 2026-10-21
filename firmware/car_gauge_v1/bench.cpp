@@ -9,6 +9,7 @@
 #include "esp_task_wdt.h"    // 'x' waits 15 s
 #include "bsp.h"
 #include "obd.h"
+#include "gps.h"
 #include "rtc.h"
 #include "settings.h"
 #include "webapi.h"
@@ -91,6 +92,8 @@ static void benchCommands(uint32_t now) {
   if (cmd == 's') benchSynth = !benchSynth;
   // 'b' runs the render benchmark.
   if (cmd == 'b') ui_bench();
+  // 'p': does the GPS take input - NMEA, UBX, neither? See gps_bench_probe().
+  if (cmd == 'p') gps_bench_probe();
   // 'x' holds GPS_TX_GPIO low as a plain output for 15 s, then restarts: with
   // a meter on the GPS module's RX pin, 0 V proves the ESP drives that line,
   // 3.3 V that it does not (the module's own pull-up is what reads). An idle

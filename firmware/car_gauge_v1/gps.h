@@ -91,3 +91,7 @@ void gps_init();   // open the UART, and wake a parked module
 // 24 mA parked draw - the single largest consumer in the system. A no-op when
 // GPS_SLEEP_ON_PARK is 0. gps_init() sends the wake burst that undoes it.
 void gps_park();
+
+// Bench builds only (BENCH_CONSOLE, the 'p' command): ask the module for an
+// NMEA and a UBX reply and print which came back - see gps.cpp.
+void gps_bench_probe();
