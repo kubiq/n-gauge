@@ -108,7 +108,7 @@ lv_obj_t *ui_build_track() {
   // edge filling up towards it - full at the line. First, so it
   // is under everything - and not clickable (make_arc_sized), so the
   // buttons above it still take every tap.
-  trkLeft = make_arc_sized(s, COL_BLUE, 0, TRACK_ARC_STEPS, 440, 12);
+  trkLeft = make_arc_sized(s, COL_BLUE, 0, TRACK_ARC_STEPS, RING_EDGE_PX, RING_INNER_W);
   lv_obj_add_flag(trkLeft, LV_OBJ_FLAG_HIDDEN);
   // Chequered flag in place of the "LAP TIMER" caption (Material Symbols
   // "sports_score", Apache 2.0 - see firmware/assets/). Coloured by session

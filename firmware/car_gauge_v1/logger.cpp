@@ -107,10 +107,6 @@ bool logger_sd_lock_for(uint32_t ms) {
 // nothing reopens one between the close and the power going.
 static volatile bool stopped = false;
 
-// Same 1-bit SDMMC wiring as the sniffer sketch: CLK=2, CMD=1, D0=3.
-#define SD_CLK 2
-#define SD_CMD 1
-#define SD_D0  3
 
 void logger_init() {
   if (!sdLock) sdLock = xSemaphoreCreateRecursiveMutex();
@@ -125,7 +121,7 @@ void logger_init() {
     return;
   }
   lognames_new_session();
-  if (!SD_MMC.setPins(SD_CLK, SD_CMD, SD_D0)) {
+  if (!SD_MMC.setPins(SD_CLK_GPIO, SD_CMD_GPIO, SD_D0_GPIO)) {
     Serial.println(F("[ERR] SD_MMC.setPins failed - no drive log"));
     return;
   }
@@ -289,7 +285,8 @@ void logger_start() {
   static bool started = false;
   if (started || !sdLock) return;
   started = true;
-  xTaskCreatePinnedToCore(loggerTaskLoop, "logger", 8192, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(loggerTaskLoop, "logger", TASK_LOGGER_STACK, NULL, TASK_LOGGER_PRIO,
+                          NULL, TASK_CORE);
 }
 
 // One line, stamped with the UTC time (or "no-clock"), appended to a small

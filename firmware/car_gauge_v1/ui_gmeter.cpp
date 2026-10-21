@@ -138,7 +138,7 @@ void ui_update_gmeter(float gx, float gy, float gz) {
     lastPx = px; lastPy = py; lastD = d;
     lv_obj_set_size(gDot, d, d);
     lv_obj_align(gDot, LV_ALIGN_CENTER, px, -py);
-    lv_obj_set_style_bg_color(gDot, mag > 0.9f ? COL_BAD : COL_GOOD, 0);
+    lv_obj_set_style_bg_color(gDot, mag > GMETER_RED_G ? COL_BAD : COL_GOOD, 0);
   }
   static uint32_t lastLabelMs = 0;
   if (magCenti != lastMagCenti && now - lastLabelMs >= GMETER_LABEL_MS) {

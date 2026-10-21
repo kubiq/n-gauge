@@ -340,6 +340,23 @@
 // working, which is strictly better than a pretty frozen screen.
 #define WDT_TIMEOUT_MS     8000
 
+// ---- Tasks -----------------------------------------------------------------
+// Everything but the screen runs on core 0, so loop() on core 1 (priority 1)
+// renders undisturbed. One table, because the priorities only mean something
+// against each other: CAN first (its replies arrive back to back and the
+// queue must not overflow), then the GNSS UART, then the card. The logger and
+// the download share priority 1 and spend most of their time waiting on the
+// card or the socket. Stacks in bytes.
+#define TASK_CORE             0
+#define TASK_OBD_PRIO         5
+#define TASK_OBD_STACK        4096
+#define TASK_GPS_PRIO         4
+#define TASK_GPS_STACK        6144
+#define TASK_LOGGER_PRIO      1
+#define TASK_LOGGER_STACK     8192
+#define TASK_DL_PRIO          1
+#define TASK_DL_STACK         4096
+
 // ---- Oil temperature -------------------------------------------------------
 // Mode 22 DID 0xE001, from the Car Scanner "i30 N" PID profile. The standard
 // Mode 01 PID 0x5C is NOT supported by this car: 193 requests, zero replies
@@ -661,6 +678,10 @@
 #endif
 
 // ---- Drive logging (onboard microSD) ---------------------------------------
+// The board's microSD slot, 1-bit SDMMC.
+#define SD_CLK_GPIO           2
+#define SD_CMD_GPIO           1
+#define SD_D0_GPIO            3
 // Decoded values, plus (at the Full log level) the raw TPMS and oil payloads
 // as hex, so a decoding can be checked or redone offline. There is no longer a separate promiscuous frame-capture sketch -
 // if full raw CAN capture is ever needed again, recover can_sniffer_sd from
@@ -738,6 +759,8 @@
 // logger badly. Flush on this cadence instead: between flushes the copy on the
 // card can be behind, but each flush leaves it valid and complete.
 #define GPX_FLUSH_MS          2000
+// The same for the track session's .vbo (log_vbo.cpp).
+#define VBO_FLUSH_MS          2000
 
 // ---- Screens -------------------------------------------------------------
 // The order a tap or swipe cycles through until the app sets another
@@ -750,6 +773,7 @@
 // The trail is the point: a g-g trace shows how smooth the inputs were, which
 // is what motorsport uses it for. The sphere around it is decoration.
 #define GMETER_FS_G        1.5f   // full-scale radius, g
+#define GMETER_RED_G       0.9f   // the dot turns red past this (near the tyres' limit)
 #define GMETER_TRAIL_N     14     // history dots
 #define GMETER_TRAIL_MS    90     // sample spacing - N*this = history length
 #define GMETER_LABEL_MS    100    // the "0.83 g" figure: 10 Hz is as fast as it can be read

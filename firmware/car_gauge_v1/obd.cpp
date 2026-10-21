@@ -132,7 +132,7 @@ void obd_init() {
 
   // Core 0: the Arduino loop (and therefore LVGL) is pinned to core 1 by
   // CONFIG_ARDUINO_RUNNING_CORE, so this keeps CAN off the rendering core.
-  xTaskCreatePinnedToCore(obdTask, "obd", 4096, NULL, 5, NULL, 0);
+  xTaskCreatePinnedToCore(obdTask, "obd", TASK_OBD_STACK, NULL, TASK_OBD_PRIO, NULL, TASK_CORE);
 }
 
 // --- request senders --------------------------------------------------------

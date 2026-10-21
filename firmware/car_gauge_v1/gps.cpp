@@ -378,7 +378,7 @@ void gps_init() {
   //
   // Priority 4, below CAN's 5: a dropped ISO-TP consecutive frame aborts a
   // whole transfer, whereas a late NMEA sentence costs one fix out of 25.
-  xTaskCreatePinnedToCore(gpsTask, "gps", 6144, NULL, 4, NULL, 0);
+  xTaskCreatePinnedToCore(gpsTask, "gps", TASK_GPS_STACK, NULL, TASK_GPS_PRIO, NULL, TASK_CORE);
 }
 
 #if GPS_SLEEP_ON_PARK

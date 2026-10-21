@@ -54,8 +54,8 @@ void ui_boot_anim_start() {
 
   // Same geometry as the temps screen, so the handover looks continuous
   // rather than like two unrelated designs.
-  bootOuter = make_arc_sized(bootScr, COL_OIL,  0, 100, 420, 16);
-  bootInner = make_arc_sized(bootScr, COL_BLUE, 0, 100, 372, 12);
+  bootOuter = make_arc_sized(bootScr, COL_OIL,  0, 100, RING_OUTER_PX, RING_OUTER_W);
+  bootInner = make_arc_sized(bootScr, COL_BLUE, 0, 100, RING_INNER_PX, RING_INNER_W);
   lv_arc_set_value(bootOuter, 0);
   lv_arc_set_value(bootInner, 0);
 

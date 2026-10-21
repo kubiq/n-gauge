@@ -40,6 +40,16 @@
 
 #define LCD_PX    466    // the panel, square and round
 
+// The rings every gauge screen is built of, so the screens line up when you
+// swipe between them: the outer ring (oil, boost, the splash), the inner one
+// inside it (coolant, torque), and the thin one at the very edge (track,
+// WiFi). Diameter and line width, in px.
+#define RING_OUTER_PX   420
+#define RING_OUTER_W    16
+#define RING_INNER_PX   372
+#define RING_INNER_W    12
+#define RING_EDGE_PX    440
+
 // ---- widget builders (ui_widgets.cpp) ---------------------------------------
 // A screen: dark, not scrollable, swipes change the view (screen_gesture_cb).
 lv_obj_t *make_screen();

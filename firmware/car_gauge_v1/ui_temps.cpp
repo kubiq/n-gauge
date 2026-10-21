@@ -25,8 +25,8 @@ static bool carTalking = false;
 // coolant is the inner arc and a smaller figure under it.
 lv_obj_t *ui_build_temps() {
   lv_obj_t *s = make_screen();
-  oilArc   = make_arc_sized(s, COL_OIL,  0, 150, 420, 16);
-  coolArc  = make_arc_sized(s, COL_BLUE, 0, 130, 372, 12);
+  oilArc   = make_arc_sized(s, COL_OIL,  0, 150, RING_OUTER_PX, RING_OUTER_W);
+  coolArc  = make_arc_sized(s, COL_BLUE, 0, 130, RING_INNER_PX, RING_INNER_W);
   // Each reading is its dashboard symbol beside the number, in place of the
   // old "OIL / COOLANT" caption - the same symbols as the car's own warning
   // lights, so they need no reading. Coloured by state in the updaters.

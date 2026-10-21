@@ -42,7 +42,7 @@ lv_obj_t *ui_build_wifi() {
   // Countdown to the automatic return to the gauges (WIFI_VIEW_MAX_MS): full
   // on arrival, empty at the switch - see ui_update_wifi_countdown(). Thin,
   // so it frames the screen rather than reading as a gauge.
-  wifiArc = make_arc_sized(s, COL_BLUE, 0, WIFI_ARC_STEPS, 440, 6);
+  wifiArc = make_arc_sized(s, COL_BLUE, 0, WIFI_ARC_STEPS, RING_EDGE_PX, 6);   // thinner: a timer, not a gauge
   lv_arc_set_value(wifiArc, WIFI_ARC_STEPS);
   // A touch anywhere on it means someone is still reading: start over.
   lv_obj_add_event_cb(s, wifi_touch_cb, LV_EVENT_PRESSED, NULL);

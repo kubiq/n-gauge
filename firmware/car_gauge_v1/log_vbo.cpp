@@ -32,6 +32,7 @@ static constexpr size_t VBO_BUF_N = 4096;
 static LogFile  vbo;
 static bool     vboFailed = false;
 static uint32_t vboLastWriteMs = 0, vboLastSeq = 0, vboLastFixMs = UINT32_MAX;
+static bool     vboDirty = false;      // rows since the last commit
 RTC_DATA_ATTR static int nextTrackN = 0;
 
 bool vbolog_init() { return logfile_alloc(vbo, VBO_BUF_N); }
@@ -197,9 +198,15 @@ void vbolog_task() {
         tyreC[0], tyreC[1], tyreC[2], tyreC[3],
         (float)(gear > 0 ? gear : 0),    // 0 = none or not current
         fuelLh, lam, lamCmd, amb, fuelPc, cat, rail);
+    vboDirty = true;
   }
-  if (vbo.len > VBO_BUF_N - 512 || now - vboLastWriteMs >= 1000) {
+  // A full batch goes to the card by itself (logfile_printf drains it); the
+  // flush - what survives a power cut - on VBO_FLUSH_MS, and only after rows.
+  // It used to commit every second whether anything was written or not, and
+  // on every near-full batch: at 25 Hz that was a flush every ~0.4 s.
+  if (vboDirty && now - vboLastWriteMs >= VBO_FLUSH_MS) {
     vboLastWriteMs = now;
+    vboDirty = false;
     logfile_commit(vbo);
   }
 }

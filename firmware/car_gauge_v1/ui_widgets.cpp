@@ -70,19 +70,7 @@ lv_obj_t* make_arc_sized(lv_obj_t *parent, lv_color_t c, int min, int max,
 }
 
 lv_obj_t* make_arc(lv_obj_t *parent, lv_color_t c, int min, int max) {
-  lv_obj_t *a = lv_arc_create(parent);
-  lv_obj_set_size(a, 420, 420);
-  lv_obj_center(a);
-  lv_arc_set_rotation(a, 135);
-  lv_arc_set_bg_angles(a, 0, 270);
-  lv_arc_set_range(a, min, max);
-  lv_obj_remove_style(a, NULL, LV_PART_KNOB);          // no drag knob
-  lv_obj_clear_flag(a, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_color(a, COL_LINE, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(a, 16, LV_PART_MAIN);
-  lv_obj_set_style_arc_color(a, c, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_width(a, 16, LV_PART_INDICATOR);
-  return a;
+  return make_arc_sized(parent, c, min, max, RING_OUTER_PX, RING_OUTER_W);
 }
 
 lv_obj_t* make_big_label(lv_obj_t *parent, lv_color_t c, int dy) {

@@ -18,7 +18,7 @@ lv_obj_t *ui_build_boost() {
   // In hundredths of a bar, as ui_update_boost() sets it; lv_arc clamps a
   // value past the end to the end.
   boostArc = make_arc(s, COL_BLUE, 0, (int)(BOOST_ARC_MAX_BAR * 100.0f + 0.5f));
-  torqueArc = make_arc_sized(s, COL_INK, 0, TORQUE_ARC_MAX_NM, 372, 12);
+  torqueArc = make_arc_sized(s, COL_INK, 0, TORQUE_ARC_MAX_NM, RING_INNER_PX, RING_INNER_W);
   torqueVal = make_tyre_val(s, 0, 84);        // 28px, under "bar"
   // Accelerator pedal: a short bar in the open bottom quarter both arcs
   // leave (their ends sit ~148 px below centre, so 175 clears them and stays

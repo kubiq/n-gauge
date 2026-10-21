@@ -139,15 +139,15 @@ static void womBench(uint32_t now) {
   static int     lastLevel = -1;
   static uint32_t events = 0, armedAt = 0;
   if (!armed) {
-    pinMode(21, INPUT);
+    pinMode(MOTION_WAKE_GPIO, INPUT);
     const bool ok = bsp_imu_wom_arm(thr);
     armed = true;
     armedAt = now;
-    lastLevel = digitalRead(21);
+    lastLevel = digitalRead(MOTION_WAKE_GPIO);
     Serial.printf("[WOM] armed at %u mg: %s, INT2 idle level %d\n",
                   thr, ok ? "ok" : "FAILED", lastLevel);
   }
-  const int level = digitalRead(21);
+  const int level = digitalRead(MOTION_WAKE_GPIO);
   if (level != lastLevel) {
     const uint8_t st = bsp_imu_status1();
     events++;

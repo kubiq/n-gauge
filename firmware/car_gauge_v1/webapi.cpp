@@ -835,7 +835,8 @@ static void handleDownload() {
   for (int i = 0; i < 25 && dlBusy; i++) delay(20);
   if (dlBusy) { server.send(503, "text/plain", "Another download is running - try again."); return; }
   if (!dlTaskHandle &&
-      xTaskCreatePinnedToCore(dlTask, "dl", 4096, NULL, 1, &dlTaskHandle, 0) != pdPASS) {
+      xTaskCreatePinnedToCore(dlTask, "dl", TASK_DL_STACK, NULL, TASK_DL_PRIO, &dlTaskHandle,
+                              TASK_CORE) != pdPASS) {
     dlTaskHandle = nullptr;
     server.send(500, "text/plain", "no task for the download");
     return;
