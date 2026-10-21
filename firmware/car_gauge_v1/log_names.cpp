@@ -4,6 +4,7 @@
 #include "log_priv.h"
 #include "rtc.h"        // clock_valid(): a dated name only with a trusted clock
 #include "settings.h"   // logKey: the encrypted suffix
+#include "taskwdt.h"    // taskwdt_feed: a long directory walk
 #include <esp_random.h>
 #include "SD_MMC.h"
 #include <time.h>
@@ -39,8 +40,10 @@ static int highestIndex(const char *prefix, const char *ext) {
   if (!root) return 0;
   const size_t pl = strlen(prefix);
   int maxN = 0;
+  int seen = 0;
   for (String name = root.getNextFileName(); name.length();
        name = root.getNextFileName()) {
+    if ((++seen & 31) == 0) taskwdt_feed();   // thousands of names on a full card
     const char *s = name.c_str();
     if (*s == '/') s++;                 // returned as a full path: "/drive_0001.csv"
     if (strncmp(s, prefix, pl) != 0) continue;

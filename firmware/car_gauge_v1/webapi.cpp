@@ -11,7 +11,9 @@
 #include "ui.h"             // ui_show_notice() during an upload from the app
 #include "calc.h"           // calc_parse_range(), for /dl
 #include "logcrypt.h"       // logcrypt_fingerprint(), for /api/settings
+#include "taskwdt.h"        // the download's task is watched while it works
 #include <sys/stat.h>       // stat(), for file sizes without opening them
+#include <dirent.h>         // readdir(): the card's names without a String each
 #include <WiFi.h>
 #include <sys/socket.h>     // select()/send() on the download's socket - see sendAll;
 #include <errno.h>          // after WiFi.h, whose lwip order the socket header needs
@@ -200,9 +202,13 @@ static void handleLiveJson() {
            // Resources: internal RAM now and at its lowest since boot (WiFi
            // fails without it), PSRAM, SD in KB, the firmware against its
            // partition, the chip's temperature, why it last started.
+           // loopStackMin: the least stack loop() has had free since boot, in
+           // bytes - the margin under the web handlers' big locals and LVGL's
+           // drawing, never measured before (2026-10-21). This handler runs
+           // on loop(), so the figure includes itself.
            "\"sys\":{\"heap\":%u,\"heapMin\":%u,\"heapTotal\":%u,\"psram\":%u,\"psramTotal\":%u,"
            "\"sdUsedKb\":%lu,\"sdTotalKb\":%lu,\"app\":%lu,\"appMax\":%lu,"
-           "\"tempC\":%.1f,\"reset\":\"%s\"},"
+           "\"tempC\":%.1f,\"reset\":\"%s\",\"loopStackMin\":%u},"
            "\"uptimeMs\":%lu}",
            obd.linkUp ? "true" : "false",
            // Fresh, not "arrived once" - same answer the screen gives.
@@ -229,6 +235,7 @@ static void handleLiveJson() {
            (unsigned long)sdUsed, (unsigned long)sdTotal,
            (unsigned long)ESP.getSketchSize(), (unsigned long)appMax,
            temperatureRead(), web_reset_text(),
+           (unsigned)uxTaskGetStackHighWaterMark(NULL),
            (unsigned long)millis());
   if (len < 0 || len >= (int)sizeof(b)) { server.send(500, "text/plain", "live JSON too long"); return; }
   server.send(200, "application/json", b);
@@ -436,6 +443,8 @@ static void handleSave() {
 // A name from the phone, safe to open in the card root - calc_safe_name()
 // (host-tested), over all length() bytes, embedded NULs included.
 static bool safeName(const String &n) { return calc_safe_name(n.c_str(), n.length()); }
+// A name off the card (NUL-terminated, from the listing).
+static bool safeName(const char *n) { return calc_safe_name(n, strlen(n)); }
 
 static const char *mimeFor(const String &n) {
   if (n.endsWith(LOGCRYPT_SUFFIX)) return "application/octet-stream";   // ciphertext
@@ -449,8 +458,8 @@ static const char *mimeFor(const String &n) {
 // since each costs one stat per file inside a single loop() pass.
 #define FILES_JSON_PER_PAGE 50
 
-// One page of the card root's files, newest first, into names[] (perPage
-// long); *nShown says how many. Returns the total file count. Paged because
+// One page of the card root's files, newest first, into out->names (perPage
+// long); out->shown says how many. Returns the total file count. Paged because
 // the card holds ~300 files, and listing them all opened every one
 // (openNextFile) - many seconds inside one loop() pass, so the 8 s watchdog
 // rebooted the gauge each time the page loaded (seen in the car 2026-10-03:
@@ -479,54 +488,63 @@ static int pageArg() {
   return server.hasArg("p") ? calc_parse_page(server.arg("p").c_str(), CARD_MAX_PAGE) : 0;
 }
 
+// One page of the card's names, pointing into the sorted table - which it
+// owns, in PSRAM. It used to copy the page into Strings, and the walk made a
+// String per name on the card: internal RAM, which WiFi runs on, churned by
+// every sync (B16). readdir() hands each name over without allocating.
+struct CardPage {
+  char       *table = nullptr;
+  const char *names[FILES_JSON_PER_PAGE];
+  int         shown = 0;
+  CardPage() = default;
+  CardPage(const CardPage &) = delete;
+  CardPage &operator=(const CardPage &) = delete;
+  ~CardPage() { if (table) heap_caps_free(table); }
+};
+static_assert(FILES_PER_PAGE <= FILES_JSON_PER_PAGE, "a CardPage holds either page");
+
 // Returns the file count, or -1 when the card could not be listed - not 0:
 // "no files" told the app every pending delete was already done.
-static int listCardPage(int page, int perPage, String *names, int *nShown) {
-  *nShown = 0;
+static int listCardPage(int page, int perPage, CardPage *out) {
   int nFiles = 0;
-  char *table = nullptr;
   for (int pass = 0; pass < 2; pass++) {
-    File root = SD_MMC.open("/");
-    if (!root) {
-      if (table) heap_caps_free(table);
-      return -1;
-    }
+    DIR *dir = opendir("/sdcard");
+    if (!dir) return -1;
     int i = 0;
-    bool isDir = false;
-    for (String n = root.getNextFileName(&isDir); n.length(); n = root.getNextFileName(&isDir)) {
-      if (isDir) continue;
+    for (struct dirent *e = readdir(dir); e; e = readdir(dir)) {
+      if (e->d_type == DT_DIR) continue;
       // Pass 0 counts; pass 1 fills the table (as many as were counted).
       if (pass == 1 && i < nFiles) {
-        const char *bare = n.c_str() + (n[0] == '/');
-        char *slot = table + i * CARD_NAME_MAX;
-        if (strlen(bare) < CARD_NAME_MAX) strcpy(slot, bare);
+        char *slot = out->table + i * CARD_NAME_MAX;
+        if (strlen(e->d_name) < CARD_NAME_MAX) strcpy(slot, e->d_name);
         else slot[0] = '\0';
       }
       i++;
       if ((i & 31) == 0) esp_task_wdt_reset();   // bounded by the file count
     }
-    root.close();
+    closedir(dir);
     if (pass == 0) {
       nFiles = i;
       if (nFiles == 0) return 0;
-      table = (char *)heap_caps_malloc(nFiles * CARD_NAME_MAX, MALLOC_CAP_SPIRAM);
-      if (!table) return -1;
+      out->table = (char *)heap_caps_malloc(nFiles * CARD_NAME_MAX, MALLOC_CAP_SPIRAM);
+      if (!out->table) return -1;
     } else if (i < nFiles) {
       nFiles = i;                            // a file went between the passes
     }
   }
-  qsort(table, nFiles, CARD_NAME_MAX, byCardOrder);
-  for (int i = page * perPage; i < nFiles && *nShown < perPage; i++)
-    names[(*nShown)++] = table + i * CARD_NAME_MAX;
-  heap_caps_free(table);
+  qsort(out->table, nFiles, CARD_NAME_MAX, byCardOrder);
+  for (int i = page * perPage; i < nFiles && out->shown < perPage; i++)
+    out->names[out->shown++] = out->table + i * CARD_NAME_MAX;
   return nFiles;
 }
 
 // stat() rather than open(): VFS open() runs the same stat() first and then
 // also allocates a FILE and an fd.
-static long cardFileSize(const String &name) {
+static long cardFileSize(const char *name) {
+  char path[16 + CARD_NAME_MAX];
+  snprintf(path, sizeof(path), "/sdcard/%s", name);
   struct stat st;
-  return stat(("/sdcard/" + name).c_str(), &st) == 0 ? (long)st.st_size : -1;
+  return stat(path, &st) == 0 ? (long)st.st_size : -1;
 }
 
 // A save on a stalling card holds the SD lock: the phone is told to come back,
@@ -576,24 +594,24 @@ static void handleFiles() {
            (unsigned long long)(total / 1048576ULL));
   server.sendContent(hdr);
 
-  String names[FILES_PER_PAGE];
-  int nShown = 0;
-  int nFiles = listCardPage(page, FILES_PER_PAGE, names, &nShown);
+  CardPage list;
+  int nFiles = listCardPage(page, FILES_PER_PAGE, &list);
   if (nFiles < 0) {
     server.sendContent(F("</table><p class='sub'>The card could not be read.</p>"));
     nFiles = 0;
   }
-  for (int k = 0; k < nShown; k++) {
+  for (int k = 0; k < list.shown; k++) {
+    const char *name = list.names[k];
     // Card names go into HTML and a link: only ones safeName() admits, which
     // carry no markup and are the only ones /dl would serve anyway.
-    if (!safeName(names[k])) continue;
-    const long size = cardFileSize(names[k]);
+    if (!safeName(name)) continue;
+    const long size = cardFileSize(name);
     char row[240];
-    snprintf(row, sizeof(row),
+    const int len = snprintf(row, sizeof(row),
              "<tr><td><a href='/dl?f=%s'>%s</a></td><td>%lu KB</td></tr>",
-             names[k].c_str(), names[k].c_str(),
-             size > 0 ? (unsigned long)(size / 1024) : 0UL);
-    server.sendContent(row);
+             name, name, size > 0 ? (unsigned long)(size / 1024) : 0UL);
+    // With the length: sendContent(char *) would build a String of it first.
+    server.sendContent(row, (size_t)len);
     esp_task_wdt_reset();
   }
 
@@ -631,9 +649,8 @@ static void handleFilesJson() {
     return;
   }
   if (!logger_card_ok()) { server.send(503, "text/plain", "No SD card."); return; }
-  String names[FILES_JSON_PER_PAGE];
-  int nShown = 0;
-  const int nFiles = listCardPage(page, FILES_JSON_PER_PAGE, names, &nShown);
+  CardPage list;
+  const int nFiles = listCardPage(page, FILES_JSON_PER_PAGE, &list);
   // An error, not an empty card: the app takes a file missing from the list
   // as deleted, and would drop every delete it still has pending.
   if (nFiles < 0) { server.send(500, "text/plain", "The card could not be read."); return; }
@@ -643,15 +660,16 @@ static void handleFilesJson() {
   server.send(200, "application/json", "");
   server.sendContent("{\"files\":[");
   bool firstRow = true;
-  for (int k = 0; k < nShown; k++) {
-    if (!safeName(names[k])) continue;
-    const long size = cardFileSize(names[k]);
+  for (int k = 0; k < list.shown; k++) {
+    const char *name = list.names[k];
+    if (!safeName(name)) continue;
+    const long size = cardFileSize(name);
     if (size < 0) continue;
     char row[96];
     // safeName() admits no character JSON needs escaped.
-    snprintf(row, sizeof(row), "%s{\"name\":\"%s\",\"size\":%ld}",
-             firstRow ? "" : ",", names[k].c_str(), size);
-    server.sendContent(row);
+    const int len = snprintf(row, sizeof(row), "%s{\"name\":\"%s\",\"size\":%ld}",
+                             firstRow ? "" : ",", name, size);
+    server.sendContent(row, (size_t)len);
     firstRow = false;
     esp_task_wdt_reset();
   }
@@ -719,9 +737,12 @@ static void handleDelete() {
 // 10 s, past the 8 s watchdog, and rebooted the pod (setTimeout() sets
 // SO_SNDTIMEO, which MSG_DONTWAIT ignores). Here each wait is 100 ms, the
 // watchdog is fed between them, and the stall limit is ours.
+static volatile bool dlAbort = false;   // web_stop(): end the download now
+
 static bool sendAll(int fd, const uint8_t *p, size_t n) {
   uint32_t progressAt = millis();
   while (n) {
+    if (dlAbort) return false;
     fd_set w;
     FD_ZERO(&w);
     FD_SET(fd, &w);
@@ -744,9 +765,81 @@ static bool sendAll(int fd, const uint8_t *p, size_t n) {
   return true;
 }
 
+// ---- the download's own task (B11) -------------------------------------------
+// The file used to be sent from inside the handler, so loop() - the screen,
+// the warnings - waited out the whole transfer: up to DL_MAX_MS, two minutes,
+// for a big GPX, and a sync still running as the car pulls away froze the
+// gauge. Now the handler checks the request, sends the headers and hands the
+// open file and a copy of the client to this task; loop() goes straight on.
+// The copy is what keeps the connection open: the server only drops its own
+// reference when the handler returns. One download at a time - the app pulls
+// files one after another.
+//
+// The SD lock is taken per chunk, not for the whole transfer, so the logger
+// keeps writing during a sync (before, its rows were skipped meanwhile).
+// Core 0 at priority 1, beside the logger: the screen's core stays free.
+struct DlJob {
+  WiFiClient client;
+  File       f;
+  uint32_t   left = 0;
+  uint32_t   total = 0;
+  char       name[CARD_NAME_MAX] = "";
+};
+static DlJob dlJob;
+static TaskHandle_t dlTaskHandle = nullptr;
+static volatile bool dlBusy = false;
+
+static void dlTask(void *) {
+  static uint8_t buf[1024];
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    TaskWdt wdt;                       // watched while it works, not while idle
+    wdt.beat();
+    const uint32_t t0 = millis();
+    const int fd = dlJob.client.fd();
+    const uint32_t deadline = millis() + DL_MAX_MS;
+    uint32_t sinceYield = 0;
+    while (fd >= 0 && dlJob.left && !dlAbort && (int32_t)(millis() - deadline) < 0) {
+      size_t got = 0;
+      {
+        LoggerSdLock lock(SD_LOCK_WEB_MS);
+        if (!lock || logger_card_shared()) break;
+        got = dlJob.f.read(buf, dlJob.left < sizeof(buf) ? dlJob.left : sizeof(buf));
+      }
+      if (!got) break;
+      if (!sendAll(fd, buf, got)) break;         // stalled or gone: give up
+      dlJob.left -= got;
+      wdt.beat();
+      // A fast client never makes send() wait: let lower priorities run.
+      if ((sinceYield += got) >= 16384) { sinceYield = 0; vTaskDelay(1); }
+    }
+    dlJob.f.close();
+    Serial.printf("[..] sent %s: %lu of %lu bytes in %lu ms%s\n", dlJob.name,
+                  (unsigned long)(dlJob.total - dlJob.left), (unsigned long)dlJob.total,
+                  (unsigned long)(millis() - t0),
+                  !dlJob.left ? "" : dlAbort ? " - stopped (AP going down)" : " - cut short");
+    // Cut short: close now, so the client sees the transfer end rather than
+    // waiting on a Content-Length that will never be met.
+    if (dlJob.left) dlJob.client.stop();
+    dlJob.client = WiFiClient();       // our reference gone: a finished one closes
+    wdt.stop();
+    dlBusy = false;
+  }
+}
+
+bool web_download_active() { return dlBusy; }
+
 static void handleDownload() {
-  // Held for the whole download: the logger pauses meanwhile (rows of that
-  // time are skipped, the files themselves stay consistent).
+  // The previous file's last bytes can reach the app a moment before the task
+  // has tidied up, and its next request comes at once.
+  for (int i = 0; i < 25 && dlBusy; i++) delay(20);
+  if (dlBusy) { server.send(503, "text/plain", "Another download is running - try again."); return; }
+  if (!dlTaskHandle &&
+      xTaskCreatePinnedToCore(dlTask, "dl", 4096, NULL, 1, &dlTaskHandle, 0) != pdPASS) {
+    dlTaskHandle = nullptr;
+    server.send(500, "text/plain", "no task for the download");
+    return;
+  }
   LoggerSdLock lock(SD_LOCK_WEB_MS);
   if (!lock) { sendCardBusy(); return; }
   if (logger_card_shared()) {
@@ -780,7 +873,6 @@ static void handleDownload() {
   }
   uint32_t left = size ? last - first + 1 : 0;
 
-  WiFiClient client = server.client();
   server.sendHeader("Content-Disposition", "attachment; filename=\"" + n + "\"");
   server.sendHeader("Accept-Ranges", "bytes");
   if (r > 0) {
@@ -791,21 +883,16 @@ static void handleDownload() {
   }
   server.setContentLength(left);
   server.send(r > 0 ? 206 : 200, mimeFor(n), "");
+  if (!left) { f.close(); return; }
 
-  static uint8_t buf[1024];
-  const int fd = client.fd();
-  const uint32_t deadline = millis() + DL_MAX_MS;
-  while (fd >= 0 && left && (int32_t)(millis() - deadline) < 0) {
-    const size_t got = f.read(buf, left < sizeof(buf) ? left : sizeof(buf));
-    if (!got) break;
-    if (!sendAll(fd, buf, got)) break;          // stalled or gone: give up
-    left -= got;
-    esp_task_wdt_reset();
-  }
-  f.close();
-  // Cut short: close now, so the client sees the transfer end rather than
-  // waiting on a Content-Length that will never be met.
-  if (left) client.stop();
+  // To the task. dlBusy is false here, so it is waiting and owns nothing.
+  dlJob.client = server.client();
+  dlJob.f = f;
+  dlJob.left = dlJob.total = left;
+  strlcpy(dlJob.name, n.c_str(), sizeof(dlJob.name));
+  dlAbort = false;
+  dlBusy = true;
+  xTaskNotifyGive(dlTaskHandle);
 }
 
 // No delete on these pages: a drive log was often the only copy of a run
@@ -872,9 +959,11 @@ enum Page : uint8_t { PAGE_GAUGE, PAGE_CAR, PAGE_DEVICE };
 // its format, as it did when the page was one snprintf.
 static void sendPage(Page page, const char *path, const char *body, ...)
     __attribute__((format(printf, 3, 4)));
+// Built in PSRAM and sent from there with its length: send(200, type, b)
+// took it as a String, a 6 KB copy in internal RAM per page view (B16).
 static void sendPage(Page page, const char *path, const char *body, ...) {
   const size_t cap = 6144;
-  char *b = (char *)malloc(cap);
+  char *b = (char *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
   if (!b) { server.send(500, "text/plain", "out of memory"); return; }
   size_t n = strlcpy(b, PAGE_HEAD, cap);
   if (n < cap)
@@ -898,8 +987,11 @@ static void sendPage(Page page, const char *path, const char *body, ...) {
   // is not there, or is there without its handler, and the board looks broken.
   server.sendHeader("Cache-Control", "no-store, must-revalidate");
   Serial.printf("[HTTP] GET %s -> %u bytes (cap %u)\n", path, (unsigned)n, (unsigned)cap);
-  server.send(200, "text/html", b);
-  free(b);
+  if (n >= cap) n = cap - 1;
+  server.setContentLength(n);
+  server.send(200, "text/html", "");
+  server.sendContent(b, n);
+  heap_caps_free(b);
 }
 
 // Gauge: what the screen shows and when it warns.
@@ -1084,6 +1176,12 @@ static void handleDevicePage() {
 
 void web_stop() {
   if (!up) return;
+  // A download still running ends first: sleep unmounts the card next, and
+  // the AP going leaves it nowhere to send. Its waits are 100 ms steps that
+  // check dlAbort, so this takes a moment.
+  dlAbort = true;
+  for (int i = 0; i < 60 && dlBusy; i++) { delay(50); esp_task_wdt_reset(); }
+  if (dlBusy) Serial.println(F("[ERR] the download did not stop"));
   dns.stop();
   server.stop();
   WiFi.softAPdisconnect(true);

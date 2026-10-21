@@ -14,8 +14,9 @@ fail=0
 step() {
   local name="$1"; shift
   echo "==> $name"
-  # Warnings from our own files count; the toolchain's own and the one in
-  # settings.cpp (a volatile ++ the core's API forces) do not.
+  # Warnings from our own files count; the toolchain's own do not. (The one
+  # exception there was, filtered by its line number, broke as soon as the
+  # line moved - it is fixed now instead.)
   local log
   if ! log="$("$@" 2>&1)"; then
     echo "$log" | tail -30
@@ -24,7 +25,7 @@ step() {
     return
   fi
   local warn
-  warn="$(echo "$log" | grep -E "car_gauge_v1/[^ ]+: warning:" | grep -v "settings.cpp:248" || true)"
+  warn="$(echo "$log" | grep -E "car_gauge_v1/[^ ]+: warning:" || true)"
   if [ -n "$warn" ]; then
     echo "$warn"
     echo "WARNINGS: $name"

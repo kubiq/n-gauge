@@ -24,6 +24,9 @@
 void web_start();           // bring it up (no-op if already up)
 void web_stop();            // bring it down; called before deep sleep
 bool web_is_up();
+// A /dl transfer is running on its own task, with a card file open: the
+// card is not to be unmounted or lent to the PC meanwhile.
+bool web_download_active();
 // Times since boot web_start() declined: under AP_MIN_INTERNAL_HEAP free.
 uint32_t web_ap_refused();
 // How many stations are associated. Used by power.cpp to hold off sleep while

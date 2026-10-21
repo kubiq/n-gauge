@@ -11,8 +11,10 @@
 #include "gps.h"
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // logLevel, and the key generation
+#include "webapi.h"     // web_download_active: no unmount under a download
 #include "SD_MMC.h"
 #include "esp_task_wdt.h"   // fed while waiting for the SD lock
+#include "taskwdt.h"
 
 // FAT file times in UTC, not local time. FatFs asks get_fattime() for the
 // stamp, and ESP-IDF's version uses localtime() - which is what the FAT spec
@@ -150,6 +152,7 @@ static void closeAll() {
 }
 
 bool logger_suspend() {
+  if (web_download_active()) return false;   // a file open for the phone
   LoggerSdLock lock(SD_LOCK_WEB_MS);
   if (!lock) return false;           // mid-save on a stalled card: not now
   closeAll();
@@ -192,6 +195,10 @@ static uint32_t remountTriedMs = 0;
 static void cardRecover() {
   const uint32_t now = millis();
   if (remountTriedMs && now - remountTriedMs < SD_REMOUNT_RETRY_MS) return;
+  // A download has a file open, and unmounting under it would let its close
+  // hit a descriptor reused by the new mount. It fails on the dead card and
+  // ends by itself; the remount waits for that.
+  if (web_download_active()) return;
   remountTriedMs = now;
   closeAll();                        // what still reaches the card, does
   if (remounts >= SD_REMOUNT_MAX) {
@@ -258,8 +265,14 @@ static void loggerTask() {
 // which preempt it the moment they have work, and the time a save costs is
 // mostly the card working, not this core. A pass every LOGGER_PASS_MS, the
 // pace loop() used to give it; the delay also lets core 0's idle task run.
+//
+// Watched (taskwdt.h). A pass is normally milliseconds; the long ones are a
+// stalling card (a save, ~460 ms seen) and a pulled one (the failing closes
+// and a mount attempt, cardRecover) - each well inside the 8 s.
 static void loggerTaskLoop(void *) {
+  TaskWdt wdt;
   for (;;) {
+    wdt.beat();
     {
       LoggerSdLock lock;
       if (!stopped) {

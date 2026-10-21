@@ -9,6 +9,7 @@
 // ============================================================================
 #include <Arduino.h>
 #include "esp_task_wdt.h"
+#include "taskwdt.h"      // the background tasks are watched too
 #include "lvgl.h"
 #include "config.h"
 #include "bsp.h"
@@ -200,6 +201,7 @@ void setup() {
   } else {
     Serial.println(F("[ERR] watchdog NOT armed - a hung loop will not reboot"));
   }
+  taskwdt_armed = true;   // the CAN, GNSS and logger tasks subscribe on their next pass
 
   // If the car is off (bus silent), don't sit awake draining the battery.
   // On a deep-sleep wake this only starts the bus check; power_task() in

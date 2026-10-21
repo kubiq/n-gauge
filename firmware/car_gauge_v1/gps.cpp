@@ -6,6 +6,7 @@
 #include "config.h"
 #include "calc.h"       // calc_timegm; timegm() is absent from this newlib
 #include "rtc.h"        // clock_valid(): step a clock not yet set, slew a set one
+#include "taskwdt.h"
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
 #include <sys/time.h>
@@ -657,7 +658,9 @@ static void gpsProbeNow() {
 
 static void gpsTask(void *arg) {
   (void)arg;
+  TaskWdt wdt;
   for (;;) {
+    wdt.beat();       // the slowest pass, a UBX handshake, is ~3.5 s
 #if BENCH_CONSOLE
     if (probeReq) { probeReq = false; gpsProbeNow(); }
 #endif
@@ -668,6 +671,7 @@ static void gpsTask(void *arg) {
       // Stop here. The board is about to deep-sleep, and continuing to poll a
       // receiver we just put into backup mode would wake it again on the very
       // next byte we sent it - undoing the 17 mA the park exists to save.
+      wdt.stop();
       vTaskDelete(NULL);
     }
 #endif

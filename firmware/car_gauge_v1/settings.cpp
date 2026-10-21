@@ -249,7 +249,9 @@ bool settings_set_log_key(const char *hex) {
     settings.logKey = true;
   }
   settings_save();
-  settings_log_key_gen++;
+  // Not ++: C++20 deprecates it on a volatile. One writer (under the SD lock),
+  // so the read-then-write cannot race.
+  settings_log_key_gen = settings_log_key_gen + 1;
   return true;
 }
 

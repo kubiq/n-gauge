@@ -5,6 +5,7 @@
 #include "obd.h"
 #include "config.h"
 #include "calc.h"         // ISO-TP reassembly, the Mode 01 walk and formulas
+#include "taskwdt.h"
 #include <Arduino.h>
 #include "driver/gpio.h"   // RX idle-level report, Rs pad hold
 #include "driver/twai.h"
@@ -470,7 +471,9 @@ static void obdPoll() {
 
 static void obdTask(void *arg) {
   (void)arg;
+  TaskWdt wdt;
   for (;;) {
+    wdt.beat();
     obdPoll();
     // obdPoll() already blocks up to 5 ms in twai_receive when the bus is
     // quiet, so this only yields when frames are arriving back-to-back.
