@@ -55,14 +55,24 @@ export function isEncrypted(head: Uint8Array): boolean {
 
 export type Opened = {
   plain: Uint8Array;
-  /** How far the file was valid; less than its length after a cut-off last record. */
+  /** The end of the last good block; less than the length after a cut-off last record. */
   consumed: number;
 };
 
+/** The first segment header at or after `from` (its first 10 bytes are fixed), or the file's length. */
+function nextHeader(file: Uint8Array, from: number): number {
+  for (let i = from; i + BLOCK_HEAD + 5 <= file.length; i++) {
+    if (isEncrypted(file.subarray(i, i + BLOCK_HEAD + 5)) && file[i + BLOCK_HEAD + 4] === VERSION) return i;
+  }
+  return file.length;
+}
+
 /**
- * Decrypts a whole file. Stops - without throwing - at the first block that
- * is cut short or fails its MAC: that is the end of the file as far as the
- * reader is concerned (the pod lost power mid-write, or the copy is partial).
+ * Decrypts a whole file, without throwing. A block that is cut short or fails
+ * its MAC is skipped to the next segment header: a write that failed on the
+ * pod (a card error) leaves a broken block with good segments after it. With
+ * none after it, it is the end (the pod lost power mid-write, or the copy is
+ * partial). Same as logcrypt_open() in logcrypt.h.
  */
 export function openLog(file: Uint8Array, secret: Uint8Array): Opened {
   const ourPub = x25519.getPublicKey(secret);
@@ -71,28 +81,38 @@ export function openLog(file: Uint8Array, secret: Uint8Array): Opened {
   let ad: Uint8Array | null = null;
   let counter = 0;
   let at = 0;
+  let valid = 0;
   while (at + BLOCK_HEAD <= file.length) {
     const type = file[at];
     const len = u32(file, at + 1);
-    if (len > MAX_RECORD || at + BLOCK_HEAD + len > file.length) break;
     const body = file.subarray(at + BLOCK_HEAD, at + BLOCK_HEAD + len);
-    if (type === TYPE_HEADER) {
-      if (len !== HEADER_BODY || !MAGIC.every((m, i) => body[i] === m) || body[4] !== VERSION) break;
-      const ephPub = body.subarray(5, 37);
-      key = derive(x25519.getSharedSecret(secret, ephPub), ephPub, ourPub);
-      ad = body.slice();
-      counter = 0;
-    } else if (type === TYPE_RECORD && key && ad && len >= MAC) {
+    let ok = len <= MAX_RECORD && at + BLOCK_HEAD + len <= file.length;
+    if (ok && type === TYPE_HEADER) {
+      ok = len === HEADER_BODY && MAGIC.every((m, i) => body[i] === m) && body[4] === VERSION;
+      if (ok) {
+        const ephPub = body.subarray(5, 37);
+        key = derive(x25519.getSharedSecret(secret, ephPub), ephPub, ourPub);
+        ad = body.slice();
+        counter = 0;
+      }
+    } else if (ok && type === TYPE_RECORD && key && ad && len >= MAC) {
       try {
         parts.push(xchacha20poly1305(key, nonce(counter), ad).decrypt(body));
+        counter++;
       } catch {
-        break; // MAC mismatch: corrupt or cut, the end
+        ok = false; // MAC mismatch: corrupt or cut
       }
-      counter++;
     } else {
-      break;
+      ok = false;
+    }
+    if (!ok) {
+      // On to the next segment; its own key and count start afresh.
+      key = ad = null;
+      at = nextHeader(file, at + 1);
+      continue;
     }
     at += BLOCK_HEAD + len;
+    valid = at;
   }
   const plain = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let o = 0;
@@ -100,7 +120,7 @@ export function openLog(file: Uint8Array, secret: Uint8Array): Opened {
     plain.set(p, o);
     o += p.length;
   }
-  return { plain, consumed: at };
+  return { plain, consumed: valid };
 }
 
 /**

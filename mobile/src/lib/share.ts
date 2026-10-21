@@ -23,12 +23,17 @@ export function trackLogNames(): string[] {
 
 // The pod's own plain-text logs, which GROW: a line per sleep, a line per
 // boot. Unlike a drive's files they are never finished, so "already there"
-// is no reason to skip one - it is written over with the longer copy.
+// is no reason to skip one - it is written over with the longer copy. When
+// full, the pod moves one aside to a numbered name (sleeplog_0001.txt):
+// finished from then on, so saved once like a drive's.
 const GROWING_LOGS = ['sleeplog.txt', 'bootlog.txt'];
+const POD_TEXT_LOG = /^(?:sleeplog|bootlog)(?:_\d{4})?\.txt$/;
 
 /** The pod's sleep and boot logs the phone holds - "Save all" takes them too. */
 export function podTextLogNames(): string[] {
-  return GROWING_LOGS.filter((n) => n in loadInbox() && inboxFile(n).exists);
+  return Object.keys(loadInbox())
+    .filter((n) => POD_TEXT_LOG.test(n) && inboxFile(n).exists)
+    .sort();
 }
 
 const dir = new Directory(Paths.cache, 'share');
@@ -39,7 +44,7 @@ const dir = new Directory(Paths.cache, 'share');
 const mimeOf = (name: string) =>
   isGpxName(name) ? 'application/gpx+xml'
   : isVboName(name) ? 'application/octet-stream'
-  : GROWING_LOGS.includes(name) ? 'text/plain'
+  : POD_TEXT_LOG.test(name) ? 'text/plain'
   : 'text/csv';
 
 /**

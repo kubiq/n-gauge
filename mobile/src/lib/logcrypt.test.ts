@@ -52,6 +52,19 @@ test('a cut-off last record: everything before it, no throw', () => {
   assert.equal(consumed, file.length - lastLen);
 });
 
+// A write that failed mid-block on the pod (a card error), then a new segment.
+test('a broken block is skipped to the next segment', () => {
+  const recs: string[] = V.records;
+  const seg = sealSegment(pub, hex(V.ephemeralSecrets[0]), recs.map(bytes));
+  const junk = Uint8Array.from([0x02, 0x10, 0, 0, 0, 0x6a, 0x75, 0x6e, 0x6b]);
+  const parts = [seg.subarray(0, seg.length - 7), seg, junk, seg];
+  const f = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  parts.reduce((o, p) => (f.set(p, o), o + p.length), 0);
+  const { plain, consumed } = openLog(f, secret);
+  assert.equal(text(plain), recs[0] + recs[1] + recs.join('') + recs.join(''));
+  assert.equal(consumed, f.length);
+});
+
 test('the wrong key reads nothing', () => {
   const other = secret.slice();
   // Not bit 0 of byte 0: X25519 clamps the low 3 bits, so that is the same key.
