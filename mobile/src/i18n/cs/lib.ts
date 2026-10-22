@@ -1,7 +1,6 @@
 // Czech for the lib part - see ../index.ts. English text -> Czech.
 export const lib: Record<string, string> = {
   // Sync status and errors (hooks/use-sync.tsx)
-  '{at}/{of} {name}: {got} of {total}': '{at}/{of} {name}: {got} z {total}',
   'Pulled 1 file.|Pulled {n} files.': 'Stažen {n} soubor.|Staženy {n} soubory.|Staženo {n} souborů.',
   'Cancelled after {done} of {total}.': 'Zrušeno po {done} z {total}.',
   'Stopped after {done} of {total}: {error}': 'Zastaveno po {done} z {total}: {error}',

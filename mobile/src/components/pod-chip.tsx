@@ -19,13 +19,17 @@ function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>
   if (!pod.creds) return { title: t('Set up the gauge'), detail: null, ring: C.dim, busy: false };
   if (pod.state === 'connecting') return { title: t('Connecting…'), detail: synced, ring: C.dim, busy: true };
   if (pod.state === 'idle') return { title: t('Not connected'), detail: synced, ring: C.dim, busy: false };
-  if (sync.progress)
+  if (sync.progress) {
+    const p = sync.progress;
+    // Of the whole pull, not the file: what is left of the sync.
+    const pct = p.total > 0 ? Math.min(99, Math.floor((p.got / p.total) * 100)) : 0;
     return {
       title: t('Connected'),
-      detail: t('Syncing {at}/{of}', { at: sync.progress.at, of: sync.progress.of }),
+      detail: t('Syncing {at}/{of} · {pct} %', { at: p.at, of: p.of, pct }),
       ring: C.good,
       busy: true,
     };
+  }
   if (sync.phase !== 'idle') return { title: t('Connected'), detail: t('Checking…'), ring: C.good, busy: true };
   if (sync.err) return { title: t('Connected'), detail: t('Sync failed'), ring: C.bad, busy: false, bad: true };
   return { title: t('Connected'), detail: synced, ring: C.good, busy: false };

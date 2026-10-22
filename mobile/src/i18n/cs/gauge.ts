@@ -115,7 +115,7 @@ export const gauge: Record<string, string> = {
   'Set up the gauge': 'Nastavit budík',
   'Connecting…': 'Připojování…',
   Connected: 'Připojeno',
-  'Syncing {at}/{of}': 'Synchronizace {at}/{of}',
+  'Syncing {at}/{of} · {pct} %': 'Synchronizace {at}/{of} · {pct} %',
   'Checking…': 'Kontrola…',
   'Sync failed': 'Synchronizace selhala',
   'Sync failed: {error}': 'Synchronizace selhala: {error}',

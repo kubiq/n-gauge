@@ -7,7 +7,7 @@ import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Pill, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
-import { duration, km, when } from '@/lib/format';
+import { duration, km, mb, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
@@ -57,7 +57,7 @@ export default function TripsScreen() {
   // where each drive appearing on its own moved the whole list down again,
   // once per file, while it was being read (2026-10-20). A first visit with
   // nothing read yet still fills in as it goes, rather than staying empty.
-  const { landed, phase } = useSync();
+  const { landed, phase, progress } = useSync();
   const syncing = phase !== 'idle';
   const again = useRef(false);
   const [rerun, setRerun] = useState(0);
@@ -213,9 +213,23 @@ export default function TripsScreen() {
   );
 
   return (
-    // Progress (reading new drives, saving to the folder) floats over the
-    // list: as a line above it, it pushed every row down and back up.
-    <Screen overlay={status ? <Pill>{status}</Pill> : null}>
+    // Progress (a sync's, reading new drives, saving to the folder) floats
+    // over the list: as a line above it, it pushed every row down and back up.
+    <Screen
+      overlay={
+        progress ? (
+          <Pill>
+            {t('Syncing {at} of {of}: {got} of {total}', {
+              at: progress.at,
+              of: progress.of,
+              got: mb(progress.got),
+              total: mb(progress.total),
+            })}
+          </Pill>
+        ) : status ? (
+          <Pill>{status}</Pill>
+        ) : null
+      }>
       {trips.length === 0 ? (
         <Card>
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>

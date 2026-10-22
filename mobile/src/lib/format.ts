@@ -6,6 +6,11 @@ export function km(m: number): string {
   return m >= 10000 ? `${Math.round(m / 1000)} km` : `${(m / 1000).toFixed(1)} km`;
 }
 
+/** A file's size: "4.2 MB" under 10 MB, "17 MB" above. */
+export function mb(bytes: number): string {
+  return `${(bytes / 1048576).toFixed(bytes < 10 * 1048576 ? 1 : 0)} MB`;
+}
+
 export function duration(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.round((s % 3600) / 60);

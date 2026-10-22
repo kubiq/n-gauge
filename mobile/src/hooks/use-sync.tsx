@@ -31,11 +31,16 @@ import {
   saveLastSync,
 } from '@/lib/store';
 import { dropStaleCopies, renameLegacyLogs } from '@/lib/trip-cache';
-import { type PodFile, planPull, type Pull } from '@/lib/sync-plan';
-
-const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`;
+import { type PodFile, planPull, type Pull, pullBytes } from '@/lib/sync-plan';
 
 type Phase = 'idle' | 'checking' | 'pulling';
+
+/**
+ * While pulling: the file (1-based) of how many, and the bytes of the whole
+ * pull so far against all of it - a 17 MB GPX said nothing of how far it
+ * was, only "1/3" (asked 2026-10-22).
+ */
+export type SyncProgress = { at: number; of: number; got: number; total: number };
 
 type Sync = {
   phase: Phase;
@@ -48,8 +53,7 @@ type Sync = {
   inbox: Inbox;
   /** Bumped each time a file lands, for screens that list the inbox. */
   landed: number;
-  /** While pulling: the file being pulled (1-based) of how many. */
-  progress: { at: number; of: number } | null;
+  progress: SyncProgress | null;
   /** When a sync last finished with nothing left to pull (ms), across restarts. */
   lastSync: number | null;
   /** Check, then pull whatever is new. */
@@ -86,7 +90,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return dropNonLogs();
   });
   const [landed, setLanded] = useState(0);
-  const [progress, setProgress] = useState<{ at: number; of: number } | null>(null);
+  const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [lastSync, setLastSync] = useState(loadLastSync);
   // The connection (pod.session) a sync last finished on with nothing left
   // to pull. Per connection, so a new one is not taken as synced before its
@@ -132,24 +136,25 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     abort.current = ctl;
     setPhase('pulling');
     let done = 0;
+    const total = pullBytes(todo);
+    let before = 0;               // bytes of the files already pulled
+    let shownAt = 0;
     try {
       for (const [i, p] of todo.entries()) {
         if (ctl.signal.aborted) break;
-        setProgress({ at: i + 1, of: todo.length });
+        setProgress({ at: i + 1, of: todo.length, got: before, total });
         await pull(
           p,
-          (b) =>
-            setStatus(
-              t('{at}/{of} {name}: {got} of {total}', {
-                at: i + 1,
-                of: todo.length,
-                name: p.name,
-                got: mb(b),
-                total: mb(p.size - p.from),
-              }),
-            ),
+          (b) => {
+            // At most four times a second: every screen re-renders on it.
+            const now = Date.now();
+            if (now - shownAt < 250) return;
+            shownAt = now;
+            setProgress({ at: i + 1, of: todo.length, got: before + b, total });
+          },
           ctl.signal,
         );
+        before += p.size - p.from;
         done++;
         pulledThisSession.current++;
         // Per file, so "On the phone", the count of what is left and the

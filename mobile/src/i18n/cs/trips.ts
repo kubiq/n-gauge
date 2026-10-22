@@ -2,6 +2,7 @@
 export const trips: Record<string, string> = {
   // app/index.tsx - the drives list
   'Reading new drives… {i} of {n}': 'Načítám nové jízdy… {i} z {n}',
+  'Syncing {at} of {of}: {got} of {total}': 'Synchronizace {at} z {of}: {got} z {total}',
   'Could not read it: {error}': 'Nelze přečíst: {error}',
   'Saved': 'Uloženo',
   'Save': 'Uložit',
