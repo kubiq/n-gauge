@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { x25519 } from '@noble/curves/ed25519.js';
 
 import {
+  beaconOf,
   bytesToText,
   fingerprint,
   fingerprintSpaced,
@@ -31,6 +32,10 @@ const file = hex(V.file);
 test('the same key pair as the pod’s C code', () => {
   assert.equal(toHex(x25519.getPublicKey(secret)), V.recipientPublic);
   assert.equal(fingerprint(pub), V.fingerprint);
+});
+
+test('the same beacon as the pod’s C code', () => {
+  assert.equal(beaconOf(pub, V.beaconSession), V.beacon);
 });
 
 test('decrypts the file the pod’s C code wrote', () => {

@@ -12,10 +12,11 @@
 // gauge in the header, and the phone leaves the gauge's WiFi when it is done.
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ToastAndroid } from 'react-native';
+import { AppState, ToastAndroid } from 'react-native';
 
 import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
+import { loadBeaconAutoSync, newDriveBeacon, updateKnownBeacons } from '@/lib/beacon';
 import { deletePodFile, getLive, listFiles } from '@/lib/pod';
 import {
   dropNonLogs,
@@ -267,6 +268,33 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       ToastAndroid.LONG,
     );
   }, [connected, synced, phase, holders, disconnect]);
+
+  // The background check (beacon.ts) learns of each drive as it lands, so
+  // its note goes once the drive is on the phone.
+  useEffect(() => {
+    updateKnownBeacons().catch((e) => console.warn('known beacons', e));
+  }, [inbox]);
+
+  // "Sync new drives when the app opens": on opening, the gauge's beacon
+  // names a drive the phone does not have - connect, and the connect syncs.
+  // Once per drive per run of the app, so a declined prompt is not asked
+  // again at each return to the app.
+  const { state, creds, connect } = pod;
+  const triedBeacon = useRef<string | null>(null);
+  useEffect(() => {
+    const look = async () => {
+      if (state !== 'idle' || !creds || !loadBeaconAutoSync()) return;
+      const fp = await newDriveBeacon();
+      if (!fp || fp === triedBeacon.current) return;
+      triedBeacon.current = fp;
+      connect();
+    };
+    look().catch((e) => console.warn('beacon', e));
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') look().catch((e) => console.warn('beacon', e));
+    });
+    return () => sub.remove();
+  }, [state, creds, connect]);
 
   // A sync that stopped says why - still connected, so a tap on the gauge
   // in the header tries again (pod-chip.tsx).

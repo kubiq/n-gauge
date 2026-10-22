@@ -91,10 +91,27 @@ class PodWifiModule : Module() {
       callback != null && cm.boundNetworkForProcess != null
     }
 
+    // The beacon (PodBeacon.kt): the fingerprint the gauge is beaconing, if
+    // the phone's scan results from the last maxAgeMs have it.
+    Function("seenBeacon") { maxAgeMs: Double ->
+      PodBeacon.seen(ctx, maxAgeMs.toLong())
+    }
+
+    Function("setKnownBeacons") { fps: List<String> ->
+      PodBeacon.setKnown(ctx, fps)
+    }
+
+    Function("watchBeacon") { on: Boolean, title: String, text: String ->
+      PodBeacon.watch(ctx, on, title, text)
+    }
+
     OnDestroy {
       release()
     }
   }
+
+  private val ctx: Context
+    get() = appContext.reactContext ?: throw CodedException("ERR_NO_CONTEXT", "No Android context", null)
 
   private fun release() {
     val c = cm

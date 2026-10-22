@@ -55,6 +55,13 @@ export const app: Record<string, string> = {
   'Disconnect after syncing': 'Po synchronizaci odpojit',
   'Once the new logs are on the phone, it leaves the gauge’s WiFi and is back on the internet. Not while the gauge’s settings or the log key are open.':
     'Jakmile jsou nové záznamy v telefonu, odpojí se od WiFi budíku a je zase na internetu. Ne, dokud jsou otevřená nastavení budíku nebo klíč záznamů.',
+  // The gauge's beacon (connection-card.tsx, beacon.ts)
+  'Tell me about new drives': 'Upozornit na nové jízdy',
+  'Sync them when the app opens': 'Synchronizovat je po otevření aplikace',
+  'Parked, the gauge’s WiFi says which drive it has last. The phone hears it in its WiFi scans, without connecting, and tells you of a drive it does not have yet - about every 15 minutes. Needs location “all the time”: Android shows WiFi scans only with it.':
+    'Zaparkovaný budík ve své WiFi ohlašuje, kterou jízdu má jako poslední. Telefon to zachytí při hledání WiFi sítí, bez připojení, a upozorní na jízdu, kterou ještě nemá - zhruba každých 15 minut. Potřebuje polohu „vždy“: bez ní Android výsledky hledání WiFi nedá.',
+  'New drives on the gauge': 'Nové jízdy v budíku',
+  'Open the app to sync them.': 'Otevřete aplikaci a synchronizujte je.',
 
   // Logs folder (logs-folder-card.tsx)
   Folder: 'Složka',

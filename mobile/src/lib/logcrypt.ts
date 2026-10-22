@@ -166,6 +166,20 @@ export function fingerprintSpaced(pub: Uint8Array): string {
   return fingerprint(pub).replace(/(.{4})(?=.)/g, '$1 ');
 }
 
+/**
+ * What the pod's WiFi beacons carry for a drive (logcrypt_beacon in the
+ * firmware): BLAKE2b-8 of the log key's public half (zeros with no key),
+ * "n-gauge beacon v1" and the drive's 6-char session, hex. Only a phone with
+ * the key can tell which drive a beacon names.
+ */
+export function beaconOf(pub: Uint8Array | null, session: string): string {
+  const info = new TextEncoder().encode('n-gauge beacon v1' + session);
+  const msg = new Uint8Array(32 + info.length);
+  if (pub) msg.set(pub);
+  msg.set(info, 32);
+  return toHex(blake2b(msg, { dkLen: 8 }));
+}
+
 export function toHex(b: Uint8Array): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
