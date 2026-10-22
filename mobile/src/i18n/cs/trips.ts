@@ -11,6 +11,8 @@ export const trips: Record<string, string> = {
   'No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.':
     'V telefonu zatím nejsou žádné jízdy. Klepnutím na budík nahoře se připojte - nové jízdy se přenesou samy.',
   '1 drive|{n} drives': '{n} jízda|{n} jízdy|{n} jízd',
+  'Show 1 drive|Show {n} drives': 'Zobrazit {n} jízdu|Zobrazit {n} jízdy|Zobrazit {n} jízd',
+  'Reading…': 'Načítám…',
   'Hide the 1 very short drive|Hide the {n} very short drives':
     'Skrýt {n} velmi krátkou jízdu|Skrýt {n} velmi krátké jízdy|Skrýt {n} velmi krátkých jízd',
   'Show 1 very short drive (under 200 m)|Show {n} very short drives (under 200 m)':

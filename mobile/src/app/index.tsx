@@ -10,7 +10,7 @@ import { t, tn } from '@/i18n';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
-import { groupByWeek, weekLabel } from '@/lib/weeks';
+import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { podTextLogNames, saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
 import { type ListFacts, loadListFacts } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
@@ -18,6 +18,14 @@ import { type CsvSummary, isEncryptedName, isGpxName, isStub, litresPer100, type
 import { S, themed } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
+
+// Drives this recent are read by themselves; older ones only when their week
+// is opened. Reading a drive means decrypting and parsing a 5-17 MB GPX, and
+// after a summary change (trip-cache.ts VERSION) that was every drive on the
+// phone, months back, on the list's first open (2026-10-20).
+const RECENT_MS = 31 * 24 * 3600 * 1000;
+// Undated drives (no clock) are few, and have no week to open: read always.
+const isOld = (start: number | null) => start !== null && start < Date.now() - RECENT_MS;
 
 // Every drive the phone holds. Summaries missing from the cache (new pulls)
 // are worked out here, one file at a time, and the list fills in as they land.
@@ -53,6 +61,8 @@ export default function TripsScreen() {
   const syncing = phase !== 'idle';
   const again = useRef(false);
   const [rerun, setRerun] = useState(0);
+  // Older weeks opened this visit (their Monday): their drives are read too.
+  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
 
   useFocusEffect(
     useCallback(() => {
@@ -62,11 +72,12 @@ export default function TripsScreen() {
       const have: Sums = {};
       const todo: string[] = [];
       for (const t of list) {
+        const wanted = !isOld(t.start) || (t.start !== null && opened.has(mondayOf(t.start)));
         for (const name of [t.gpx, t.csv]) {
           if (!name) continue;
           const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
           if (s) have[name] = s;
-          else todo.push(name);
+          else if (wanted) todo.push(name);
         }
       }
       setTrips(list);
@@ -111,7 +122,7 @@ export default function TripsScreen() {
           setRerun((n) => n + 1);
         }
       })();
-    }, [landed, rerun, syncing]),
+    }, [landed, rerun, syncing, opened]),
   );
 
   const saveAll = async () => {
@@ -185,14 +196,21 @@ export default function TripsScreen() {
   const readOnes = rows.filter((r) => r.read);
   const longOnes = readOnes.filter((r) => r.problem || !isStub(r.g, r.c));
   const hidden = readOnes.length - longOnes.length;
-  const shown = showShort ? readOnes : longOnes;
+  const shownSet = new Set(showShort ? readOnes : longOnes);
+  // Older drives not read yet stay in their week, counted, until it is opened
+  // - and while it is being read, so the week does not vanish and come back.
+  // (Recent ones are being read anyway: listed once read, as above.)
+  const unread = (r: (typeof rows)[number]) => !r.read && isOld(r.t.start);
   // By week, each with its totals - of the drives shown, so the hidden
   // blips do not count. The same start and time the rows show.
-  const weeks = groupByWeek(shown, (r) => ({
-    start: r.g?.start ?? r.t.start,
-    distanceM: r.g?.distanceM ?? null,
-    secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
-  }));
+  const weeks = groupByWeek(
+    rows.filter((r) => shownSet.has(r) || unread(r)),
+    (r) => ({
+      start: r.g?.start ?? r.t.start,
+      distanceM: r.g?.distanceM ?? null,
+      secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
+    }),
+  );
 
   return (
     // Progress (reading new drives, saving to the folder) floats over the
@@ -203,29 +221,50 @@ export default function TripsScreen() {
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>
         </Card>
       ) : (
-        weeks.map((w) => (
-          <View key={w.monday ?? 'undated'} style={styles.week}>
-            <Text style={styles.weekHead}>
-              {weekLabel(w.monday)}
-              <Text style={styles.weekTotals}>
-                {`  ·  ${tn(w.drives, '1 drive', '{n} drives')}`}
-                {w.distanceM > 0 ? `  ·  ${km(w.distanceM)}` : ''}
-                {w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
+        weeks.map((w) => {
+          const waiting = w.items.filter(unread).length;
+          const monday = w.monday;
+          const isOpened = monday !== null && opened.has(monday);
+          return (
+            <View key={monday ?? 'undated'} style={styles.week}>
+              <Text style={styles.weekHead}>
+                {weekLabel(monday)}
+                <Text style={styles.weekTotals}>
+                  {`  ·  ${tn(w.drives, '1 drive', '{n} drives')}`}
+                  {/* Totals only of a whole week: with drives unread they
+                      would be a part passed off as the sum. */}
+                  {!waiting && w.distanceM > 0 ? `  ·  ${km(w.distanceM)}` : ''}
+                  {!waiting && w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
+                </Text>
               </Text>
-            </Text>
-            {w.items.map((r) => (
-              <TripRow
-                key={r.t.key}
-                t={r.t}
-                g={r.g}
-                c={r.c}
-                problem={r.problem}
-                name={r.name}
-                facts={facts}
-              />
-            ))}
-          </View>
-        ))
+              {w.items
+                .filter((r) => !unread(r))
+                .map((r) => (
+                  <TripRow
+                    key={r.t.key}
+                    t={r.t}
+                    g={r.g}
+                    c={r.c}
+                    problem={r.problem}
+                    name={r.name}
+                    facts={facts}
+                  />
+                ))}
+              {waiting && monday !== null ? (
+                isOpened ? (
+                  <Text style={styles.moreText}>{t('Reading…')}</Text>
+                ) : (
+                  <Pressable
+                    onPress={() => setOpened((prev) => new Set(prev).add(monday))}
+                    hitSlop={8}
+                    style={styles.more}>
+                    <Text style={styles.moreText}>{tn(waiting, 'Show 1 drive', 'Show {n} drives')}</Text>
+                  </Pressable>
+                )
+              ) : null}
+            </View>
+          );
+        })
       )}
       {hidden ? (
         // A tap shows them in place, and hides them again.
