@@ -252,6 +252,9 @@
 // so without it a dead CAN link would show a plausible oil temp forever and
 // the over-temp alarm would never fire. Stale data must read "--".
 #define OBD_STALE_MS       5000
+// The engine is running at this rpm or more (the drive CSV's `car` column).
+// Idle is ~750; with the ignition on and the engine off the ECU answers 0.
+#define ENGINE_RUNNING_RPM 300
 
 // The OBD probe (OBD_PROBE: supported PIDs per ECU, torque DIDs, a bus
 // census) and the link benchmark (OBD_BENCH: reply latency per request type)

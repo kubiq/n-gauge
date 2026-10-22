@@ -195,6 +195,14 @@ static const CsvCol COLS[] = {
     put("%u", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
   }},
   {"apRefused",  [](const CsvRow &) { put("%lu", (unsigned long)web_ap_refused()); }},
+  // The car's state (2026-10-22: two stops with the car switched off read as
+  // unexplained gaps in the charts): 0 off - no frame from it for
+  // OBD_STALE_MS; 1 on, engine off - talking, but under ENGINE_RUNNING_RPM
+  // or no rpm; 2 running.
+  {"car",        [](const CsvRow &) {
+    const bool talking = calc_fresh(obd.lastFrameMs != 0, obd.lastFrameMs, millis(), OBD_STALE_MS);
+    put("%d", !talking ? 0 : obd_rpm_fresh() && obd.rpm >= ENGINE_RUNNING_RPM ? 2 : 1);
+  }},
 };
 
 // Create the drive log on first use, not at boot.
