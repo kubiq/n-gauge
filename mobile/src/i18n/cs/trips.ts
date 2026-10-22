@@ -88,6 +88,8 @@ export const trips: Record<string, string> = {
   'Coolant': 'Chladicí kapalina',
   'Voltage': 'Napětí',
   'Over the drive': 'Průběh jízdy',
+  'car off': 'auto vypnuté',
+  'engine off': 'motor vypnutý',
   'Drag across the charts to read them at any moment.': 'Přejeďte prstem po grafech a odečtěte hodnoty v kterémkoli okamžiku.',
   'At {at} of {total}': '{at} z {total}',
 

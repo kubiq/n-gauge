@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { type GestureResponderEvent, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 import { Card } from '@/components/ui';
 import { t } from '@/i18n';
@@ -81,6 +81,28 @@ const PANELS = (s: Series, C: Colors): Panel[] => {
     .filter((p) => p.lines.length > 0);
 };
 
+// The car not running, shaded behind every chart (asked 2026-10-22: a stop
+// with the car switched off was an unexplained gap): off darker, on with the
+// engine off lighter. The same neutral as the axes - no series colour.
+const OFF_OPACITY = { 0: 0.22, 1: 0.1 } as const;
+
+type Still = { from: number; to: number; state: 0 | 1 };
+
+/** The runs of buckets with the car off, or on with the engine off. */
+function stillSpans(car: Series['car']): Still[] {
+  const out: Still[] = [];
+  car.forEach((s, i) => {
+    if (s !== 0 && s !== 1) return;
+    const last = out[out.length - 1];
+    if (last && last.state === s && last.to === i - 1) last.to = i;
+    else out.push({ from: i, to: i, state: s });
+  });
+  return out;
+}
+
+const stateName = (s: 0 | 1 | 2 | null | undefined) =>
+  s === 0 ? t('car off') : s === 1 ? t('engine off') : null;
+
 /** The line as a path, lifted at gaps: a dropout is not drawn across. */
 function pathOf(data: (number | null)[], x: (i: number) => number, y: (v: number) => number): string {
   let d = '';
@@ -104,6 +126,8 @@ export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (u
   const C = useColors();
   const styles = useStyles();
   const panels = useMemo(() => PANELS(series, C), [series, C]);
+  // Older caches have no car state: nothing shaded.
+  const still = useMemo(() => stillSpans(series.car ?? []), [series]);
   const n = series.t.length;
   const [width, setWidth] = useState(0);
   const [at, setAt] = useState<number | null>(null);
@@ -129,13 +153,21 @@ export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (u
 
   if (n < 2 || panels.length === 0) return null;
   const x = (i: number) => (i / (n - 1)) * plotW;
+  // A bucket's band reaches halfway to its neighbours, within the plot.
+  const half = plotW / (n - 1) / 2;
+  const band = (s: Still) => {
+    const x0 = Math.max(0, x(s.from) - half);
+    return { x: x0, width: Math.min(plotW, x(s.to) + half) - x0 };
+  };
+  const atState = at === null ? null : stateName(series.car?.[at]);
 
   return (
     <Card title={t('Over the drive')}>
       <Text style={styles.hint}>
         {at === null
           ? t('Drag across the charts to read them at any moment.')
-          : t('At {at} of {total}', { at: clock(series.t[at]), total: clock(series.durationS) })}
+          : t('At {at} of {total}', { at: clock(series.t[at]), total: clock(series.durationS) }) +
+            (atState ? `  ·  ${atState}` : '')}
       </Text>
       <View {...responder} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ gap: S.md }}>
         {panels.map((p) => {
@@ -176,6 +208,9 @@ export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (u
               <View>
                 {plotW > 0 ? (
                   <Svg width={plotW} height={PLOT_H}>
+                    {still.map((s) => (
+                      <Rect key={s.from} {...band(s)} y={0} height={PLOT_H} fill={C.dim} fillOpacity={OFF_OPACITY[s.state]} />
+                    ))}
                     {/* Recessive frame: the top and bottom of the range, and zero. */}
                     <Line x1={0} x2={plotW} y1={y(hi)} y2={y(hi)} stroke={C.border} strokeWidth={1} />
                     <Line x1={0} x2={plotW} y1={y(lo)} y2={y(lo)} stroke={C.border} strokeWidth={1} />
@@ -208,6 +243,19 @@ export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (u
           <Text style={styles.axis}>0 min</Text>
           <Text style={styles.axis}>{duration(series.durationS)}</Text>
         </View>
+        {/* What the shading means, for the states the drive has. */}
+        {still.length ? (
+          <View style={styles.keys}>
+            {([0, 1] as const)
+              .filter((st) => still.some((s) => s.state === st))
+              .map((st) => (
+                <View key={st} style={styles.key}>
+                  <View style={[styles.block, { backgroundColor: C.dim, opacity: OFF_OPACITY[st] }]} />
+                  <Text style={styles.axis}>{stateName(st)}</Text>
+                </View>
+              ))}
+          </View>
+        ) : null}
       </View>
     </Card>
   );
@@ -222,6 +270,7 @@ const useStyles = themed((C) =>
     keys: { flexDirection: 'row', gap: S.md },
     key: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
     swatch: { width: 14, height: 3, borderRadius: 2 },
+    block: { width: 14, height: 10, borderRadius: 2 },
     axis: { color: C.dim, fontSize: 11 },
     // In the GUTTER column; `top` set per label, from its line.
     scale: { position: 'absolute', right: 0, width: GUTTER - S.xs, textAlign: 'right', lineHeight: 2 * LABEL_MID },

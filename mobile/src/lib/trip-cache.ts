@@ -42,10 +42,11 @@ export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; t
 // 8: fuel burned and the distance it is divided by, from the CSV (2026-10-20).
 // 9: a fix written many times counts once - a 1 Hz GPS read 2 km for 14 (2026-10-20).
 const VERSION = 9;
-// A CSV's summary alone, on top of VERSION: redoing it does not re-read
-// every GPX, which takes far longer.
+// A CSV's summary and series alone, on top of VERSION: redoing them does not
+// re-read every GPX, which takes far longer.
 // 1: the tank level at a drive's ends and its fill-ups, for the list (2026-10-22).
-const CSV_VERSION = 1;
+// 2: the series carries the car's state, off / engine off / running (2026-10-22).
+const CSV_VERSION = 2;
 const csvV = VERSION * 1000 + CSV_VERSION;
 
 function read<T>(f: File, size: number, v = VERSION): T | null {
@@ -174,7 +175,7 @@ export async function summarise(name: string): Promise<void> {
     // The chart's series from the same read: a drive opened later needs
     // neither the file nor its decryption again (seriesOf).
     const text = await readLogText(name);
-    write(new File(dir, `${name}.series.json`), size, csvSeries(text));
+    write(new File(dir, `${name}.series.json`), size, csvSeries(text), csvV);
     const summary = parseCsv(text);
     // Where each fill-up was, named as a drive's ends are.
     if (summary.refuels.length) {
@@ -192,11 +193,11 @@ export async function summarise(name: string): Promise<void> {
 export async function seriesOf(name: string): Promise<Series | null> {
   const f = new File(dir, `${name}.series.json`);
   const size = inboxFile(name).size;
-  const have = read<Series>(f, size);
+  const have = read<Series>(f, size, csvV);
   if (have) return have;
   if (!dir.exists) dir.create({ intermediates: true });
   const s = csvSeries(await readLogText(name));
-  write(f, size, s);
+  write(f, size, s, csvV);
   return s;
 }
 

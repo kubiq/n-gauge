@@ -33,6 +33,17 @@ test('series: GPS speed for logs without obdKmh, and a restart is left out', () 
   assert.deepEqual(s.volts, [null, null, null]);
 });
 
+test('series: the car\'s state, from its column - and from the readings without it', () => {
+  // The gauge's own column wins; the highest state in a bucket.
+  const logged = csvSeries('utc,ms,rpm,oilC,car\n,0,800,90,2\n,500,,,0\n,1000,,,1\n,1500,0,90,1\n', 2);
+  assert.deepEqual(logged.car, [2, 1]);
+  // Older logs: running at 300 rpm, on while the car's readings come, else off.
+  const old = csvSeries('utc,ms,rpm,oilC,speedKmh\n,0,800,90,30\n,500,,,0\n,1000,0,90,0\n,1500,,,0\n', 4);
+  assert.deepEqual(old.car, [2, 0, 1, 0]);
+  // No car columns at all: it cannot say.
+  assert.deepEqual(csvSeries('utc,ms,speedKmh\n,0,10\n,500,20\n', 2).car, [null, null]);
+});
+
 // 2026-10-14: the gauge writes CRLF, voltage is the last column, and the
 // first row of a drive has none yet - its "\r" read as 0 V, and the chart's
 // first point (a bucket's mean) said 5.3 V.
