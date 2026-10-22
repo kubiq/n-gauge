@@ -210,14 +210,15 @@ void slide_text(lv_obj_t *label, const char *text, int dir, uint32_t ms) {
   }
   if (!ghost || dir == 0) { lv_label_set_text(label, text); return; }
   const int32_t h = lv_obj_get_height(lv_obj_get_parent(label));
-  const int32_t s = dir > 0 ? 1 : -1;
+  const int32_t s = dir > 0 ? -1 : 1;
   // The ghost takes the old number as it looked.
   lv_label_set_text(ghost, lv_label_get_text(label));
   lv_obj_set_style_text_color(ghost, lv_obj_get_style_text_color(label, 0), 0);
   lv_obj_set_style_text_align(ghost, lv_obj_get_style_text_align(label, 0), 0);
   lv_obj_clear_flag(ghost, LV_OBJ_FLAG_HIDDEN);
   lv_label_set_text(label, text);
-  // Up: the new one comes from below, the old one leaves upwards.
+  // Up: the new one slides in from the top, the old one out at the bottom.
+  // Down: in from the bottom, out at the top.
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_exec_cb(&a, slideY);

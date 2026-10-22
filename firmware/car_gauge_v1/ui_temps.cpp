@@ -45,7 +45,7 @@ lv_obj_t *ui_build_temps() {
   lv_obj_set_width(coolVal, lv_obj_get_style_width(oilVal, 0));
   lv_obj_set_style_text_align(coolVal, LV_TEXT_ALIGN_LEFT, 0);
   lv_label_set_long_mode(coolVal, LV_LABEL_LONG_CLIP);
-  // A degree up slides in from below, a degree down from above (slide_text).
+  // A degree up slides in from above, a degree down from below (slide_text).
   make_sliding(oilVal);
   make_sliding(coolVal);
   // And the same size: the two symbols are different artwork, 58x46 (oil)

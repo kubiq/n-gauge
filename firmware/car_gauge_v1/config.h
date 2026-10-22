@@ -449,6 +449,9 @@
 // The GPS speed: a new number at most this often, each sliding in as long -
 // so a slide always ends before the next (25 fixes a second otherwise).
 #define GPS_SPEED_SHOW_MS  100
+// Under this the GPS speed shows 0: standing at a fuel pump it read 0-1 km/h
+// back and forth (2026-10-22) - the fix wanders a little even standing still.
+#define GPS_SPEED_STILL_KMH 2.0f
 // Expected mean time between boost samples. Only the bench render test and
 // synthetic input use it.
 #define BOOST_SAMPLE_MS    15

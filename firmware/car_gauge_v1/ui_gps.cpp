@@ -53,7 +53,8 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
   static int  lastSats = INT32_MIN, lastKmh = INT32_MIN;
   static uint32_t speedAt = 0;
   const uint32_t now = lv_tick_get();
-  int kmh = (int)(speedKmh + 0.5f);              // what actually gets shown
+  // What actually gets shown: 0 standing still, not the fix's wander.
+  int kmh = speedKmh < GPS_SPEED_STILL_KMH ? 0 : (int)(speedKmh + 0.5f);
   // A new speed at most every GPS_SPEED_SHOW_MS, so each slide (as long)
   // finishes before the next number comes: at 25 fixes a second a rising
   // speed changed the number faster than any slide could run. The latest
