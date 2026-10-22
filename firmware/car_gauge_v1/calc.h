@@ -731,11 +731,13 @@ struct CalcGpxLimits {
   uint16_t maxRejectRun;           // then accept anyway
   float    movingKmh;              // below this, distance is not counted
   uint32_t tripGapMs;              // closer than this, provably the same trip
+  uint32_t satsWaitMs;             // how long a fix may wait for a satellite count
 };
 
 struct CalcGpxGate {
   uint32_t lastMs = 0;             // the last accepted point; 0 = none yet
   bool     sawSats = false;        // the module has reported satellites
+  uint32_t noSatsSinceMs = 0;      // the first fix without a count; 0 = none yet
   int32_t  okLat = 0, okLon = 0;   // the last accepted position, degrees x 1e7
   uint16_t rejectRun = 0;
 };
@@ -775,6 +777,15 @@ static inline bool calc_gpx_gate(CalcGpxGate *g, const CalcGpxLimits *lim, uint3
   // logging altogether.
   if (sats > 0) g->sawSats = true;
   if (g->sawSats && !calc_fix_quality_ok(sats, hdop, lim->minSats, lim->maxHdop)) return false;
+  // But the first fix after a boot arrives in RMC before GGA has given any
+  // count: 0 there means "not told yet", and that fix went in unjudged - a
+  // parked wake's one point read <sat>0</sat> hdop 0.0 (2026-10-20). So a
+  // fix waits up to satsWaitMs for a count first; a module that never gives
+  // one still logs after that.
+  if (!g->sawSats) {
+    if (g->noSatsSinceMs == 0) g->noSatsSinceMs = nowMs;
+    if (nowMs - g->noSatsSinceMs < lim->satsWaitMs) return false;
+  }
 
   // Physical plausibility, the check that actually fixes tunnels. Coming out
   // of one the track sprayed across the map in straight spikes, with 3-4

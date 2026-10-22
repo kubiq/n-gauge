@@ -736,6 +736,9 @@
 // deliberately 5 s apart, and a threshold below that would split the track on
 // every single idle point.
 #define GPX_SEGMENT_GAP_MS    10000
+// How long a fix waits for the module's first satellite count (calc_gpx_gate):
+// after a boot RMC brings a position before GGA says how many satellites.
+#define GPX_SATS_WAIT_MS      5000
 
 // GPX point validation. Measured against trip_0004, which sprayed spikes
 // across the map coming out of a tunnel:

@@ -10,7 +10,7 @@
 static const CalcGpxLimits LIM = {
   GPX_POINT_MS, GPX_IDLE_POINT_MS, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG,
   GPX_SEGMENT_GAP_MS, GPX_MAX_JUMP_KMH, GPX_MAX_REJECT_RUN,
-  LOG_IDLE_SPEED_KMH, 30u * 60000u,
+  LOG_IDLE_SPEED_KMH, 30u * 60000u, GPX_SATS_WAIT_MS,
 };
 
 static const int32_t LAT0 = 500000000, LON0 = 144000000;   // 50 N, 14.4 E
@@ -63,12 +63,23 @@ static void a_fix_without_satellites_is_refused_once_sats_were_seen() {
   CHECK(!step(g, 1120, LAT0, LON0, 50, &s, false, 12, GPS_MAX_HDOP_LOG + 1));
 }
 
-// A module that never reports satellites must still log.
+// A module that never reports satellites must still log - after the wait.
 static void a_module_without_satellite_counts_still_logs() {
   CalcGpxGate g;
   CalcGpxStep s;
-  CHECK(step(g, 1000, LAT0, LON0, 50, &s, false, 0, 99.99f));
-  CHECK(step(g, 1040, LAT0, LON0, 50, &s, false, 0, 99.99f));
+  CHECK(!step(g, 1000, LAT0, LON0, 50, &s, false, 0, 99.99f));
+  CHECK(step(g, 1000 + GPX_SATS_WAIT_MS, LAT0, LON0, 50, &s, false, 0, 99.99f));
+  CHECK(step(g, 1040 + GPX_SATS_WAIT_MS, LAT0, LON0, 50, &s, false, 0, 99.99f));
+}
+
+// After a boot the first fix comes before any satellite count (RMC before
+// GGA): it waits for the count, and is then judged like any other.
+static void the_first_fix_waits_for_a_satellite_count() {
+  CalcGpxGate g;
+  CalcGpxStep s;
+  CHECK(!step(g, 1000, LAT0, LON0, 0, &s, true, 0, 0.0f));     // a parked wake's first fix
+  CHECK(!step(g, 1040, LAT0, LON0, 0, &s, true, 3, 9.0f));     // counted: and too weak
+  CHECK(step(g, 1080, LAT0, LON0, 0, &s, true, 9, 1.1f));      // a real one
 }
 
 // Out of a tunnel: a spike kilometres away is refused, the drive goes on
@@ -147,6 +158,7 @@ int main() {
   TEST(parked_points_are_thinned);
   TEST(a_fix_without_satellites_is_refused_once_sats_were_seen);
   TEST(a_module_without_satellite_counts_still_logs);
+  TEST(the_first_fix_waits_for_a_satellite_count);
   TEST(a_tunnel_spike_is_refused_and_adds_no_distance);
   TEST(a_bad_reference_is_let_go_eventually);
   TEST(a_gap_breaks_the_track_and_is_not_distance);

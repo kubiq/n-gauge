@@ -7,6 +7,7 @@
 #include "config.h"
 #include "calc.h"       // GPS plausibility checks, shared with tests/
 #include "gps.h"
+#include "obd.h"        // lastFrameMs: the car is on - a track may open
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // tripGapMin: the trip-reset gap is user-editable
 #include "SD_MMC.h"
@@ -233,6 +234,7 @@ void gpxlog_task() {
     // One definition of "stationary" in the firmware, not two.
     LOG_IDLE_SPEED_KMH,
     (uint32_t)(settings.tripGapMin * 60000UL),
+    GPX_SATS_WAIT_MS,
   };
   CalcGpxStep step;
   if (!calc_gpx_gate(&gate, &lim, fixClock, log_idle(), gps.sats, gps.hdop,
@@ -251,6 +253,13 @@ void gpxlog_task() {
   if (!log_may_write()) return;        // no card, or writes given up on
   if (settings.logLevel < LOG_TRIPS) return;   // logging off: count, don't write
   if (gpxOpenFailed) return;           // see gpxOpen(): do not retry forever
+  // Not for a parked car. A motion wake - a door, a bump - keeps the pod up
+  // for a minute; with sky view it got a fix, the file opened on it, and the
+  // pod slept again: a one-point "drive" at the parking spot in the app's
+  // list, per wake (2026-10-20: two of them, 20:37 and 21:36). So a track
+  // opens only once the car is on (a CAN frame, as the drive CSV waits for)
+  // or moving - walking pace and up, for a track without the car's bus.
+  if (!gpx.open && obd.lastFrameMs == 0 && gps.speedKmh < LOG_IDLE_SPEED_KMH) return;
   if (!gpx.open) gpxOpen();            // lazily, on the first accepted point
   if (!gpx.open) return;
 
