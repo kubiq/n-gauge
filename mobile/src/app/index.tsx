@@ -36,9 +36,6 @@ const RECENT_MS = 31 * 24 * 3600 * 1000;
 // Undated drives (no clock) are few, and have no week to open: read always.
 const isOld = (start: number | null) => start !== null && start < Date.now() - RECENT_MS;
 
-// A fill-up as listed: one of a CSV's refuels, or found between two drives.
-type FuelStop = Refuel & { key: string };
-const isFuel = (x: object): x is FuelStop => 'fromPct' in x;
 // The i30 N's tank, for the litres a fill-up's levels come to.
 const TANK_L = 50;
 
@@ -207,28 +204,17 @@ export default function TripsScreen() {
       name: tripName(t, g, names),
     };
   });
-  type Row = (typeof rows)[number];
-  const [showShort, setShowShort] = useState(false);
-  const readOnes = rows.filter((r) => r.read);
-  const longOnes = readOnes.filter((r) => r.problem || !isStub(r.g, r.c));
-  const hidden = readOnes.length - longOnes.length;
-  const shownSet = new Set(showShort ? readOnes : longOnes);
-  // Older drives not read yet stay in their week, counted, until it is opened
-  // - and while it is being read, so the week does not vanish and come back.
-  // (Recent ones are being read anyway: listed once read, as above.)
-  const unread = (r: (typeof rows)[number]) => !r.read && isOld(r.t.start);
-  // Fill-ups, in among the drives at their time (asked 2026-10-22): during a
-  // drive (its CSV's refuels), and between two - the tank fuller at a drive's
-  // start than at the end of the one before. Looked for in every drive read,
-  // the hidden blips too: a hop to the pump is one.
-  const items: (Row | FuelStop)[] = [];
-  let newer: Row | null = null;          // the drive after, with a start level
+  // Fill-ups, on the drive they were on (asked 2026-10-22): during it (its
+  // CSV's refuels), or before it - the tank fuller at its start than at the
+  // end of the drive before, filled while the gauge slept. In time order.
+  const fills: Record<string, Refuel[]> = {};
+  let newer: (typeof rows)[number] | null = null;   // the drive after, with a start level
   for (const r of rows) {
     const c = r.c;
+    if (c?.refuels.length) fills[r.t.key] = [...c.refuels];
     if (newer && c?.fuelEndPct != null && newer.c!.fuelStartPct! - c.fuelEndPct >= FILL_MIN_PCT) {
       const end = r.g?.end ?? (r.t.start !== null && c.durationS ? r.t.start + c.durationS * 1000 : r.t.start);
-      items.push({
-        key: `fuel:${r.t.key}`,
+      (fills[newer.t.key] ??= []).unshift({
         at: end,
         pt: r.g?.to ?? null,
         place: r.g?.toPlace ?? null,
@@ -236,20 +222,27 @@ export default function TripsScreen() {
         toPct: newer.c!.fuelStartPct!,
       });
     }
-    for (const f of [...(c?.refuels ?? [])].reverse()) items.push({ ...f, key: `fuel:${r.t.key}:${f.at}` });
-    if (shownSet.has(r) || unread(r)) items.push(r);
     if (c?.fuelStartPct != null) newer = r;
   }
+  const [showShort, setShowShort] = useState(false);
+  const readOnes = rows.filter((r) => r.read);
+  // A hop to the pump is short, but not hidden with the blips.
+  const longOnes = readOnes.filter((r) => r.problem || fills[r.t.key] || !isStub(r.g, r.c));
+  const hidden = readOnes.length - longOnes.length;
+  const shownSet = new Set(showShort ? readOnes : longOnes);
+  // Older drives not read yet stay in their week, counted, until it is opened
+  // - and while it is being read, so the week does not vanish and come back.
+  // (Recent ones are being read anyway: listed once read, as above.)
+  const unread = (r: (typeof rows)[number]) => !r.read && isOld(r.t.start);
   // By week, each with its totals - of the drives shown, so the hidden
   // blips do not count. The same start and time the rows show.
-  const weeks = groupByWeek(items, (r) =>
-    isFuel(r)
-      ? { start: r.at, distanceM: null, secs: null, event: true }
-      : {
-          start: r.g?.start ?? r.t.start,
-          distanceM: r.g?.distanceM ?? null,
-          secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
-        },
+  const weeks = groupByWeek(
+    rows.filter((r) => shownSet.has(r) || unread(r)),
+    (r) => ({
+      start: r.g?.start ?? r.t.start,
+      distanceM: r.g?.distanceM ?? null,
+      secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
+    }),
   );
 
   return (
@@ -276,7 +269,7 @@ export default function TripsScreen() {
         </Card>
       ) : (
         weeks.map((w) => {
-          const waiting = w.items.filter((r) => !isFuel(r) && unread(r)).length;
+          const waiting = w.items.filter(unread).length;
           const monday = w.monday;
           const isOpened = monday !== null && opened.has(monday);
           return (
@@ -292,11 +285,8 @@ export default function TripsScreen() {
                 </Text>
               </Text>
               {w.items
-                .filter((r) => isFuel(r) || !unread(r))
-                .map((r) =>
-                  isFuel(r) ? (
-                    <FuelRow key={r.key} f={r} names={names} />
-                  ) : (
+                .filter((r) => !unread(r))
+                .map((r) => (
                   <TripRow
                     key={r.t.key}
                     t={r.t}
@@ -305,9 +295,10 @@ export default function TripsScreen() {
                     problem={r.problem}
                     name={r.name}
                     facts={facts}
+                    fills={fills[r.t.key]}
+                    names={names}
                   />
-                  ),
-                )}
+                ))}
               {waiting && monday !== null ? (
                 isOpened ? (
                   <Text style={styles.moreText}>{t('Reading…')}</Text>
@@ -345,6 +336,8 @@ function TripRow({
   problem,
   name,
   facts,
+  fills,
+  names,
 }: {
   t: TripFiles;
   g?: GpxStats;
@@ -352,6 +345,8 @@ function TripRow({
   problem?: string;
   name: string | null;
   facts: ListFacts;
+  fills?: Refuel[];
+  names: Names;
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
@@ -386,17 +381,17 @@ function TripRow({
         {facts.fuelL && c?.fuelL != null && c.fuelL > 0 ? <Fact label={t('fuel')} value={`${c.fuelL.toFixed(1)} l`} /> : null}
         {facts.per100 && per100 !== null ? <Fact label={t('consumption')} value={`${per100.toFixed(1)} l/100`} /> : null}
       </View>
+      {fills?.map((f) => <FillLine key={`${f.at}:${f.fromPct}`} f={f} names={names} />)}
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );
 }
 
-// A fill-up: a line between the drives, not a card - it is no drive, and
-// there is nothing more of it to open. The litres are the levels' difference
-// over the tank, so roughly: the gauge reads the level in steps, and high
-// while it settles.
-function FuelRow({ f, names }: { f: FuelStop; names: Names }) {
+// A fill-up on its drive's card: the levels, the litres they come to and
+// where. The litres are the levels' difference over the tank, so roughly:
+// the car reads the level in steps.
+function FillLine({ f, names }: { f: Refuel; names: Names }) {
   const ui = useUi();
   const styles = useStyles();
   const place = endName(f.pt, f.place ?? null, names);
@@ -409,7 +404,7 @@ function FuelRow({ f, names }: { f: FuelStop; names: Names }) {
           {`  ·  ${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${litres} l`}
         </Text>
       </Text>
-      <Text style={ui.note}>{[f.at ? when(f.at) : null, place].filter(Boolean).join('  ·  ')}</Text>
+      {place ? <Text style={ui.note}>{place}</Text> : null}
     </View>
   );
 }
@@ -437,8 +432,8 @@ const useStyles = themed((C) =>
     week: { gap: S.md },
     weekHead: { color: C.accent, fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: S.sm },
     weekTotals: { color: C.dim, fontWeight: '400', letterSpacing: 0 },
-    // A fill-up: set in from the cards' edge, with a rule of the accent.
-    fuel: { borderLeftWidth: 3, borderLeftColor: C.accent, paddingLeft: S.md, paddingVertical: S.xs, marginHorizontal: S.sm },
+    // A fill-up in a drive's card, with a rule of the accent.
+    fuel: { borderLeftWidth: 3, borderLeftColor: C.accent, paddingLeft: S.sm },
     fuelTitle: { color: C.text, fontSize: 14, fontWeight: '600' },
     fuelFacts: { color: C.dim, fontWeight: '400' },
     // A link, not a card: 48 dp tall to hit, styled like the app's other links.
