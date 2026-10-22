@@ -10,6 +10,8 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -28,6 +30,10 @@ object PodBeacon {
   private const val TYPE: Byte = 1
   private const val PREFS = "podBeacon"
   private const val WORK = "podBeacon"
+  private const val WORK_SHORT = "podBeaconShort"
+  // How often the background check runs. Under 15 (for testing, 2026-10-22)
+  // it is a chain of one-off work, each queuing the next; 15 is the normal.
+  private const val CHECK_MINUTES = 15L
   private const val CHANNEL = "newDrives"
   private const val NOTE_ID = 1
 
@@ -60,6 +66,32 @@ object PodBeacon {
       }
   }
 
+  /**
+   * The BSSID of the network called `ssid` in the scan results of the last
+   * five minutes, for the connect request; null without one, or without the
+   * location permission.
+   */
+  fun bssidOf(ctx: Context, ssid: String): String? {
+    val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
+    val results = try {
+      wm.scanResults
+    } catch (e: SecurityException) {
+      return null
+    }
+    val nowUs = SystemClock.elapsedRealtime() * 1000
+    @Suppress("DEPRECATION")
+    return results
+      .filter { it.SSID == ssid && nowUs - it.timestamp <= 5 * 60_000_000L }
+      .maxByOrNull { it.timestamp }
+      ?.BSSID
+  }
+
+  /** Asks for a fresh scan. Android throttles these; a refused one is no harm. */
+  fun scan(ctx: Context) {
+    @Suppress("DEPRECATION")
+    runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).startScan() }
+  }
+
   /** The fingerprints of the drives the phone has. A note on one goes. */
   fun setKnown(ctx: Context, fps: List<String>) {
     val p = prefs(ctx)
@@ -75,22 +107,37 @@ object PodBeacon {
     val wm = WorkManager.getInstance(ctx)
     if (!on) {
       wm.cancelUniqueWork(WORK)
+      wm.cancelUniqueWork(WORK_SHORT)
+      // Switched on again, the drive the gauge names is told of again.
+      prefs(ctx).edit().remove("notified").remove("title").apply()
       cancelNote(ctx)
       return
     }
     prefs(ctx).edit().putString("title", title).putString("text", text).apply()
-    // 15 minutes is the shortest WorkManager allows; parked a while, the gauge
-    // beacons until it sleeps, so a drive is still caught.
-    val req = PeriodicWorkRequestBuilder<BeaconWorker>(15, TimeUnit.MINUTES).build()
-    wm.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, req)
+    if (CHECK_MINUTES >= 15) {
+      // 15 minutes is the shortest periodic work WorkManager allows; parked a
+      // while, the gauge beacons until it sleeps, so a drive is still caught.
+      val req = PeriodicWorkRequestBuilder<BeaconWorker>(CHECK_MINUTES, TimeUnit.MINUTES).build()
+      wm.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, req)
+    } else {
+      wm.cancelUniqueWork(WORK)
+      next(ctx, ExistingWorkPolicy.REPLACE)
+    }
   }
+
+  // Shorter than 15 minutes: one-off work that queues the next after itself.
+  fun next(ctx: Context, policy: ExistingWorkPolicy) {
+    val req = OneTimeWorkRequestBuilder<BeaconWorker>().setInitialDelay(CHECK_MINUTES, TimeUnit.MINUTES).build()
+    WorkManager.getInstance(ctx).enqueueUniqueWork(WORK_SHORT, policy, req)
+  }
+
+  fun short(ctx: Context) = CHECK_MINUTES < 15 && prefs(ctx).contains("title")
 
   /** One pass of the background check. */
   fun check(ctx: Context) {
     // Throttled by Android (a few a hour in the background) - it refreshes
     // the results the next pass reads; the system's own scans do too.
-    @Suppress("DEPRECATION")
-    runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).startScan() }
+    scan(ctx)
     val fp = seen(ctx, 20 * 60_000L) ?: return
     val p = prefs(ctx)
     if (isKnown(ctx, fp) || p.getString("notified", null) == fp) return
@@ -126,6 +173,8 @@ object PodBeacon {
 class BeaconWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
   override fun doWork(): Result {
     PodBeacon.check(applicationContext)
+    // After this one finishes, not in its place.
+    if (PodBeacon.short(applicationContext)) PodBeacon.next(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE)
     return Result.success()
   }
 }

@@ -2,6 +2,7 @@ package expo.modules.podwifi
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.MacAddress
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -11,6 +12,10 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 // Joins the pod's own AP the way Android 10+ wants a local-only device joined:
 // WifiNetworkSpecifier shows the system's one-tap "connect to this device"
@@ -23,7 +28,11 @@ import expo.modules.kotlin.modules.ModuleDefinition
 // flip side: nothing in this app reaches the internet until disconnect() -
 // a sync pulls everything first, disconnects, then uploads.
 class PodWifiModule : Module() {
-  private var callback: ConnectivityManager.NetworkCallback? = null
+  // The request for the pod's network (with the system prompt), the watch
+  // for one the phone joined by itself, and the network in use.
+  @Volatile private var requested: ConnectivityManager.NetworkCallback? = null
+  @Volatile private var watching: ConnectivityManager.NetworkCallback? = null
+  @Volatile private var bound: Network? = null
 
   private val cm: ConnectivityManager
     get() = appContext.reactContext?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -42,43 +51,91 @@ class PodWifiModule : Module() {
         return@AsyncFunction
       }
       release()
+      val c = cm
+      // One connect, settled once, by whichever way finds the pod first.
+      val settled = AtomicBoolean(false)
+      lateinit var asked: ConnectivityManager.NetworkCallback
 
-      val specifier = WifiNetworkSpecifier.Builder()
+      fun adopt(network: Network, viaRequest: Boolean) {
+        if (!settled.compareAndSet(false, true)) return
+        bound = network
+        c.bindProcessToNetwork(network)
+        // Found on a network the phone joined by itself: the request (and
+        // its prompt) is not needed - and its network would be a second one.
+        if (!viaRequest) {
+          runCatching { c.unregisterNetworkCallback(asked) }
+          requested = null
+        }
+        promise.resolve(null)
+      }
+
+      fun lost(network: Network) {
+        if (network != bound) return
+        bound = null
+        c.bindProcessToNetwork(null)
+        sendEvent("onLost", mapOf<String, Any>())
+      }
+
+      // Every WiFi network the phone is on, now or once it joins one: one
+      // that answers as the pod is used as it is. Joined by hand in Android's
+      // WiFi list (2026-10-22: the request found nothing in 30 s, and the
+      // hand-joined network was then ignored, the connect failing anyway).
+      val any = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+          if (settled.get()) return
+          thread { if (isPod(network, ssid)) adopt(network, false) }
+        }
+
+        override fun onLost(network: Network) = lost(network)
+      }
+
+      // And the request, with the prompt. The pod's BSSID from a recent scan,
+      // if the phone has one (it has with the beacon on): matched straight
+      // from the results, and once approved, joined again without a prompt.
+      val spec = WifiNetworkSpecifier.Builder()
         .setSsid(ssid)
         .setWpa2Passphrase(passphrase)
-        .build()
+      PodBeacon.bssidOf(ctx, ssid)?.let { spec.setBssid(MacAddress.fromString(it)) }
+      PodBeacon.scan(ctx)
       val request = NetworkRequest.Builder()
         .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
         // The pod has no internet. Without this Android would wait for a
         // network that validates, which this one never will.
         .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        .setNetworkSpecifier(specifier)
+        .setNetworkSpecifier(spec.build())
         .build()
-
-      // onAvailable can fire again after a brief drop; the promise settles once.
-      var settled = false
-      val cb = object : ConnectivityManager.NetworkCallback() {
+      asked = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-          cm.bindProcessToNetwork(network)
-          if (!settled) { settled = true; promise.resolve(null) }
+          if (!settled.get()) return adopt(network, true)
+          // Back after a brief drop: bound again.
+          if (bound == null && requested === this) {
+            bound = network
+            c.bindProcessToNetwork(network)
+          }
         }
 
         // Also the timeout path, and the user tapping "cancel" on the prompt.
         override fun onUnavailable() {
-          callback = null
-          if (!settled) {
-            settled = true
+          requested = null
+          if (settled.compareAndSet(false, true)) {
+            release()
             promise.reject(CodedException("ERR_UNAVAILABLE", "Gauge not found, or the prompt was declined", null))
           }
         }
 
-        override fun onLost(network: Network) {
-          cm.bindProcessToNetwork(null)
-          sendEvent("onLost", mapOf<String, Any>())
-        }
+        override fun onLost(network: Network) = lost(network)
       }
-      callback = cb
-      cm.requestNetwork(request, cb, timeoutMs)
+      requested = asked
+      // The watch after `asked` exists: a network found at once unregisters it.
+      watching = any
+      c.registerNetworkCallback(
+        NetworkRequest.Builder()
+          .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+          .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+          .build(),
+        any,
+      )
+      c.requestNetwork(request, asked, timeoutMs)
     }
 
     // Unbinds first, so the app's traffic goes back to the default network
@@ -88,7 +145,7 @@ class PodWifiModule : Module() {
     }
 
     Function("isConnected") {
-      callback != null && cm.boundNetworkForProcess != null
+      bound != null && cm.boundNetworkForProcess != null
     }
 
     // The beacon (PodBeacon.kt): the fingerprint the gauge is beaconing, if
@@ -116,7 +173,23 @@ class PodWifiModule : Module() {
   private fun release() {
     val c = cm
     c.bindProcessToNetwork(null)
-    callback?.let { runCatching { c.unregisterNetworkCallback(it) } }
-    callback = null
+    bound = null
+    for (cb in listOf(requested, watching)) cb?.let { runCatching { c.unregisterNetworkCallback(it) } }
+    requested = null
+    watching = null
   }
+
+  // The pod answers on this network: its settings, with its own SSID in
+  // them. Not just anything at 4.3.2.1 - that is a public address, and over a
+  // network with internet something else could answer there.
+  private fun isPod(network: Network, ssid: String): Boolean = runCatching {
+    val conn = network.openConnection(URL("http://4.3.2.1/api/settings")) as HttpURLConnection
+    conn.connectTimeout = 2000
+    conn.readTimeout = 2000
+    try {
+      conn.responseCode == 200 && conn.inputStream.bufferedReader().readText().contains("\"apSsid\":\"$ssid\"")
+    } finally {
+      conn.disconnect()
+    }
+  }.getOrDefault(false)
 }
