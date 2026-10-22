@@ -66,6 +66,11 @@ lv_obj_t *make_icon_row(lv_obj_t *parent, int dy, const lv_image_dsc_t *icon, lv
 void fix_value_width(lv_obj_t *label, const char *pattern);
 void show_no_value(lv_obj_t *label);
 void show_value_style(lv_obj_t *label, lv_color_t c);
+// A value label that slides its changes in (ui_widgets.cpp): make_sliding()
+// once it is built and sized, then slide_text() with the direction - +1 the
+// value rose, -1 it fell, 0 no slide.
+void make_sliding(lv_obj_t *label);
+void slide_text(lv_obj_t *label, const char *text, int dir);
 // For updates: set a colour only when it differs. Any style set invalidates
 // the whole object, unchanged value or not - an arc's whole bounding box.
 void set_arc_color(lv_obj_t *arc, lv_color_t c);

@@ -3,6 +3,7 @@
 // ============================================================================
 #include "ui_priv.h"
 #include <string.h>     // strcmp: the state line, set only on a change
+#include <stdio.h>      // snprintf: the numbers, for slide_text
 
 // Oil-temperature and coolant-temperature warning-light symbols for the oil
 // screen: A8 masks (icon_oil.c, icon_coolant.c), coloured on the device.
@@ -44,6 +45,9 @@ lv_obj_t *ui_build_temps() {
   lv_obj_set_width(coolVal, lv_obj_get_style_width(oilVal, 0));
   lv_obj_set_style_text_align(coolVal, LV_TEXT_ALIGN_LEFT, 0);
   lv_label_set_long_mode(coolVal, LV_LABEL_LONG_CLIP);
+  // A degree up slides in from below, a degree down from above (slide_text).
+  make_sliding(oilVal);
+  make_sliding(coolVal);
   // And the same size: the two symbols are different artwork, 58x46 (oil)
   // and 43x40 (coolant). Each goes in a 50x40 box, the oil one scaled to the
   // coolant one's height, both centred in it.
@@ -69,6 +73,8 @@ void ui_update_oil(bool have, int tempC, bool cold, bool overOil, bool overCool)
       overOil == lastOverOil && overCool == lastOverCool && carTalking == lastTalking)
     return;
   const bool haveChanged = have != lastHave || lastTemp == INT32_MIN;
+  // Slides only from one reading to the next - not in from "--".
+  const int dir = haveChanged ? 0 : tempC > lastTemp ? 1 : tempC < lastTemp ? -1 : 0;
   lastHave = have; lastTemp = tempC; lastCold = cold;
   lastOverOil = overOil; lastOverCool = overCool;
   lastTalking = carTalking;
@@ -97,7 +103,9 @@ void ui_update_oil(bool have, int tempC, bool cold, bool overOil, bool overCool)
   }
   if (haveChanged) show_value_style(oilVal, COL_OIL);
   lv_arc_set_value(oilArc, tempC);
-  lv_label_set_text_fmt(oilVal, "%d\xC2\xB0", tempC);
+  char txt[12];
+  snprintf(txt, sizeof(txt), "%d\xC2\xB0", tempC);
+  slide_text(oilVal, txt, dir);
   // The symbol takes the arc's colour: blue cold, oil orange ready, red hot -
   // the OIL's state only. It used to take coolant's too, so a hot coolant
   // turned the oil arc and symbol red over a perfectly good oil reading.
@@ -120,6 +128,8 @@ void ui_update_coolant(bool have, int tempC, bool over) {
   static bool lastHave = false, lastOver = false;
   static int  lastTemp = INT32_MIN;
   if (have == lastHave && tempC == lastTemp && over == lastOver) return;
+  const bool haveChanged = have != lastHave || lastTemp == INT32_MIN;
+  const int dir = haveChanged ? 0 : tempC > lastTemp ? 1 : tempC < lastTemp ? -1 : 0;
   lastHave = have; lastTemp = tempC; lastOver = over;
 
   if (!have) {
@@ -131,7 +141,9 @@ void ui_update_coolant(bool have, int tempC, bool over) {
     return;
   }
   lv_arc_set_value(coolArc, tempC);
-  lv_label_set_text_fmt(coolVal, "%d\xC2\xB0", tempC);
+  char txt[12];
+  snprintf(txt, sizeof(txt), "%d\xC2\xB0", tempC);
+  slide_text(coolVal, txt, dir);
   // Colour only. The shared state line is owned by ui_update_oil, which is
   // called first each loop and already says TOO HOT when either is over.
   const lv_color_t c = over ? COL_BAD : COL_BLUE;

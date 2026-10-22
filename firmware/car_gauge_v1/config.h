@@ -443,6 +443,9 @@
 // second when the oil DID takes a slot; this covers the usual gap with
 // margin and barely lags.
 #define BOOST_GLIDE_MS     30
+// How long a changed oil or coolant number takes to slide in (ui_widgets.cpp,
+// slide_text): quick enough to be over long before the next degree.
+#define SLIDE_MS           180
 // Expected mean time between boost samples. Only the bench render test and
 // synthetic input use it.
 #define BOOST_SAMPLE_MS    15

@@ -3,6 +3,7 @@
 // moves between screens. See ui_priv.h.
 // ============================================================================
 #include "ui_priv.h"
+#include <string.h>     // strcmp: slide_text, only on a change
 
 // Swipe to change screens: left for the next one, right for the previous one.
 // (The hardware button only wakes the gauge, since 2026-10-13.)
@@ -164,6 +165,71 @@ void show_value_style(lv_obj_t *label, lv_color_t c) {
   set_text_color(label, c);
   if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_LEFT)
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+}
+
+// ---- a number that slides in ---------------------------------------------------
+// Asked 2026-10-19: when a reading changes, the new number slides in and the
+// old one out - up for a rise, down for a fall - so the direction reads at a
+// glance. Whole numbers, not per digit: one more label per value, not one per
+// digit. The label is put in a box that clips to one line, with a second
+// "ghost" label beside it carrying the old number out; the ghost is kept in
+// the label's user data, so callers go on using the label as before (its
+// text, colour, the "no value" styles).
+static void slideY(void *obj, int32_t y) { lv_obj_set_y((lv_obj_t *)obj, y); }
+static void slideDone(lv_anim_t *a) { lv_obj_add_flag((lv_obj_t *)a->var, LV_OBJ_FLAG_HIDDEN); }
+
+void make_sliding(lv_obj_t *label) {
+  lv_obj_update_layout(label);
+  const int32_t w = lv_obj_get_width(label), h = lv_obj_get_height(label);
+  lv_obj_t *row = lv_obj_get_parent(label);
+  lv_obj_t *box = lv_obj_create(row);
+  lv_obj_remove_style_all(box);                 // no background, border, padding
+  lv_obj_set_size(box, w, h);
+  lv_obj_clear_flag(box, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_move_to_index(box, lv_obj_get_index(label));   // the label's place in its row
+  lv_obj_set_parent(label, box);
+  lv_obj_set_pos(label, 0, 0);
+  lv_obj_t *ghost = lv_label_create(box);
+  lv_obj_set_style_text_font(ghost, lv_obj_get_style_text_font(label, 0), 0);
+  lv_label_set_long_mode(ghost, LV_LABEL_LONG_CLIP);
+  lv_obj_set_width(ghost, w);
+  lv_obj_add_flag(ghost, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_user_data(label, ghost);
+}
+
+void slide_text(lv_obj_t *label, const char *text, int dir) {
+  if (strcmp(lv_label_get_text(label), text) == 0) return;
+  lv_obj_t *ghost = (lv_obj_t *)lv_obj_get_user_data(label);
+  // A new value mid-slide: the last one ends where it was going.
+  if (ghost) {
+    lv_anim_delete(label, slideY);
+    lv_anim_delete(ghost, slideY);
+    lv_obj_set_y(label, 0);
+    lv_obj_add_flag(ghost, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (!ghost || dir == 0) { lv_label_set_text(label, text); return; }
+  const int32_t h = lv_obj_get_height(lv_obj_get_parent(label));
+  const int32_t s = dir > 0 ? 1 : -1;
+  // The ghost takes the old number as it looked.
+  lv_label_set_text(ghost, lv_label_get_text(label));
+  lv_obj_set_style_text_color(ghost, lv_obj_get_style_text_color(label, 0), 0);
+  lv_obj_set_style_text_align(ghost, lv_obj_get_style_text_align(label, 0), 0);
+  lv_obj_clear_flag(ghost, LV_OBJ_FLAG_HIDDEN);
+  lv_label_set_text(label, text);
+  // Up: the new one comes from below, the old one leaves upwards.
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_exec_cb(&a, slideY);
+  lv_anim_set_duration(&a, SLIDE_MS);
+  lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+  lv_anim_set_var(&a, label);
+  lv_anim_set_values(&a, s * h, 0);
+  lv_anim_start(&a);
+  lv_anim_set_var(&a, ghost);
+  lv_anim_set_values(&a, 0, -s * h);
+  lv_anim_set_completed_cb(&a, slideDone);
+  lv_anim_start(&a);
 }
 
 // Colours set only when they change. Setting a style property invalidates the
