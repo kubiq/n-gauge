@@ -9,6 +9,8 @@ export type Groupable = {
   start: number | null;
   distanceM: number | null;
   secs: number | null;
+  /** Not a drive (a fill-up): listed in its week, not counted in its totals. */
+  event?: boolean;
 };
 
 export type WeekGroup<T> = {
@@ -40,6 +42,7 @@ export function groupByWeek<T>(items: T[], of: (t: T) => Groupable): WeekGroup<T
       groups.set(monday, w);
     }
     w.items.push(t);
+    if (g.event) continue;
     w.drives++;
     w.distanceM += g.distanceM ?? 0;
     w.secs += g.secs ?? 0;

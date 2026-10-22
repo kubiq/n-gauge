@@ -42,19 +42,24 @@ export type GpxStats = Omit<GpxSummary, 'track'> & { fromPlace: string | null; t
 // 8: fuel burned and the distance it is divided by, from the CSV (2026-10-20).
 // 9: a fix written many times counts once - a 1 Hz GPS read 2 km for 14 (2026-10-20).
 const VERSION = 9;
+// A CSV's summary alone, on top of VERSION: redoing it does not re-read
+// every GPX, which takes far longer.
+// 1: the tank level at a drive's ends and its fill-ups, for the list (2026-10-22).
+const CSV_VERSION = 1;
+const csvV = VERSION * 1000 + CSV_VERSION;
 
-function read<T>(f: File, size: number): T | null {
+function read<T>(f: File, size: number, v = VERSION): T | null {
   if (!f.exists) return null;
   try {
     const c: Cached<T> = JSON.parse(f.textSync());
-    return c.size === size && c.v === VERSION ? c.summary : null;
+    return c.size === size && c.v === v ? c.summary : null;
   } catch {
     return null;
   }
 }
 
-function write<T>(f: File, size: number, summary: T) {
-  f.write(JSON.stringify({ size, v: VERSION, summary } satisfies Cached<T>));
+function write<T>(f: File, size: number, summary: T, v = VERSION) {
+  f.write(JSON.stringify({ size, v, summary } satisfies Cached<T>));
 }
 
 /**
@@ -145,7 +150,7 @@ export function cachedGpx(name: string): GpxStats | null {
 }
 
 export function cachedCsv(name: string): CsvSummary | null {
-  return read<CsvSummary>(new File(dir, `${name}.json`), inboxFile(name).size);
+  return read<CsvSummary>(new File(dir, `${name}.json`), inboxFile(name).size, csvV);
 }
 
 /** Works out and caches what is missing or stale for one file. */
@@ -170,7 +175,13 @@ export async function summarise(name: string): Promise<void> {
     // neither the file nor its decryption again (seriesOf).
     const text = await readLogText(name);
     write(new File(dir, `${name}.series.json`), size, csvSeries(text));
-    write(new File(dir, `${name}.json`), size, parseCsv(text));
+    const summary = parseCsv(text);
+    // Where each fill-up was, named as a drive's ends are.
+    if (summary.refuels.length) {
+      const places = await atlasNames(summary.refuels.map((r) => r.pt)).catch(() => []);
+      summary.refuels.forEach((r, i) => (r.place = places[i] ?? null));
+    }
+    write(new File(dir, `${name}.json`), size, summary, csvV);
   }
 }
 

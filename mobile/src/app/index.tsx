@@ -9,12 +9,21 @@ import { Card, Note, Pill, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
 import { duration, km, mb, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
-import { forgetStaleTitles, type Names, tripName } from '@/lib/names';
+import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { podTextLogNames, saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
 import { type ListFacts, loadListFacts } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
-import { type CsvSummary, isEncryptedName, isGpxName, isStub, litresPer100, type TripFiles } from '@/lib/trips';
+import {
+  type CsvSummary,
+  FILL_MIN_PCT,
+  isEncryptedName,
+  isGpxName,
+  isStub,
+  litresPer100,
+  type Refuel,
+  type TripFiles,
+} from '@/lib/trips';
 import { S, themed } from '@/theme';
 
 type Sums = Record<string, GpxStats | CsvSummary>;
@@ -26,6 +35,12 @@ type Sums = Record<string, GpxStats | CsvSummary>;
 const RECENT_MS = 31 * 24 * 3600 * 1000;
 // Undated drives (no clock) are few, and have no week to open: read always.
 const isOld = (start: number | null) => start !== null && start < Date.now() - RECENT_MS;
+
+// A fill-up as listed: one of a CSV's refuels, or found between two drives.
+type FuelStop = Refuel & { key: string };
+const isFuel = (x: object): x is FuelStop => 'fromPct' in x;
+// The i30 N's tank, for the litres a fill-up's levels come to.
+const TANK_L = 50;
 
 // Every drive the phone holds. Summaries missing from the cache (new pulls)
 // are worked out here, one file at a time, and the list fills in as they land.
@@ -192,6 +207,7 @@ export default function TripsScreen() {
       name: tripName(t, g, names),
     };
   });
+  type Row = (typeof rows)[number];
   const [showShort, setShowShort] = useState(false);
   const readOnes = rows.filter((r) => r.read);
   const longOnes = readOnes.filter((r) => r.problem || !isStub(r.g, r.c));
@@ -201,15 +217,39 @@ export default function TripsScreen() {
   // - and while it is being read, so the week does not vanish and come back.
   // (Recent ones are being read anyway: listed once read, as above.)
   const unread = (r: (typeof rows)[number]) => !r.read && isOld(r.t.start);
+  // Fill-ups, in among the drives at their time (asked 2026-10-22): during a
+  // drive (its CSV's refuels), and between two - the tank fuller at a drive's
+  // start than at the end of the one before. Looked for in every drive read,
+  // the hidden blips too: a hop to the pump is one.
+  const items: (Row | FuelStop)[] = [];
+  let newer: Row | null = null;          // the drive after, with a start level
+  for (const r of rows) {
+    const c = r.c;
+    if (newer && c?.fuelEndPct != null && newer.c!.fuelStartPct! - c.fuelEndPct >= FILL_MIN_PCT) {
+      const end = r.g?.end ?? (r.t.start !== null && c.durationS ? r.t.start + c.durationS * 1000 : r.t.start);
+      items.push({
+        key: `fuel:${r.t.key}`,
+        at: end,
+        pt: r.g?.to ?? null,
+        place: r.g?.toPlace ?? null,
+        fromPct: c.fuelEndPct,
+        toPct: newer.c!.fuelStartPct!,
+      });
+    }
+    for (const f of [...(c?.refuels ?? [])].reverse()) items.push({ ...f, key: `fuel:${r.t.key}:${f.at}` });
+    if (shownSet.has(r) || unread(r)) items.push(r);
+    if (c?.fuelStartPct != null) newer = r;
+  }
   // By week, each with its totals - of the drives shown, so the hidden
   // blips do not count. The same start and time the rows show.
-  const weeks = groupByWeek(
-    rows.filter((r) => shownSet.has(r) || unread(r)),
-    (r) => ({
-      start: r.g?.start ?? r.t.start,
-      distanceM: r.g?.distanceM ?? null,
-      secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
-    }),
+  const weeks = groupByWeek(items, (r) =>
+    isFuel(r)
+      ? { start: r.at, distanceM: null, secs: null, event: true }
+      : {
+          start: r.g?.start ?? r.t.start,
+          distanceM: r.g?.distanceM ?? null,
+          secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
+        },
   );
 
   return (
@@ -236,7 +276,7 @@ export default function TripsScreen() {
         </Card>
       ) : (
         weeks.map((w) => {
-          const waiting = w.items.filter(unread).length;
+          const waiting = w.items.filter((r) => !isFuel(r) && unread(r)).length;
           const monday = w.monday;
           const isOpened = monday !== null && opened.has(monday);
           return (
@@ -252,8 +292,11 @@ export default function TripsScreen() {
                 </Text>
               </Text>
               {w.items
-                .filter((r) => !unread(r))
-                .map((r) => (
+                .filter((r) => isFuel(r) || !unread(r))
+                .map((r) =>
+                  isFuel(r) ? (
+                    <FuelRow key={r.key} f={r} names={names} />
+                  ) : (
                   <TripRow
                     key={r.t.key}
                     t={r.t}
@@ -263,7 +306,8 @@ export default function TripsScreen() {
                     name={r.name}
                     facts={facts}
                   />
-                ))}
+                  ),
+                )}
               {waiting && monday !== null ? (
                 isOpened ? (
                   <Text style={styles.moreText}>{t('Reading…')}</Text>
@@ -348,6 +392,28 @@ function TripRow({
   );
 }
 
+// A fill-up: a line between the drives, not a card - it is no drive, and
+// there is nothing more of it to open. The litres are the levels' difference
+// over the tank, so roughly: the gauge reads the level in steps, and high
+// while it settles.
+function FuelRow({ f, names }: { f: FuelStop; names: Names }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const place = endName(f.pt, f.place ?? null, names);
+  const litres = Math.round(((f.toPct - f.fromPct) / 100) * TANK_L);
+  return (
+    <View style={styles.fuel}>
+      <Text style={styles.fuelTitle}>
+        {t('Filled up')}
+        <Text style={styles.fuelFacts}>
+          {`  ·  ${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${litres} l`}
+        </Text>
+      </Text>
+      <Text style={ui.note}>{[f.at ? when(f.at) : null, place].filter(Boolean).join('  ·  ')}</Text>
+    </View>
+  );
+}
+
 function Fact({ label, value }: { label: string; value: string }) {
   const ui = useUi();
   return (
@@ -371,6 +437,10 @@ const useStyles = themed((C) =>
     week: { gap: S.md },
     weekHead: { color: C.accent, fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: S.sm },
     weekTotals: { color: C.dim, fontWeight: '400', letterSpacing: 0 },
+    // A fill-up: set in from the cards' edge, with a rule of the accent.
+    fuel: { borderLeftWidth: 3, borderLeftColor: C.accent, paddingLeft: S.md, paddingVertical: S.xs, marginHorizontal: S.sm },
+    fuelTitle: { color: C.text, fontSize: 14, fontWeight: '600' },
+    fuelFacts: { color: C.dim, fontWeight: '400' },
     // A link, not a card: 48 dp tall to hit, styled like the app's other links.
     more: { minHeight: 48, justifyContent: 'center' },
     moreText: { color: C.link, fontSize: 14 },

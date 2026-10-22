@@ -226,6 +226,49 @@ test('csv: gaps and a restart are not counted, a stale value is not either', () 
   assert.ok(Math.abs(s.fuelKm! - 0.08) < 1e-9);   // four seconds at 20 m/s
 });
 
+// Tank readings: [seconds, rpm, %], a row every 500 ms from each given row
+// to the next, at a made-up spot.
+const tankCsv = (spans: [number, number, number][]) => {
+  let out = 'utc,ms,rpm,fuelPct,lat,lon\r\n';
+  for (let i = 0; i + 1 < spans.length; i++) {
+    const [from, rpm, pct] = spans[i];
+    for (let ms = from * 1000; ms < spans[i + 1][0] * 1000; ms += 500) {
+      // A low tank sloshes: every fifth reading 7.8 %, as the car's do.
+      const p = pct < 30 && (ms / 500) % 5 === 0 ? 7.8 : pct;
+      out += `${new Date(Date.UTC(2026, 9, 22, 19) + ms).toISOString().slice(0, 19)}Z,${ms},${rpm},${p},50.1,14.4\r\n`;
+    }
+  }
+  return out;
+};
+
+test('csv: a fill-up is a fuller tank across a stop, read with the engine running', () => {
+  const s = parseCsv(tankCsv([
+    [0, 1500, 10],
+    [300, 0, 35],        // stopped: reads high - not counted
+    [420, 1500, 100],
+    [700, 0, 0],
+  ]));
+  assert.equal(s.fuelStartPct, 10);
+  assert.equal(s.fuelEndPct, 100);
+  assert.equal(s.refuels.length, 1);
+  const r = s.refuels[0];
+  assert.deepEqual([r.fromPct, r.toPct, r.pt], [10, 100, [14.4, 50.1]]);
+  assert.equal(r.at, Date.UTC(2026, 9, 22, 19, 4, 59));   // the engine's last running second
+});
+
+test('csv: a stop with no fill, and a short one, are no fill-ups', () => {
+  const s = parseCsv(tankCsv([
+    [0, 1500, 40],
+    [300, 0, 66],        // parked, off, reading high
+    [400, 1500, 38],
+    [600, 0, 38],
+    [610, 1500, 80],     // 10 s off: no stop - and no fill-up, whatever it read
+    [900, 0, 0],
+  ]));
+  assert.deepEqual(s.refuels, []);
+  assert.equal(s.fuelStartPct, 40);
+});
+
 test('csv: no fuel column is null, not zero', () => {
   const s = parseCsv('utc,ms,oilC\n,1000,40\n,1500,41\n');
   assert.equal(s.fuelL, null);

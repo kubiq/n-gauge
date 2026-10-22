@@ -239,7 +239,49 @@ export type CsvSummary = {
    * against no distance.
    */
   fuelKm: number | null;
+  /**
+   * The tank level (%) at the start and the end of the drive, with the engine
+   * running (fuelLevelOf); null without enough readings.
+   */
+  fuelStartPct: number | null;
+  fuelEndPct: number | null;
+  /** Fill-ups during the drive: the engine stopped, and started on more fuel. */
+  refuels: Refuel[];
 };
+
+export type Refuel = {
+  /** When the engine stopped (epoch ms, from the utc column), or null. */
+  at: number | null;
+  /** Where ([lon, lat], as the GPX ends are), or null without a fix. */
+  pt: [number, number] | null;
+  fromPct: number;
+  toPct: number;
+  /** The place's name from the lists, filled in when cached (trip-cache.ts). */
+  place?: string | null;
+};
+
+// The tank level, for fill-ups. Read only with the engine running: with it off
+// the level reads ~20 points high (parked without filling, 2026-10-18: 44 %
+// running, 66 % just after; 2026-10-22: 31 % off, 10.6 % on the next start) -
+// it is measured against the supply, which drops when the alternator stops.
+// Running, it sloshes 8-15 % at a low level, so a level is the median of a
+// few minutes, and a fill-up is a rise of FILL_MIN_PCT across a stop: the
+// largest change that was not one, in 30 drives, was 9 points.
+const RUNNING_RPM = 300;
+const STOP_MIN_MS = 30_000;
+const LEVEL_WINDOW_MS = 180_000;
+const LEVEL_MIN_READINGS = 20;
+export const FILL_MIN_PCT = 20;
+
+/** The median of the readings within LEVEL_WINDOW_MS of one end; null with too few. */
+function fuelLevelOf(pts: [number, number][], fromEnd: boolean): number | null {
+  if (!pts.length) return null;
+  const edge = (fromEnd ? pts[pts.length - 1] : pts[0])[0];
+  const v = pts.filter(([ms]) => Math.abs(ms - edge) <= LEVEL_WINDOW_MS).map(([, p]) => p);
+  if (v.length < LEVEL_MIN_READINGS) return null;
+  v.sort((a, b) => a - b);
+  return v[v.length >> 1];
+}
 
 // A row's rate and speed hold until the next row; a longer gap than this (a
 // dropout, the logger paused) counts as nothing rather than as a guess.
@@ -255,10 +297,17 @@ export function parseCsv(text: string): CsvSummary {
   const col = (n: string) => head.indexOf(n);
   const iMs = col('ms'), iBoost = col('boostBar'), iOil = col('oilC'), iCool = col('coolantC');
   const iRpm = col('rpm'), iKmh = col('obdKmh'), iFuel = col('fuelLh');
+  const iPct = col('fuelPct'), iUtc = col('utc'), iLat = col('lat'), iLon = col('lon');
   const s: CsvSummary = {
     rows: 0, durationS: 0, maxBoostBar: null, maxOilC: null, maxCoolantC: null, maxRpm: null, maxObdKmh: null, lastOilC: null,
-    fuelL: null, fuelKm: null,
+    fuelL: null, fuelKm: null, fuelStartPct: null, fuelEndPct: null, refuels: [],
   };
+  // Engine-running stretches, split where it was off STOP_MIN_MS or more:
+  // their tank readings [ms, %], and when and where each ended.
+  type Run = { pts: [number, number][]; endMs: number; at: number | null; pt: [number, number] | null };
+  const runs: Run[] = [];
+  let run: Run | null = null;
+  let lastPt: [number, number] | null = null;
   let firstMs = NaN, lastMs = NaN;
   // The previous row's uptime, fuel rate and speed, for the integrals.
   let prevMs = NaN, prevLh = NaN, prevKmh = NaN;
@@ -295,9 +344,37 @@ export function parseCsv(text: string): CsvSummary {
       if (Number.isFinite(prevKmh)) s.fuelKm! += prevKmh * h;
     }
     if (Number.isFinite(ms)) { prevMs = ms; prevLh = lh; prevKmh = kmh; }
+
+    const lat = num(f, iLat), lon = num(f, iLon);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon)) lastPt = [lon, lat];
+    const rpm = num(f, iRpm);
+    if (Number.isFinite(ms) && rpm >= RUNNING_RPM) {
+      // A new stretch after a stop - or after a reboot, when ms starts again.
+      if (!run || ms - run.endMs >= STOP_MIN_MS || ms < run.endMs) {
+        run = { pts: [], endMs: ms, at: null, pt: null };
+        runs.push(run);
+      }
+      run.endMs = ms;
+      const utc = iUtc >= 0 && f[iUtc] ? Date.parse(f[iUtc]) : NaN;
+      run.at = Number.isFinite(utc) ? utc : null;
+      run.pt = lastPt;
+      const pct = num(f, iPct);
+      if (Number.isFinite(pct)) run.pts.push([ms, pct]);
+    }
   }
   // uptime ms can restart if the pod rebooted mid-drive; never negative.
   if (!Number.isNaN(firstMs)) s.durationS = Math.max(0, (lastMs - firstMs) / 1000);
+  const levels = runs.map((r) => ({ r, head: fuelLevelOf(r.pts, false), tail: fuelLevelOf(r.pts, true) }));
+  s.fuelStartPct = levels.find((l) => l.head !== null)?.head ?? null;
+  s.fuelEndPct = levels.findLast((l) => l.tail !== null)?.tail ?? null;
+  // Each stretch's start against the last level before it.
+  let before: (typeof levels)[number] | null = null;
+  for (const l of levels) {
+    if (before && l.head !== null && l.head - before.tail! >= FILL_MIN_PCT) {
+      s.refuels.push({ at: before.r.at, pt: before.r.pt, fromPct: before.tail!, toPct: l.head });
+    }
+    if (l.tail !== null) before = l;
+  }
   return s;
 }
 
