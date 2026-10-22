@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
-import { Card, Note, Screen, useUi } from '@/components/ui';
+import { Card, Note, Pill, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
 import { duration, km, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
@@ -43,7 +43,14 @@ export default function TripsScreen() {
   // The sync runs by itself (use-sync.tsx): each file it lands re-reads the
   // list, so a drive appears while this tab is open. Landing during the
   // summaries below, the re-read waits for them (`again`, then `rerun`).
-  const { landed } = useSync();
+  //
+  // New drives are read once the sync has finished, not as each file lands,
+  // and - with a list already showing - added to it together: one change,
+  // where each drive appearing on its own moved the whole list down again,
+  // once per file, while it was being read (2026-10-20). A first visit with
+  // nothing read yet still fills in as it goes, rather than staying empty.
+  const { landed, phase } = useSync();
+  const syncing = phase !== 'idle';
   const again = useRef(false);
   const [rerun, setRerun] = useState(0);
 
@@ -73,20 +80,29 @@ export default function TripsScreen() {
         return;
       }
       setStatus(null);
-      if (!todo.length) return;
+      if (!todo.length || syncing) return;   // after the sync: this runs again then
       working.current = true;
+      const together = Object.keys(have).length > 0;
       (async () => {
+        const got: Sums = {};
+        const bad: Record<string, string> = {};
         for (const [i, name] of todo.entries()) {
           // Only while there is something to wait for; nothing once done.
           setStatus(t('Reading new drives… {i} of {n}', { i: i + 1, n: todo.length }));
           try {
             await summarise(name);
             const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
-            if (s) setSums((prev) => ({ ...prev, [name]: s }));
+            if (s && together) got[name] = s;
+            else if (s) setSums((prev) => ({ ...prev, [name]: s }));
           } catch (e) {
             const msg = e instanceof LogKeyError ? e.message : t('Could not read it: {error}', { error: String(e) });
-            setProblems((prev) => ({ ...prev, [name]: msg }));
+            if (together) bad[name] = msg;
+            else setProblems((prev) => ({ ...prev, [name]: msg }));
           }
+        }
+        if (together) {
+          setSums((prev) => ({ ...prev, ...got }));
+          setProblems((prev) => ({ ...prev, ...bad }));
         }
         setStatus(null);
         working.current = false;
@@ -95,7 +111,7 @@ export default function TripsScreen() {
           setRerun((n) => n + 1);
         }
       })();
-    }, [landed, rerun]),
+    }, [landed, rerun, syncing]),
   );
 
   const saveAll = async () => {
@@ -151,7 +167,7 @@ export default function TripsScreen() {
   // jumped up, and a row's week and title moved from the file name's stamp
   // to the track's - a list that looked shuffled while it filled. The files
   // are read top to bottom, so it now grows in order, with one "Reading new
-  // drives…" line above it.
+  // drives…" pill over it.
   const rows = trips.map((t) => {
     const g = t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined;
     const c = t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined;
@@ -179,8 +195,9 @@ export default function TripsScreen() {
   }));
 
   return (
-    <Screen>
-      {status ? <Note>{status}</Note> : null}
+    // Progress (reading new drives, saving to the folder) floats over the
+    // list: as a line above it, it pushed every row down and back up.
+    <Screen overlay={status ? <Pill>{status}</Pill> : null}>
       {trips.length === 0 ? (
         <Card>
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>

@@ -10,7 +10,12 @@ import { S, themed, useColors } from '@/theme';
  * edge to edge. That space is scroll padding, not a margin, so content
  * still scrolls behind the transparent bar but its end stops above it.
  */
-export function Screen({ children }: { children: ReactNode }) {
+/**
+ * `overlay` is drawn over the page, outside its scrolling - for a Pill, so
+ * progress takes no room in the content (a line above the trips list pushed
+ * every row down and back up again while a sync ran).
+ */
+export function Screen({ children, overlay }: { children: ReactNode; overlay?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const ui = useUi();
   // Held by something that needs the finger to itself - the map: dragging
@@ -27,8 +32,24 @@ export function Screen({ children }: { children: ReactNode }) {
           contentContainerStyle={[ui.scroll, { paddingBottom: S.md + insets.bottom }]}>
           {children}
         </ScrollView>
+        {overlay}
       </SafeAreaView>
     </HoldScrollContext.Provider>
+  );
+}
+
+/**
+ * Work in progress, floating at the foot of the screen like a toast that
+ * stays while the work runs - for a Screen's `overlay`. Not touchable: what
+ * is under it can still be tapped.
+ */
+export function Pill({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const ui = useUi();
+  return (
+    <View pointerEvents="none" style={[ui.pillWrap, { bottom: S.lg + insets.bottom }]}>
+      <Text style={ui.pill}>{children}</Text>
+    </View>
   );
 }
 
@@ -142,6 +163,19 @@ export const useUi = themed((C) =>
     buttonDanger: { borderColor: C.bad },
     buttonText: { color: C.text, fontSize: 15, fontWeight: '600' },
     note: { color: C.dim, fontSize: 13, lineHeight: 18 },
+    // Pill: centred over the foot of the screen, in the card's colours.
+    pillWrap: { position: 'absolute', left: S.md, right: S.md, alignItems: 'center' },
+    pill: {
+      backgroundColor: C.card,
+      borderColor: C.border,
+      borderWidth: 1,
+      borderRadius: 20,
+      paddingVertical: S.sm,
+      paddingHorizontal: S.md,
+      color: C.text,
+      fontSize: 13,
+      overflow: 'hidden',
+    },
     input: {
       color: C.text,
       borderColor: C.border,

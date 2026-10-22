@@ -27,8 +27,7 @@ export const lib: Record<string, string> = {
   'Sharing is not available on this device': 'Sdílení není na tomto zařízení dostupné',
   'Share the track': 'Sdílet trasu',
   'Share the car data': 'Sdílet data z auta',
-  '{n} saved': 'Uloženo: {n}',
-  '{n} already there': 'přeskočeno (už tam jsou): {n}',
+  'Successfully synced.': 'Úspěšně synchronizováno.',
   'Not saved:': 'Neuloženo:',
   'Saving {at} of {of}: {name}': 'Ukládám {at} z {of}: {name}',
 

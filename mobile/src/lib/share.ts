@@ -72,12 +72,15 @@ export async function shareLog(name: string): Promise<void> {
 
 export type SaveResult = { saved: number; skipped: number; failed: string[] };
 
+/**
+ * What a save did, in one line - or the files it could not save. Not the
+ * count of those already in the folder: after the first save that is nearly
+ * all of them, and "3 saved, 412 already there" read as a list of skips
+ * (2026-10-20).
+ */
 export function savedText(r: SaveResult): string {
-  const parts = [t('{n} saved', { n: r.saved })];
-  if (r.skipped) parts.push(t('{n} already there', { n: r.skipped }));
-  let s = parts.join(', ') + '.';
-  if (r.failed.length) s += `\n\n${t('Not saved:')}\n${r.failed.join('\n')}`;
-  return s;
+  if (!r.failed.length) return t('Successfully synced.');
+  return `${t('Not saved:')}\n${r.failed.join('\n')}`;
 }
 
 /** Asks for a folder with Android's picker and remembers it. Throws if none is picked. */
