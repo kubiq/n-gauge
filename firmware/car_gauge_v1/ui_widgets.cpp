@@ -198,7 +198,7 @@ void make_sliding(lv_obj_t *label) {
   lv_obj_set_user_data(label, ghost);
 }
 
-void slide_text(lv_obj_t *label, const char *text, int dir) {
+void slide_text(lv_obj_t *label, const char *text, int dir, uint32_t ms) {
   if (strcmp(lv_label_get_text(label), text) == 0) return;
   lv_obj_t *ghost = (lv_obj_t *)lv_obj_get_user_data(label);
   // A new value mid-slide: the last one ends where it was going.
@@ -221,7 +221,7 @@ void slide_text(lv_obj_t *label, const char *text, int dir) {
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_exec_cb(&a, slideY);
-  lv_anim_set_duration(&a, SLIDE_MS);
+  lv_anim_set_duration(&a, ms);
   lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
   lv_anim_set_var(&a, label);
   lv_anim_set_values(&a, s * h, 0);

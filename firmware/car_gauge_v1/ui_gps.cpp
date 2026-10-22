@@ -3,6 +3,8 @@
 // See ui_priv.h.
 // ============================================================================
 #include "ui_priv.h"
+#include "calc.h"       // calc_elapsed: the speed's update rate
+#include <stdio.h>      // snprintf: the speed, for slide_text
 
 extern "C" const lv_image_dsc_t icon_sat;        // GPS screen
 
@@ -16,6 +18,7 @@ lv_obj_t *ui_build_gps() {
   lv_obj_t *gpsRow = make_icon_row(s, -10, &icon_sat, &gpsIcon);
   gpsSpeed = make_big_label(gpsRow, COL_GOOD, 0);
   fix_value_width(gpsSpeed, "888");
+  make_sliding(gpsSpeed);                // faster: in from below; slower: from above
   make_name(s, "km/h", 40);
   gpsState = make_name(s, "", 80);
   // Below the fix state rather than beside the speed: at 466 px the speed is
@@ -48,9 +51,20 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
 
   static bool lastLink = false, lastFix = false;
   static int  lastSats = INT32_MIN, lastKmh = INT32_MIN;
-  const int kmh  = (int)(speedKmh + 0.5f);       // what actually gets shown
+  static uint32_t speedAt = 0;
+  const uint32_t now = lv_tick_get();
+  int kmh = (int)(speedKmh + 0.5f);              // what actually gets shown
+  // A new speed at most every GPS_SPEED_SHOW_MS, so each slide (as long)
+  // finishes before the next number comes: at 25 fixes a second a rising
+  // speed changed the number faster than any slide could run. The latest
+  // speed shows on the first pass after that.
+  const bool showingSpeed = linkUp && haveFix && lastLink && lastFix && lastKmh != INT32_MIN;
+  if (showingSpeed && kmh != lastKmh && !calc_elapsed(now, speedAt, GPS_SPEED_SHOW_MS)) kmh = lastKmh;
   if (linkUp == lastLink && haveFix == lastFix &&
       sats == lastSats && kmh == lastKmh) return;
+  // Slides from one shown speed to the next - not in from "--".
+  const int dir = !showingSpeed ? 0 : kmh > lastKmh ? 1 : kmh < lastKmh ? -1 : 0;
+  if (kmh != lastKmh) speedAt = now;
   // The satellite shows the state: grey no module, blue searching, green fix.
   // Only when the state changes - not with every speed or satellite count.
   if (linkUp != lastLink || haveFix != lastFix || lastSats == INT32_MIN)
@@ -70,7 +84,9 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
     set_text_color(gpsState, COL_BLUE);
     return;
   }
-  lv_label_set_text_fmt(gpsSpeed, "%d", (int)(speedKmh + 0.5f));
+  char txt[8];
+  snprintf(txt, sizeof(txt), "%d", kmh);
+  slide_text(gpsSpeed, txt, dir, GPS_SPEED_SHOW_MS);
   show_value_style(gpsSpeed, COL_GOOD);
   lv_label_set_text_fmt(gpsState, "fix  %d sats", sats);
   set_text_color(gpsState, COL_GOOD);

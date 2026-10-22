@@ -446,6 +446,9 @@
 // How long a changed oil or coolant number takes to slide in (ui_widgets.cpp,
 // slide_text): quick enough to be over long before the next degree.
 #define SLIDE_MS           180
+// The GPS speed: a new number at most this often, each sliding in as long -
+// so a slide always ends before the next (25 fixes a second otherwise).
+#define GPS_SPEED_SHOW_MS  100
 // Expected mean time between boost samples. Only the bench render test and
 // synthetic input use it.
 #define BOOST_SAMPLE_MS    15

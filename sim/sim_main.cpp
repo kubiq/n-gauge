@@ -95,6 +95,14 @@ int main(int argc, char **argv) {
                 (unsigned)replay.fixes.size(), replay.lengthMs / 60000.0);
   else
     std::printf("[sim] no drive given: the gauge on the bench, no car (u: a PC on USB)\n");
+  // A track that starts minutes after the car data - the GPS found its fix
+  // late - left the GPS screen at "--" for all that time: start just before
+  // the first fix instead. The car data before it is fed at once.
+  if (!replay.fixes.empty() && replay.fixes.front().t > 10000) {
+    seek(replay.fixes.front().t - 5000.0);
+    std::printf("[sim] the track starts %.0f s in: replay from just before it\n",
+                replay.fixes.front().t / 1000.0);
+  }
 
   setup();
   SDL_AddEventWatch(onEvent, nullptr);
