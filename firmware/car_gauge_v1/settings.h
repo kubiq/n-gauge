@@ -60,6 +60,12 @@ bool settings_set_log_key(const char *hex);
 // on a change, so the next ones use the new key.
 extern volatile uint32_t settings_log_key_gen;
 
+// The session (6 characters) of the last drive that wrote a log, kept in NVS
+// across sleep - what the WiFi beacon tells the phone (webapi.cpp). False
+// before any drive.
+void settings_set_last_drive(const char *session);
+bool settings_last_drive(char out[7]);
+
 // Returns false (and changes nothing) if pass is not a valid WPA2 length.
 bool settings_set_ap_pass(const char *pass);
 // Returns false (and changes nothing) if ssid is empty or over 32 bytes.

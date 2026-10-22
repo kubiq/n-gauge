@@ -70,6 +70,8 @@ void logsink_seed();
 // ---- names (log_names.cpp) --------------------------------------------------
 // A new session id, once per boot or wake: every file it writes carries it.
 void lognames_new_session();
+// A drive log (CSV or GPX) opened: this session is the last drive now.
+void lognames_note_drive();
 enum LogName { LOG_NAME_NONE, LOG_NAME_DATED, LOG_NAME_NUMBERED };
 // The name a new log gets: "/<prefix><start time>_<session><ext>" while the
 // clock is trusted, else "/<prefix><number>_<session><ext>". `base` is the

@@ -3,6 +3,8 @@
   "recipientSecret": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
   "recipientPublic": "79a631eede1bf9c98f12032cdeadd0e7a079398fc786b88cc846ec89af85a51a",
   "fingerprint": "7d125bce8295",
+  "beaconSession": "3fa81c",
+  "beacon": "20b165ea8b9e9991",
   "ephemeralSecrets": ["101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f", "303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f"],
   "records": ["utc,ms,oilC\n", ",1000,85\n", ",1500,86\n"],
   "plaintext": "utc,ms,oilC\n,1000,85\n,1500,86\nutc,ms,oilC\n,1000,85\n,1500,86\n",

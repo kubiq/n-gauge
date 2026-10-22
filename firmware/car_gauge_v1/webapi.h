@@ -32,6 +32,10 @@ bool web_is_up();
 // A /dl transfer is running (on the web server's task), with a card file
 // open: the card is not to be unmounted or lent to the PC meanwhile.
 bool web_download_active();
+// The AP's beacons carry the last drive's fingerprint (logcrypt_beacon), for
+// the phone to see new drives without joining. Call when the last drive or
+// the log key changes; a no-op while the AP is down (it is set on start).
+void web_beacon_update();
 // Times since boot web_start() declined: under AP_MIN_INTERNAL_HEAP free.
 uint32_t web_ap_refused();
 // How many stations are associated. Used by power.cpp to hold off sleep while

@@ -15,6 +15,7 @@
 #include <sys/stat.h>       // stat(), for file sizes without opening them
 #include <dirent.h>         // readdir(): the card's names without a String each
 #include <WiFi.h>
+#include <esp_wifi.h>       // esp_wifi_set_vendor_ie: the beacon
 #include <esp_http_server.h>
 #include <DNSServer.h>   // captive portal; see the note on dns below
 #include <stdlib.h>
@@ -564,6 +565,7 @@ static void saveOnLoop(void *a) {
       j->msg = "Settings saved, but not the log key: the SD card is busy - try again.";
     else if (!settings_set_log_key(arg("logPub")))
       j->msg = "Settings saved, but the log key was rejected (64 hex digits, or off).";
+    web_beacon_update();                 // keyed by it
   }
 
   // WiFi identity last: changing either restarts the AP and drops this
@@ -1432,9 +1434,42 @@ void web_start() {
   const bool dnsOk = dns.start(53, "*", WiFi.softAPIP());
 
   up = true;
+  web_beacon_update();
   Serial.printf("[OK] settings AP '%s' up at http://%s/  portal:dhcp=%s dns=%s\n",
                 settings.apSsid, ipText.c_str(),
                 portalOk ? "yes" : "NO", dnsOk ? "yes" : "NO");
+}
+
+// ---- the beacon -----------------------------------------------------------------
+// The AP's own beacons - sent ten times a second anyway, what puts the network
+// in a phone's list - carry one vendor element: the last drive's fingerprint
+// (logcrypt_beacon). The app reads it from the phone's WiFi scan results,
+// without joining, and tells whether the gauge has a drive it has not
+// (asked 2026-10-22). In probe responses too, for an active scan. Nothing
+// new on the air and no RAM worth counting: Bluetooth was the first idea,
+// and its stack cannot start beside the AP for want of internal RAM
+// (measured: a crash).
+//
+//   0xDD len | OUI 02 4E 47 ("NG", locally administered) | type 1 | 8 bytes
+static constexpr uint8_t BEACON_OUI[3] = {0x02, 0x4E, 0x47};
+
+void web_beacon_update() {
+  if (!up) return;
+  char session[7];
+  if (!settings_last_drive(session)) return;      // no drive yet: nothing to say
+  static uint8_t ie[2 + 4 + 8];
+  ie[0] = 0xDD;                                   // vendor specific
+  ie[1] = sizeof(ie) - 2;
+  memcpy(ie + 2, BEACON_OUI, 3);
+  ie[5] = 1;                                      // this format, version 1
+  // The key's public half, or zeros with none - settings.logPub is zeroed then.
+  logcrypt_beacon(ie + 6, settings.logPub, session);
+  // Replaced, not added to: off first, then on with the new bytes.
+  for (wifi_vendor_ie_type_t t : {WIFI_VND_IE_TYPE_BEACON, WIFI_VND_IE_TYPE_PROBE_RESP}) {
+    esp_wifi_set_vendor_ie(false, t, WIFI_VND_IE_ID_0, nullptr);
+    if (esp_wifi_set_vendor_ie(true, t, WIFI_VND_IE_ID_0, ie) != ESP_OK)
+      Serial.println(F("[ERR] beacon element not set"));
+  }
 }
 
 bool web_is_up()      { return up; }

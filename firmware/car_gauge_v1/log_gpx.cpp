@@ -152,6 +152,7 @@ static void gpxOpen() {
                    stamp[0] ? stamp : "trip");
     gpx.open = true;
     gpxCommit();
+    lognames_note_drive();
     Serial.printf("[OK] trip track %s%s\n", gpx.path, gpx.enc ? " (encrypted)" : "");
     return;
   }

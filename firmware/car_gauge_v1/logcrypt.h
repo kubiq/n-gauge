@@ -146,6 +146,22 @@ static inline bool logcrypt_pub_ok(const uint8_t pub[32]) {
   return any != 0;
 }
 
+// The WiFi beacon's word for "the last drive" (webapi.cpp): 8 bytes of
+// BLAKE2b(recipient_pub | "n-gauge beacon v1" | session) - `session` the six
+// characters every log name of that drive ends in. Broadcast in the AP's
+// beacons, it lets the phone tell, without connecting, whether the gauge has
+// a drive it has not: it works the same out for the sessions it holds. Keyed,
+// so to anyone else it is noise that changes with each drive - no time, no
+// name, nothing to follow the car by. With no log key, pub is all zeros.
+#define LOGCRYPT_BEACON_INFO "n-gauge beacon v1"
+static inline void logcrypt_beacon(uint8_t out[8], const uint8_t recipient_pub[32], const char *session) {
+  uint8_t msg[32 + sizeof(LOGCRYPT_BEACON_INFO) - 1 + 6];
+  memcpy(msg, recipient_pub, 32);
+  memcpy(msg + 32, LOGCRYPT_BEACON_INFO, sizeof(LOGCRYPT_BEACON_INFO) - 1);
+  memcpy(msg + 32 + sizeof(LOGCRYPT_BEACON_INFO) - 1, session, 6);
+  crypto_blake2b(out, 8, msg, sizeof(msg));
+}
+
 // Fingerprint of a public key, to compare the pod's against the phone's by
 // eye: the first 6 bytes of BLAKE2b-256(pub), as 12 hex digits.
 static inline void logcrypt_fingerprint(char out[13], const uint8_t pub[32]) {

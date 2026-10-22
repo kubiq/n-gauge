@@ -255,6 +255,26 @@ bool settings_set_log_key(const char *hex) {
   return true;
 }
 
+// The last drive's session (log_names.cpp), for the WiFi beacon. Its own
+// Preferences, not `prefs`: this is written from the logger's task, and the
+// shared object is the loop's. NVS itself takes the two.
+void settings_set_last_drive(const char *session) {
+  Preferences p;
+  p.begin(NVS_NAMESPACE, /*readOnly=*/false);
+  p.putString("lastDrive", session);
+  p.end();
+}
+
+bool settings_last_drive(char out[7]) {
+  Preferences p;
+  p.begin(NVS_NAMESPACE, /*readOnly=*/true);
+  const String s = p.getString("lastDrive", "");
+  p.end();
+  if (s.length() != 6) return false;
+  memcpy(out, s.c_str(), 7);
+  return true;
+}
+
 void settings_set_gmeter_zero(float x, float y, float z) {
   settings.gmOffX = x;
   settings.gmOffY = y;

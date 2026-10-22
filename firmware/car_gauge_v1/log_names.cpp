@@ -5,6 +5,7 @@
 #include "rtc.h"        // clock_valid(): a dated name only with a trusted clock
 #include "settings.h"   // logKey: the encrypted suffix
 #include "taskwdt.h"    // taskwdt_feed: a long directory walk
+#include "webapi.h"     // web_beacon_update: the last drive changed
 #include <esp_random.h>
 #include "SD_MMC.h"
 #include <time.h>
@@ -19,8 +20,20 @@
 // and would then repeat ids already on the card.
 static char session[7] = "000000";
 
+static bool driveNoted = false;
+
 void lognames_new_session() {
   snprintf(session, sizeof(session), "%06lx", (unsigned long)(esp_random() & 0xFFFFFF));
+  driveNoted = false;
+}
+
+// A drive's log opened this session: it is the last drive now - in NVS, once
+// per session, and onto the WiFi beacon if the AP is up (web_beacon_update).
+void lognames_note_drive() {
+  if (driveNoted) return;
+  driveNoted = true;
+  settings_set_last_drive(session);
+  web_beacon_update();
 }
 
 // ---- choosing the next file number -----------------------------------------

@@ -179,12 +179,16 @@ static std::string vector_json() {
   fill(eph1, 32, 0x30);
   char fp[13];
   logcrypt_fingerprint(fp, pub);
+  uint8_t beacon[8];
+  logcrypt_beacon(beacon, pub, "3fa81c");
   const std::string f = write_file(pub, ROWS, 3, 2);
   std::string j = "{\n";
   j += "  \"note\": \"logcrypt v1 test vector, written by tests/test_logcrypt.cpp. Fixed secrets - not keys anyone uses.\",\n";
   j += "  \"recipientSecret\": \"" + hex(sec, 32) + "\",\n";
   j += "  \"recipientPublic\": \"" + hex(pub, 32) + "\",\n";
   j += "  \"fingerprint\": \"" + std::string(fp) + "\",\n";
+  j += "  \"beaconSession\": \"3fa81c\",\n";
+  j += "  \"beacon\": \"" + hex(beacon, 8) + "\",\n";
   j += "  \"ephemeralSecrets\": [\"" + hex(eph0, 32) + "\", \"" + hex(eph1, 32) + "\"],\n";
   j += "  \"records\": [\"utc,ms,oilC\\n\", \",1000,85\\n\", \",1500,86\\n\"],\n";
   j += "  \"plaintext\": \"utc,ms,oilC\\n,1000,85\\n,1500,86\\nutc,ms,oilC\\n,1000,85\\n,1500,86\\n\",\n";

@@ -227,6 +227,7 @@ static bool driveOpen() {
   logfile_puts(csv, "\r\n");
   logfile_commit(csv);
   csv.open = true;
+  lognames_note_drive();
   Serial.printf("[OK] drive log %s%s\n", csv.path, csv.enc ? " (encrypted)" : "");
   return true;
 }
