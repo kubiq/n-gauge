@@ -83,8 +83,29 @@ int log_gear() {
 // pages, the serial dump - takes this lock first, and so waits at most one
 // save. Recursive, because the public functions call each other.
 static SemaphoreHandle_t sdLock = nullptr;
-void logger_sd_lock()   { if (sdLock) xSemaphoreTakeRecursive(sdLock, portMAX_DELAY); }
-void logger_sd_unlock() { if (sdLock) xSemaphoreGiveRecursive(sdLock); }
+// Who holds it and since when, for the "busy" error: 2026-10-23, a sync on
+// the bench (and once in the car) ended with a wait of 3 s timing out, and
+// nothing said what had the card that long. Written by the holder only -
+// on its first take and its last give (the lock is recursive).
+static TaskHandle_t sdHolder = nullptr;
+static uint32_t     sdHeldSince = 0;
+static uint8_t      sdDepth = 0;
+static void sdTaken() {
+  if (sdDepth++ == 0) {
+    sdHolder = xTaskGetCurrentTaskHandle();
+    sdHeldSince = millis();
+  }
+}
+void logger_sd_lock() {
+  if (!sdLock) return;
+  xSemaphoreTakeRecursive(sdLock, portMAX_DELAY);
+  sdTaken();
+}
+void logger_sd_unlock() {
+  if (!sdLock) return;
+  if (sdDepth && --sdDepth == 0) sdHolder = nullptr;
+  xSemaphoreGiveRecursive(sdLock);
+}
 
 // Half a second at a time, the watchdog fed in between when the caller is
 // watched - loop() is; the web server's task is not (taskwdt_feed).
@@ -94,10 +115,18 @@ bool logger_sd_lock_for(uint32_t ms) {
   for (;;) {
     const uint32_t waited = millis() - t0;
     const uint32_t step = ms - waited < 500 ? ms - waited : 500;
-    if (xSemaphoreTakeRecursive(sdLock, pdMS_TO_TICKS(step)) == pdTRUE) return true;
+    if (xSemaphoreTakeRecursive(sdLock, pdMS_TO_TICKS(step)) == pdTRUE) {
+      sdTaken();
+      return true;
+    }
     taskwdt_feed();
     if (millis() - t0 >= ms) {
-      Serial.println(F("[ERR] SD card busy - a save has held it too long"));
+      // A snapshot: the holder may let go as this is read.
+      const TaskHandle_t h = sdHolder;
+      const uint32_t since = sdHeldSince;
+      Serial.printf("[ERR] SD card busy: %s waited %lu ms; held by %s for %lu ms\n",
+                    pcTaskGetName(nullptr), (unsigned long)ms,
+                    h ? pcTaskGetName(h) : "?", (unsigned long)(millis() - since));
       return false;
     }
   }

@@ -293,8 +293,12 @@ void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb) {
   if (!have || millis() - atMs >= 60000) {
     LoggerSdLock lock(have ? 0 : SD_LOCK_WEB_MS);   // a known figure does not wait
     if (lock) {
+      const uint32_t t0 = millis();
       total = (uint32_t)(SD_MMC.totalBytes() / 1024);
       used  = (uint32_t)(SD_MMC.usedBytes() / 1024);
+      // Suspected 2026-10-23 of holding the card for seconds after a sync.
+      if (millis() - t0 >= 300)
+        Serial.printf("[..] SD space took %lu ms, under the card's lock\n", (unsigned long)(millis() - t0));
       taskwdt_feed();
       atMs = millis();
       have = true;
