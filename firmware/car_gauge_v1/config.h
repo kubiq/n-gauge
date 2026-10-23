@@ -567,6 +567,10 @@
 // (a broken CAN wire, 2026-10-19). Well above position-noise speed at a
 // standstill, well below any real driving.
 #define SLEEP_HOLD_MOVING_KMH 10.0f
+// The car's own speed (OBD) at or above this is moving (podstate.h): it reads
+// 0 standing, so any speed at all is movement. GPS speed, the fallback when
+// the car is not talking, needs SLEEP_HOLD_MOVING_KMH.
+#define MOVING_OBD_KMH        1.0f
 // Safety net only: if the CAN-RX edge wake were misconfigured, this is the
 // longest the board could stay asleep with the engine running. Long enough to
 // be cheap (one boot an hour), short enough that the failure is survivable.
