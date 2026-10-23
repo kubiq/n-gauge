@@ -83,6 +83,10 @@ void power_boot_check() {}
 void power_task() {}
 bool power_wake_pending() { return false; }
 void power_note_activity() {}
+bool power_usb_host() { return false; }
+uint32_t power_last_activity_ms() { return 0; }
+uint32_t power_sleep_after_ms() { return BUS_IDLE_SLEEP_MS; }
+PsWake power_wake_cause() { return PS_WAKE_COLD; }
 
 // ---- The card: logging is not part of the simulation (yet) -------------------
 void logger_init() {}
@@ -127,6 +131,7 @@ const char *ota_error() { return "not in the simulation"; }
 void ota_reboot() {}
 const char *ota_build() { return "sim"; }
 bool ota_rolled_back() { return false; }
+bool ota_on_probation() { return false; }
 const char *ota_hash() { return "00000000"; }
 
 RtcState rtc;
@@ -144,6 +149,7 @@ void web_start() { webUp = true; }
 void web_stop() { webUp = false; }
 bool web_is_up() { return webUp; }
 uint8_t web_clients() { return 0; }
+bool web_download_active() { return false; }
 const char *web_ip() { return webUp ? "4.3.2.1" : ""; }
 const char *web_reset_text() { return "power on"; }
 void web_sd_space_kb(uint32_t *u, uint32_t *t) { *u = 1024 * 1024; *t = 32 * 1024 * 1024; }

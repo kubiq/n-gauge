@@ -241,6 +241,16 @@ static inline void podstate_step(PodState *s, const PsFacts &f, const PsCfg &c) 
   s->started = true;
 }
 
+// ---- on the gauge (podstate.cpp) ----------------------------------------------
+// Once per loop() pass, early: the facts gathered and the state worked out.
+// The temperature warnings are loop()'s latched states.
+void podstate_update(uint32_t now, bool oilHot, bool coolHot);
+// The state as of this pass - from loop() only.
+const PodState &podstate();
+// A copy, from any task (the logger, the web server): taken under a
+// spinlock, a few microseconds.
+PodState podstate_copy();
+
 // Names, for the serial log and the replay.
 static inline const char *ps_car_name(PsCar c) {
   return c == PS_CAR_OFF ? "off" : c == PS_CAR_ON ? "on" : "running";

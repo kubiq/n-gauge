@@ -43,6 +43,8 @@ void ota_reboot();                // closes logs, restarts into the new slot
 // For the settings page: build stamp, and whether a rollback happened.
 const char *ota_build();
 bool ota_rolled_back();
+// A freshly updated firmware, not yet confirmed healthy (ota_task).
+bool ota_on_probation();
 // The running firmware's app hash, first 8 hex digits - matches the "(xxxxxxxx)"
 // the SD install logs for a file, so a file can be matched to what runs.
 const char *ota_hash();

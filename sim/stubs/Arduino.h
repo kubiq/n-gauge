@@ -19,6 +19,11 @@
 #define OUTPUT 1
 #define INPUT 0
 #define INPUT_PULLUP 2
+// FreeRTOS's spinlock: the simulation runs loop() on one thread.
+typedef int portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(m) ((void)(m))
+#define portEXIT_CRITICAL(m) ((void)(m))
 
 uint32_t millis();
 uint32_t micros();

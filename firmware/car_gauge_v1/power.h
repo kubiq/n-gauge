@@ -2,6 +2,8 @@
 // power.h  —  Option B: sleep when the CAN bus goes quiet, wake when it's back.
 // ============================================================================
 #pragma once
+#include <stdint.h>
+#include "podstate.h"   // PsWake
 
 void power_boot_check();   // right after init: if the bus is dead, sleep again
 void power_task();         // in loop: sleep once the bus has been idle too long
@@ -27,3 +29,11 @@ bool power_wake_pending();
 // obd.lastFrameMs. A 32-bit timestamp store is naturally atomic, so this is
 // safe to call from any task.
 void power_note_activity();
+
+// For the gauge's state (podstate.cpp): a USB host seen (sticky, as sleep
+// treats it), the last touch or press (0 = none since boot), the "Sleep
+// after" window, and what started this boot.
+bool power_usb_host();
+uint32_t power_last_activity_ms();
+uint32_t power_sleep_after_ms();
+PsWake power_wake_cause();

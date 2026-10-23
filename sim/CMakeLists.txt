@@ -38,6 +38,7 @@ add_executable(gauge-sim
   ${FW_UI}
   ${FW}/obd_fresh.cpp
   ${FW}/laps.cpp
+  ${FW}/podstate.cpp
   ${FW}/settings.cpp
   ${FW}/monocypher.c    # settings.cpp checks a log key (logcrypt_pub_ok)
   ${FW_IMAGES})

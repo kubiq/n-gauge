@@ -23,6 +23,7 @@
 #include "usbdisk.h"
 #include "ui.h"
 #include "power.h"
+#include "podstate.h"     // the car, its motion and what follows
 #include "rtc.h"
 #include "laps.h"
 #include "calc.h"         // calc_drive_update: AP off while driving
@@ -331,21 +332,15 @@ static void bootSplashTask(uint32_t now, bool canGrace) {
 #endif
 
 // The notification rim: which faults are up.
-static void faultsTask(uint32_t now, bool canGrace) {
-  uint8_t faults = 0;
-  // Over-temperature on every screen, not just the oil screen's state line:
-  // a track day is spent on the track screen (2026-10-17: oil at 132 C,
-  // nothing said so there). The same latched states, so the same hysteresis.
-  if (tempOverOil)  faults |= FAULT_OIL_HOT;
-  if (tempOverCool) faults |= FAULT_COOL_HOT;
-  if (!obd.linkUp || (obd.lastFrameMs == 0 && !canGrace)) faults |= FAULT_CAN;
-  // A grace period, because at boot the GNSS task is still hunting for the
-  // module's baud rate, and "not found yet" is not "missing". Checked on
-  // gps.linkUp (NMEA decoding at all), not haveFix - see UiFault in ui.h.
-  if (!gps.linkUp && now > GPS_MISSING_GRACE_MS) faults |= FAULT_GPS;
-  // Lent to a PC as a USB drive is not "missing" - the WiFi screen says so.
-  if (!logger_card_ok() && !logger_card_shared()) faults |= FAULT_SD;
-  if (logger_write_failed()) faults |= FAULT_SD_WRITE;
+// From the gauge's state (podstate.h), worked out from the same facts as
+// before: over-temperature on every screen, not just the oil screen's state
+// line (a track day is spent on the track screen - 2026-10-17: oil at 132 C,
+// nothing said so there), with the latched states' hysteresis; no car (no
+// frame since boot, after a grace; a driver that never started at once); no
+// NMEA after its grace, while the GNSS task hunts the baud rate; no card -
+// lent to a PC is not missing, the WiFi screen says so; a card failing.
+static void faultsTask() {
+  uint8_t faults = podstate().faults;
   if (bench_no_rim()) faults = 0;
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }
@@ -353,10 +348,9 @@ static void faultsTask(uint32_t now, bool canGrace) {
 // ---- push to UI ----
 // Every value through obd_*_fresh: stale data presents as no data.
 static void gaugesTask(uint32_t now) {
-  // The same "car on" test as obd.cpp's schedule: lastFrameMs counts every
-  // frame except the TPMS module's, which answers with the car parked too.
-  const uint32_t lastFrame = obd.lastFrameMs;     // once: the CAN task writes it
-  ui_set_car_talking(calc_fresh(lastFrame != 0, lastFrame, now, OBD_STALE_MS));
+  // The car off or not, from the gauge's state: no frame for OBD_STALE_MS,
+  // the TPMS module's aside (it answers with the car parked too).
+  ui_set_car_talking(podstate().car != PS_CAR_OFF);
   // Oil first: it owns the state line that the coolant arc shares.
   ui_update_oil(obd_oil_fresh(), obd.oilTempC, tempCold, tempOverOil, tempOverCool);
   ui_update_coolant(obd_coolant_fresh(), obd.coolantC, tempOverCool);
@@ -564,14 +558,15 @@ void loop() {
     // their own tasks on core 0, as CAN does.
 
     updateTempStates();
+    // The car, its motion and what follows, once for the pass (podstate.h).
+    podstate_update(now, tempOverOil, tempOverCool);
+#if BOOT_ANIM_MS > 0
     // "No car yet" waits out CAN_MISSING_GRACE_MS, and a wake still sampling
     // the bus (power_wake_pending: up to 60 s after a motion wake); a CAN
     // driver that never started (!linkUp) shows at once.
-    const bool canGrace = now < CAN_MISSING_GRACE_MS || power_wake_pending();
-#if BOOT_ANIM_MS > 0
-    bootSplashTask(now, canGrace);
+    bootSplashTask(now, now < CAN_MISSING_GRACE_MS || power_wake_pending());
 #endif
-    faultsTask(now, canGrace);
+    faultsTask();
     gaugesTask(now);
     gmeterTask(now);
     // No button handling: screens change by swiping, and the WiFi AP follows

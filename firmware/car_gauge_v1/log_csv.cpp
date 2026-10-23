@@ -11,6 +11,7 @@
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"
 #include "webapi.h"     // web_is_up(), web_ap_refused()
+#include "podstate.h"   // the car, motion and sleep columns
 #include <esp_heap_caps.h>
 #include "SD_MMC.h"
 
@@ -72,6 +73,7 @@ struct CsvRow {
   bool     haveG;
   float    gx, gy, gz;
   bool     full;                // LOG_FULL: the raw hex columns
+  PodState st;                  // the gauge's state - one copy for the row
 };
 
 // Into the CSV's batch - what every column writes with.
@@ -195,14 +197,16 @@ static const CsvCol COLS[] = {
     put("%u", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
   }},
   {"apRefused",  [](const CsvRow &) { put("%lu", (unsigned long)web_ap_refused()); }},
-  // The car's state (2026-10-22: two stops with the car switched off read as
-  // unexplained gaps in the charts): 0 off - no frame from it for
-  // OBD_STALE_MS; 1 on, engine off - talking, but under ENGINE_RUNNING_RPM
-  // or no rpm; 2 running.
-  {"car",        [](const CsvRow &) {
-    const bool talking = calc_fresh(obd.lastFrameMs != 0, obd.lastFrameMs, millis(), OBD_STALE_MS);
-    put("%d", !talking ? 0 : obd_rpm_fresh() && obd.rpm >= ENGINE_RUNNING_RPM ? 2 : 1);
-  }},
+  // The gauge's state (podstate.h), as of this row. The car (2026-10-22: two
+  // stops with the car switched off read as unexplained gaps in the
+  // charts): 0 off - no frame from it for OBD_STALE_MS; 1 on, engine off;
+  // 2 running.
+  {"car",        [](const CsvRow &r) { put("%d", (int)r.st.car); }},
+  // Its motion: 0 still, 1 moving, 2 driving, 3 parked.
+  {"motion",     [](const CsvRow &r) { put("%d", (int)r.st.motion); }},
+  // What holds sleep off (PS_AWAKE_*), hex: 0 = it may sleep. "Why did it
+  // not sleep" in one column.
+  {"awake",      [](const CsvRow &r) { put("%02x", r.st.awakeBecause); }},
 };
 
 // Create the drive log on first use, not at boot.
@@ -292,6 +296,7 @@ void csvlog_task() {
   CsvRow r;
   r.now = now;
   r.full = settings.logLevel >= LOG_FULL;
+  r.st = podstate_copy();
   r.utc[0] = '\0';
   if (clock_valid()) {
     const time_t t = time(nullptr);

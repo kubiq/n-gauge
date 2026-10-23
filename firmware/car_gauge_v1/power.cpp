@@ -423,6 +423,20 @@ void power_boot_check() {
 
 bool power_wake_pending() { return wakeSampling; }
 
+// For the gauge's state (podstate.cpp).
+bool power_usb_host() { return usbAttached(); }
+uint32_t power_last_activity_ms() { return lastActivityMs; }
+uint32_t power_sleep_after_ms() { return idleSleepMs(); }
+
+PsWake power_wake_cause() {
+  if (!wokeFromSleep()) return PS_WAKE_COLD;
+  const esp_sleep_wakeup_cause_t c = esp_sleep_get_wakeup_cause();
+  if (c == ESP_SLEEP_WAKEUP_EXT0) return PS_WAKE_MOTION;
+  if (c == ESP_SLEEP_WAKEUP_EXT1)
+    return (esp_sleep_get_ext1_wakeup_status() & (1ULL << BTN_NEXT_GPIO)) ? PS_WAKE_BUTTON : PS_WAKE_CAN;
+  return PS_WAKE_TIMER;
+}
+
 void power_task() {
 #if DEV_DISABLE_SLEEP
   return;

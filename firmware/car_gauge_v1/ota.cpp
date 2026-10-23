@@ -41,6 +41,8 @@ bool ota_rolled_back() {
   return esp_ota_get_last_invalid_partition() != NULL;
 }
 
+bool ota_on_probation() { return probation; }
+
 static void noteProbation() {
   static bool checked = false;
   if (checked) return;
