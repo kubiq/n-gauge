@@ -90,6 +90,10 @@ static SemaphoreHandle_t sdLock = nullptr;
 static TaskHandle_t sdHolder = nullptr;
 static uint32_t     sdHeldSince = 0;
 static uint8_t      sdDepth = 0;
+// The last "busy" line, waiting for the logger to put it on the card.
+static char         busyNote[112];
+static bool         busyPending = false;
+static portMUX_TYPE busyMux = portMUX_INITIALIZER_UNLOCKED;
 static void sdTaken() {
   if (sdDepth++ == 0) {
     sdHolder = xTaskGetCurrentTaskHandle();
@@ -124,9 +128,18 @@ bool logger_sd_lock_for(uint32_t ms) {
       // A snapshot: the holder may let go as this is read.
       const TaskHandle_t h = sdHolder;
       const uint32_t since = sdHeldSince;
-      Serial.printf("[ERR] SD card busy: %s waited %lu ms; held by %s for %lu ms\n",
-                    pcTaskGetName(nullptr), (unsigned long)ms,
-                    h ? pcTaskGetName(h) : "?", (unsigned long)(millis() - since));
+      char line[sizeof(busyNote)];
+      snprintf(line, sizeof(line), "SD card busy: %s waited %lu ms; held by %s for %lu ms",
+               pcTaskGetName(nullptr), (unsigned long)ms,
+               h ? pcTaskGetName(h) : "?", (unsigned long)(millis() - since));
+      Serial.printf("[ERR] %s\n", line);
+      // And on the card, for the car, which has no console: the logger
+      // writes it on its next pass (writeBusyNote), when it holds
+      // the card anyway - it cannot be written now, the card being busy.
+      portENTER_CRITICAL(&busyMux);
+      strlcpy(busyNote, line, sizeof(busyNote));
+      busyPending = true;
+      portEXIT_CRITICAL(&busyMux);
       return false;
     }
   }
@@ -251,12 +264,27 @@ static void cardRecover() {
   Serial.printf("[OK] SD card remounted (%u of %u)\n", remounts, SD_REMOUNT_MAX);
 }
 
+static void appendLine(const char *path, size_t maxBytes, const char *line);
+
+// A "busy" line kept by logger_sd_lock_for, into /bootlog.txt - the car's
+// record, which the app pulls with every sync.
+static void writeBusyNote() {
+  if (!busyPending) return;
+  char line[sizeof(busyNote)];
+  portENTER_CRITICAL(&busyMux);
+  strlcpy(line, busyNote, sizeof(line));
+  busyPending = false;
+  portEXIT_CRITICAL(&busyMux);
+  appendLine(BOOT_LOG_PATH, BOOT_LOG_MAX_BYTES, line);
+}
+
 static void loggerTask() {
   if (logsink_take_failure()) {
     remountWanted = true;
     cardOk = false;                  // no writer touches it until it is back
   }
   if (remountWanted && !sharedWithPc) cardRecover();
+  writeBusyNote();
 
   // A level change from the phone closes every open file, so it applies at
   // once rather than at the next drive; whatever the new level allows opens

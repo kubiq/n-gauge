@@ -297,8 +297,15 @@ void web_sd_space_kb(uint32_t *usedKb, uint32_t *totalKb) {
       total = (uint32_t)(SD_MMC.totalBytes() / 1024);
       used  = (uint32_t)(SD_MMC.usedBytes() / 1024);
       // Suspected 2026-10-23 of holding the card for seconds after a sync.
-      if (millis() - t0 >= 300)
-        Serial.printf("[..] SD space took %lu ms, under the card's lock\n", (unsigned long)(millis() - t0));
+      // On the card too (/bootlog.txt), for the car; the lock is ours
+      // already, and it is recursive.
+      if (millis() - t0 >= 300) {
+        char line[64];
+        snprintf(line, sizeof(line), "SD space took %lu ms, under the card's lock",
+                 (unsigned long)(millis() - t0));
+        Serial.printf("[..] %s\n", line);
+        logger_note_boot(line);
+      }
       taskwdt_feed();
       atMs = millis();
       have = true;
