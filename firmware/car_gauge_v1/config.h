@@ -690,7 +690,8 @@
 // arrived, 't<epoch>' sets the clock, 'f' injects readings that then go
 // stale, 'd' prints the tail of the drive log, 'h' internal RAM and the AP,
 // 'v<kmh>' fakes the speed the AP-while-driving logic sees (v0 = no fix, v-1
-// = real GNSS again), 'k<64 hex>' / 'koff' sets the log encryption key.
+// = real GNSS again), 'k<64 hex>' / 'koff' sets the log encryption key,
+// 'D' plays a drive to the gauge's state (bench.cpp, BENCH_DRIVE).
 #ifndef BENCH_CONSOLE
 #define BENCH_CONSOLE 0
 #endif

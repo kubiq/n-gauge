@@ -25,6 +25,44 @@ bool bench_synth()  { return benchSynth; }
 bool bench_no_rim() { return benchNoRim; }
 int  bench_ap_kmh() { return benchApKmh; }
 
+// 'D': a drive played to the gauge's state (podstate.h) with no car - the
+// car's frames, rpm and speed written as the OBD task would, each pass, by
+// this timeline. Its "[..] state:" lines on the serial port and the drive
+// CSV's car / motion / awake columns ('d') are then what a real drive would
+// give, on the desk (2026-10-23). The WiFi still follows the GNSS ('v'),
+// not the state, for now: "wifi off" in a state line is only its decision.
+struct BenchDrivePhase { uint32_t atS; bool talking; int rpm; int kmh; const char *what; };
+static const BenchDrivePhase BENCH_DRIVE[] = {
+  {  0, true,     0,  0, "ignition on: car on" },
+  { 10, true,   800,  0, "engine started: running" },
+  { 20, true,  1200, 10, "creeping off: moving" },
+  { 30, true,  2000, 50, "50 km/h: driving in 5 s, wifi off" },
+  {100, true,   800,  0, "stopped, idling: the drive ends in 60 s" },
+  {170, true,     0,  0, "engine off: car on" },
+  {180, false,    0,  0, "key out: car off in 5 s; parked at 280 s, sleep held by the car till ~8 min" },
+};
+static uint32_t benchDriveT0 = 0;       // 0 = not playing
+static int      benchDrivePhase = -1;
+
+static void benchDrive(uint32_t now) {
+  if (!benchDriveT0) return;
+  const uint32_t s = (now - benchDriveT0) / 1000;
+  int p = 0;
+  while (p + 1 < (int)(sizeof(BENCH_DRIVE) / sizeof(BENCH_DRIVE[0])) && s >= BENCH_DRIVE[p + 1].atS) p++;
+  const BenchDrivePhase &ph = BENCH_DRIVE[p];
+  if (p != benchDrivePhase) {
+    benchDrivePhase = p;
+    Serial.printf("[..] bench drive %3lu s: %s\n", (unsigned long)s, ph.what);
+  }
+  if (!ph.talking) {                     // silent from here: the state takes it on
+    benchDriveT0 = 0;
+    return;
+  }
+  obd.lastFrameMs = now ? now : 1;
+  obd.rpm = ph.rpm;      obd.rpmMs = now;    obd.haveRpm = true;
+  obd.speedKmh = ph.kmh; obd.speedMs = now;  obd.haveSpeed = true;
+}
+
 // One reader, taken once per pass. Each handler used to read for itself, and
 // the 'b' check consumed whatever byte was waiting - so an 's' landing
 // mid-pass was silently eaten.
@@ -88,6 +126,11 @@ static void benchCommands(uint32_t now) {
     Serial.printf("[..] bench: log key %s -> %s\n", hex.c_str(),
                   settings_set_log_key(hex.c_str()) ? "ok" : "rejected");
   }
+  if (cmd == 'D') {
+    benchDriveT0 = now ? now : 1;
+    benchDrivePhase = -1;
+  }
+  benchDrive(now);
   if (cmd == 'r') benchNoRim = !benchNoRim;
   if (cmd == 's') benchSynth = !benchSynth;
   // 'b' runs the render benchmark.
