@@ -108,6 +108,14 @@ void logger_sd_unlock() {
 // watched - loop() is; the web server's task is not (taskwdt_feed).
 bool logger_sd_lock_for(uint32_t ms) {
   if (!sdLock) return true;          // before logger_init: nothing else uses the card
+  // 0 = only if free now (the SD space figure, keeping the one it has): not
+  // getting it is the point, no error. It was one - "SD card busy", in the
+  // bootlog three times a drive (2026-10-24), the logger holding it 1 ms.
+  if (ms == 0) {
+    if (xSemaphoreTakeRecursive(sdLock, 0) != pdTRUE) return false;
+    sdTaken();
+    return true;
+  }
   const uint32_t t0 = millis();
   for (;;) {
     const uint32_t waited = millis() - t0;
