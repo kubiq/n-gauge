@@ -8,7 +8,7 @@
 #include "config.h"
 #include "calc.h"       // calc_gear
 #include "obd.h"
-#include "gps.h"
+#include "podstate.h"   // log_idle: parked, by the gauge's state
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // logLevel, and the key generation
 #include "webapi.h"     // web_download_active: no unmount under a download
@@ -52,20 +52,13 @@ bool logger_write_failed() {
 }
 
 // ---- idle throttle --------------------------------------------------------
-static uint32_t lastMovingMs = 0;
-
-// True once the car has been stationary a while. Deliberately returns false
-// when there is no GPS fix: without one we cannot tell standing still from
-// driving through a tunnel, and quietly thinning the log would be worse than
-// writing a few redundant rows. That also covers sitting in a garage doing
-// CAN work with no sky view - full rate, which is what you want there.
+// Parked - still for LOG_IDLE_AFTER_MS - by the gauge's state (podstate.h,
+// since 2026-10-23). It goes by the car's own speed, which reads 0 standing
+// and needs no sky: it used to be GPS speed alone, and with no fix it never
+// thinned - a tunnel could not be told from standing still. The car's speed
+// tells them apart; the GPS's is the fallback when the car is silent.
 bool log_idle() {
-  if (!gps.haveFix) return false;
-  if (gps.speedKmh >= LOG_IDLE_SPEED_KMH) {
-    lastMovingMs = millis();
-    return false;
-  }
-  return (millis() - lastMovingMs) > LOG_IDLE_AFTER_MS;
+  return podstate_copy().logRate == PS_LOG_THIN;
 }
 
 int log_gear() {
@@ -172,7 +165,6 @@ void logger_init() {
     return;
   }
   cardOk = true;
-  lastMovingMs = millis();   // don't count as idle before we've ever moved
   Serial.println(F("[OK] SD card mounted"));
   // Deliberately NO file yet - see log_csv.cpp's driveOpen().
 }

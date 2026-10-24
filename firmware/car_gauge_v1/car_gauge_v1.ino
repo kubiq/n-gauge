@@ -26,7 +26,7 @@
 #include "podstate.h"     // the car, its motion and what follows
 #include "rtc.h"
 #include "laps.h"
-#include "calc.h"         // calc_drive_update: AP off while driving
+#include "calc.h"
 #include "bench.h"        // the desk tools; empty in the car's build
 #include "bootlog.h"      // one line per boot on the card
 #include "prof.h"         // FRAME_STATS timing; nothing in the car's build
@@ -64,23 +64,6 @@ static void ui_update_gmeter_raw(float gx, float gy, float gz) {
   logger_note_g(hx, hy);                 // the track log's IMU channels
 }
 
-#if AP_DRIVE_OFF
-// Driving, for the AP - see AP_DRIVE_OFF.
-static CalcDrive apDrive = {};
-
-static bool apDriving(uint32_t now) {
-  bool  fix = gps.haveFix;
-  float kmh = gps.speedKmh;
-  const int benchKmh = bench_ap_kmh();   // -1 outside a bench build
-  if (benchKmh >= 0) { fix = benchKmh > 0; kmh = (float)benchKmh; }
-  const bool wasDriving = apDrive.driving;
-  const bool driving = calc_drive_update(&apDrive, fix, kmh, now,
-                                         AP_DRIVE_ON_KMH, AP_DRIVE_ON_MS,
-                                         AP_DRIVE_OFF_KMH, AP_DRIVE_OFF_MS);
-  if (driving != wasDriving) Serial.println(driving ? F("[..] driving") : F("[..] stopped"));
-  return driving;
-}
-#endif
 
 // Boot step timings, printed from loop() a few seconds in - early boot output
 // is lost while USB CDC re-enumerates. Everything after ui_boot_anim_start()
@@ -491,10 +474,14 @@ static void usbTask() {
 static void apTask(uint32_t now) {
   (void)now;
 #if WIFI_AP_ALWAYS
-  bool want = !power_wake_pending();
 #if AP_DRIVE_OFF
-  // A connected phone keeps it up: the AP goes down once it disconnects.
-  if (apDriving(now) && web_clients() == 0) want = false;
+  // The gauge's state (podstate.h): down while driving, by the car's own
+  // speed - the GPS's only when the car is silent. By the GPS alone it
+  // stayed up 2-5 minutes into a drive, until the first fix (2026-10-23).
+  // A connected phone keeps it up; not while a wake is still checking.
+  const bool want = podstate().wifiWanted;
+#else
+  const bool want = !power_wake_pending();
 #endif
   static uint32_t lastTryMs = 0;           // 0 = not tried since it was last up
   if (want && !web_is_up() && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {

@@ -22,13 +22,7 @@ bool bench_synth();
 // 'r': the notification rim hidden, as in the car, where nothing is
 // normally faulted.
 bool bench_no_rim();
-// 'v<kmh>': the speed the AP-while-driving logic sees. -1 = the real GNSS,
-// 0 = no fix. Overrides what THAT logic sees, not the gps fields themselves:
-// the GNSS task rewrites gps.haveFix on every poll, module or not, so a value
-// poked into it lasts about 5 ms.
-int  bench_ap_kmh();
 #else
 static inline bool bench_synth()  { return false; }
 static inline bool bench_no_rim() { return false; }
-static inline int  bench_ap_kmh() { return -1; }
 #endif

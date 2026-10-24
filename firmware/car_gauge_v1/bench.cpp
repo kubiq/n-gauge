@@ -19,18 +19,17 @@
 #if BENCH_CONSOLE
 static bool benchSynth = false;
 static bool benchNoRim = false;
-static int  benchApKmh = -1;
 
 bool bench_synth()  { return benchSynth; }
 bool bench_no_rim() { return benchNoRim; }
-int  bench_ap_kmh() { return benchApKmh; }
 
 // 'D': a drive played to the gauge's state (podstate.h) with no car - the
 // car's frames, rpm and speed written as the OBD task would, each pass, by
 // this timeline. Its "[..] state:" lines on the serial port and the drive
 // CSV's car / motion / awake columns ('d') are then what a real drive would
-// give, on the desk (2026-10-23). The WiFi still follows the GNSS ('v'),
-// not the state, for now: "wifi off" in a state line is only its decision.
+// give, on the desk (2026-10-23). The WiFi and the parked log rate follow
+// the state, so the AP goes down 5 s into the 50 km/h and comes back as the
+// drive ends, as in the car.
 struct BenchDrivePhase { uint32_t atS; bool talking; int rpm; int kmh; const char *what; };
 static const BenchDrivePhase BENCH_DRIVE[] = {
   {  0, true,     0,  0, "ignition on: car on" },
@@ -103,14 +102,6 @@ static void benchCommands(uint32_t now) {
                   (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
                   (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
                   web_is_up() ? "up" : "down", (unsigned long)web_ap_refused());
-  }
-  // 'v<kmh>' - see bench_ap_kmh().
-  if (cmd == 'v') {
-    benchApKmh = (int)Serial.parseInt();
-    if (benchApKmh < 0) benchApKmh = -1;
-    Serial.printf("[..] bench: AP logic sees %s\n",
-                  benchApKmh < 0 ? "the real GNSS" :
-                  benchApKmh == 0 ? "no fix" : "a fix at the given speed");
   }
   if (cmd == 't') {
     const long e = Serial.parseInt();

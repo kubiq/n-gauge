@@ -689,9 +689,8 @@
 // the notification rim as if nothing were faulted, 'c' pretends a CAN frame
 // arrived, 't<epoch>' sets the clock, 'f' injects readings that then go
 // stale, 'd' prints the tail of the drive log, 'h' internal RAM and the AP,
-// 'v<kmh>' fakes the speed the AP-while-driving logic sees (v0 = no fix, v-1
-// = real GNSS again), 'k<64 hex>' / 'koff' sets the log encryption key,
-// 'D' plays a drive to the gauge's state (bench.cpp, BENCH_DRIVE).
+// 'k<64 hex>' / 'koff' sets the log encryption key, 'D' plays a drive to the
+// gauge's state (bench.cpp, BENCH_DRIVE) - the WiFi follows it, as in the car.
 #ifndef BENCH_CONSOLE
 #define BENCH_CONSOLE 0
 #endif
@@ -849,13 +848,16 @@
 // competing with a -130 dBm satellite signal; stationary is also exactly when
 // the settings page and log downloads are wanted. Never while a phone is
 // connected.
-// Keyed on GNSS speed, NOT on CAN: the bus is alive whenever the engine runs,
-// including parked at the kerb. The premise (does the AP actually hurt the
+// Keyed on speed, not on the bus being alive - it is whenever the engine
+// runs, parked at the kerb too: the gauge's state (podstate.h) decides, by
+// the car's own speed (OBD), the GNSS's only when the car is silent. It was
+// the GNSS's alone until 2026-10-23, and with no fix yet the AP stayed up
+// 2-5 minutes into a drive. The premise (does the AP actually hurt the
 // fix?) is still unmeasured - the drive CSV's apUp column plus the GPX
 // sat/hdop per point answer it; set this to 0 for a comparison drive.
 #define AP_DRIVE_OFF       1
-// "Driving" = fix and >= ON_KMH held for ON_MS. "Stopped" = < OFF_KMH or no
-// fix, held for OFF_MS. OFF_MS is long so a red light does not restart the AP:
+// "Driving" = >= ON_KMH held for ON_MS. "Stopped" = < OFF_KMH or no speed,
+// held for OFF_MS. OFF_MS is long so a red light does not restart the AP:
 // each start costs ~46 KB of internal RAM and esp_wifi panics rather than
 // failing cleanly if it is not there, so it must not flap. It also needs
 // AP_MIN_INTERNAL_HEAP (80 KB) free, or it does not start at all: a log
