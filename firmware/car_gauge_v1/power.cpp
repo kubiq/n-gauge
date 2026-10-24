@@ -113,18 +113,6 @@ void power_note_activity() {
   lastActivityMs = t ? t : 1;           // 0 is the "never" sentinel
 }
 
-// The car is moving, by the GNSS: a sign of life like a touch, and held for
-// the same "Sleep after" window. The bus going quiet is how the pod decides
-// the car is off - but with a broken CAN wire (2026-10-19: CAN-L, in the car)
-// the bus is quiet while driving, and the pod slept at 95 km/h, woke on
-// motion, heard nothing for a minute, and slept again, every minute. A car
-// the GNSS sees moving is not parked: stay up, and the rim's "not connected
-// to CAN bus" says what is actually wrong.
-static bool movingNow() {
-  return gps.haveFix && gps.speedKmh >= SLEEP_HOLD_MOVING_KMH;
-}
-static uint32_t lastMovingMs = 0;       // 0 = not seen moving since boot
-
 static void goToSleep() {
   // Decide between edge wake and timer wake.
   //
@@ -443,12 +431,11 @@ void power_task() {
 #else
   // A deep-sleep wake still deciding whether the car is really on - see
   // power_boot_check(). Nothing else decides about sleep meanwhile.
-  if (movingNow()) lastMovingMs = millis() ? millis() : 1;
   if (wakeSampling) {
     if (usbAttached()) {
       Serial.println(F("[..] USB host seen on wake - sleep inhibited"));
       wakeSampling = false;
-    } else if (lastMovingMs != 0) {
+    } else if (podstate().awakeBecause & PS_AWAKE_MOVING) {
       // Woken, and the car is moving with no bus: a drive with a CAN fault,
       // not a parked car. Up, and the ordinary rules below take over.
       Serial.println(F("[..] moving with no CAN traffic - staying awake"));
@@ -480,68 +467,14 @@ void power_task() {
     return;
   }
 
-  if (usbAttached()) return;            // bench work; see usbAttached()
-
-  const uint32_t now = millis();
-
-  // A CONNECTED client holds the idle timer; disconnecting restarts it.
-  //
-  // Note this keys on a station being associated, NOT on the AP being up.
-  // The AP is up the entire time the board is awake, so gating on that would
-  // mean never sleeping at all - a flat battery. Someone actually on the
-  // settings page is a different matter: sleeping out from under them is rude,
-  // and mid-download it truncates the file.
-  //
-  // Self-limiting in practice: walking away deauthenticates the phone, or it
-  // ages out of the AP's station table, and the countdown then starts from
-  // that moment rather than from the last CAN frame. A phone left associated
-  // in a parked car will hold the board awake, which is the accepted trade -
-  // a client in radio range means someone is there.
-  static uint32_t lastClientMs = 0;
-  if (web_clients() > 0) {
-    lastClientMs = now ? now : 1;       // 0 is the "never" sentinel
-    return;
-  }
-  if (lastClientMs != 0 && !calc_elapsed(now, lastClientMs, idleSleepMs())) {
-    return;                            // recently disconnected: full window
-  }
-
-  // Someone is operating the gauge right now: button or a tap on the panel.
-  //
-  // Checked before the bus paths below because it has to override BOTH of them.
-  // The complaint that produced this was the no-bus path on the bench - screens
-  // going dark 20 s after power-up while they were being cycled - but the same
-  // thing would happen in the car with the engine off, which is exactly when
-  // someone stands at the door reading tyre pressures.
-  if (lastActivityMs != 0 && !calc_elapsed(now, lastActivityMs, idleSleepMs())) {
-    return;
-  }
-  // Moving, whatever the bus says - see movingNow().
-  if (lastMovingMs != 0 && !calc_elapsed(now, lastMovingMs, idleSleepMs())) {
-    return;
-  }
-
-  // The bus has been alive at some point: normal key-off path.
-  //
-  // Snapshot the timestamp ONCE and compare as signed (calc_elapsed).
-  // obd.lastFrameMs is written from the CAN task on the other core for every
-  // frame received, so it can be a millisecond NEWER than the `now` sampled
-  // above. Unsigned, `now - last` then underflows to ~4.29e9, sails past the
-  // idle window and deep-sleeps the gauge while the bus is maximally alive -
-  // blanking the screen mid-drive and splitting the log in two. Signed, a
-  // negative delta is simply inert - now tested (test_calc.cpp).
-  const uint32_t lastFrame = obd.lastFrameMs;
-  if (lastFrame != 0) {
-    if (calc_elapsed(now, lastFrame, idleSleepMs())) goToSleep();
-    return;
-  }
-
-  // No frame has EVER arrived - engine off, unplugged from the car, or the
-  // CAN driver failed to install. A cold boot deliberately stays up for a
-  // while so the screen is usable; after that there is nothing to show, so
-  // sleep. This also covers the driver-down case, which previously returned
-  // early here and meant the board never slept at all: a transient CAN fault
-  // turning into a flat battery.
-  if (now > COLD_BOOT_AWAKE_MS) goToSleep();
+  // Awake, or asleep: the gauge's state (podstate.h, since 2026-10-24) -
+  // nothing holding it off any more (awakeBecause, the drive CSV's `awake`):
+  // a USB host, a phone on the WiFi or one just gone, a touch or the button,
+  // moving, the car talking, a cold boot that has heard no car yet - each for
+  // the "Sleep after" window after it ends. The rules and why are there, worked
+  // out at the top of this pass. These decided here, one by one, until then;
+  // the state was checked against them first, on real drives - it would have
+  // slept at the same second.
+  if (podstate().sleepOk) goToSleep();
 #endif
 }

@@ -212,17 +212,33 @@ static inline void podstate_step(PodState *s, const PsFacts &f, const PsCfg &c) 
   s->wifiWanted = !f.waking && !(motion == PS_DRIVING && f.apClients == 0);
   s->logRate = motion == PS_PARKED ? PS_LOG_THIN : PS_LOG_FULL;
 
+  // Sleep: what holds it off, each for sleepAfterMs after it ends (power.cpp
+  // sleeps when nothing does).
   if (f.apClients) s->lastPhoneMs = ps_stamp(now);
   uint8_t awake = 0;
   if (f.waking) awake |= PS_AWAKE_WAKING;
+  // Bench work: a sleeping board drops off USB (power.cpp, usbAttached).
   if (f.usbHost) awake |= PS_AWAKE_USB;
+  // A phone associated - not the AP being up, which it is whenever awake, so
+  // that would be never sleeping. Sleeping under someone on the settings
+  // page is rude, and mid-download it cuts the file. Walking away ends it.
   if (ps_within(now, s->lastPhoneMs, c.sleepAfterMs)) awake |= PS_AWAKE_PHONE;
+  // A touch or the button: someone at the door reading the tyres, engine off.
   if (ps_within(now, f.lastUserMs, c.sleepAfterMs)) awake |= PS_AWAKE_USER;
+  // Moving, whatever the bus says: with a broken CAN wire (2026-10-19) the
+  // bus was quiet while driving, and the pod slept at 95 km/h, woke on
+  // motion, heard nothing, and slept again, every minute.
   if (ps_within(now, s->lastMovingMs, c.sleepAfterMs)) awake |= PS_AWAKE_MOVING;
+  // The car talking. Signed (calc_elapsed): the CAN task can stamp a frame
+  // a millisecond after `now` was read, and unsigned that read as ~49 days
+  // ago - asleep mid-drive, the log split in two.
   if (f.lastFrameMs != 0) {
     if (!calc_elapsed(now, f.lastFrameMs, c.sleepAfterMs)) awake |= PS_AWAKE_CAR;
   } else if (now <= c.coldBootAwakeMs) {
-    awake |= PS_AWAKE_BOOT;     // no car ever: a cold boot stays up a while
+    // No frame ever - engine off, unplugged, or the CAN driver down: a cold
+    // boot stays up a while for the screen, then sleeps. Never sleeping on a
+    // driver that failed was a flat battery.
+    awake |= PS_AWAKE_BOOT;
   }
   s->awakeBecause = awake;
   s->sleepOk = awake == 0;
