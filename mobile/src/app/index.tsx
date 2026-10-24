@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
@@ -151,7 +151,10 @@ export default function TripsScreen() {
       ];
       const r = await saveLogsToFolder(names, setStatus);
       setStatus(null);
-      Alert.alert(t('Saved'), savedText(r));
+      // Done is a toast, like the sync's messages (asked 2026-10-24); files
+      // left out keep the box - their names are a list to read.
+      if (r.failed.length) Alert.alert(t('Saved'), savedText(r));
+      else ToastAndroid.show(savedText(r), ToastAndroid.SHORT);
     } catch (e) {
       setStatus(null);
       Alert.alert(t('Save'), String((e as Error).message));
