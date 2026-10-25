@@ -53,6 +53,25 @@ snapshot per point and uses it for every check and for the write.
 The rule: a single field may be shared lock-free; a *set* of fields that must
 be consistent with each other may not.
 
+**One state for the car and what follows from it.** (`podstate.h`,
+2026-10-23/24.) Every part used to judge the car by itself, from raw
+readings, each its own way: sleep by CAN frames and GNSS over 10 km/h, the
+AP by GNSS over 20 km/h for 5 s, the parked log rate by GNSS under 3 km/h for
+3 minutes, the drive CSV's `car` column by CAN and rpm. They could disagree,
+and each feature added another opinion. Now `loop()` works out once a pass:
+the **facts** (copied in; each module still owns its own - the card's
+remounts, the GNSS set-up, the lap timer stay inside them), the
+**situation** (the car off / on / running; still / moving / driving /
+parked, with every hold-off time together) and the **decisions** (the AP
+wanted, the log rate, sleep allowed and what holds it, the faults). Moving
+goes by the car's speed - exact, 0 standing, no sky needed - with the GNSS's
+as the fallback when the car is silent, at 10 km/h, above its wander at a
+standstill. The step is pure (`podstate_step`, host-tested); one writer,
+`loop()`; the logger and the web server take a copy under a spinlock, since
+its fields must agree with each other (the rule above). Switched in one part
+at a time, each first replayed over the real drive logs
+(`tests/replay/replay_state.sh`) and played on the desk (bench `D`).
+
 **Position is stored as `int32` degrees × 1e7.**
 It is also u-blox's own wire format, so this stores what the module sent rather
 than a widened copy. ±214.7° covers both ranges at ~1.1 cm; a double over
@@ -125,11 +144,18 @@ if parked draw ever proves unacceptable, and carries a second benefit:
 accessory circuits drop out while cranking, so the buck never sees the worst
 moment on the car's electrical system.
 
-**Two sleep rules, and only two.**
-USB host seen → never sleep. No CAN event for 5 minutes → sleep. One rule
-covers the bench and one covers the car, and `COLD_BOOT_AWAKE_MS` equals
-`BUS_IDLE_SLEEP_MS` so "the bus went quiet" and "the bus never spoke" are the
-same rule.
+**Sleep when nothing holds the pod awake.**
+It began as two rules, and only two: USB host seen → never sleep; no CAN
+event for 5 minutes → sleep, with `COLD_BOOT_AWAKE_MS` equal to
+`BUS_IDLE_SLEEP_MS` so "the bus went quiet" and "the bus never spoke" were
+the same rule. Real use added holds one at a time, each from a failure: a
+phone on the AP (sleeping under a download cuts the file), a touch (the
+screen went dark in someone's hand, engine off), moving by the GNSS (a broken
+CAN wire: it slept at 95 km/h, 2026-10-19). Each lasts the "Sleep after"
+window after it ends. Since 2026-10-24 they are one list in the gauge's state
+(`podstate.h`, `awakeBecause`), logged in the drive CSV's `awake` column - so
+"why did it not sleep" is one column - and `power.cpp` sleeps when it is
+empty. Checked first against the old code on real drives: the same second.
 
 **"CAN event" means the car is awake, not that something answered us.**
 Replies from the TPMS module do not count. Found in the car on 2026-10-02:
@@ -758,13 +784,54 @@ or is there without its handler.
 **The AP goes down while driving.** (2026-09-27, `AP_DRIVE_OFF`.) A 2.4 GHz
 transmitter a few centimetres from the GNSS antenna competes with a
 -130 dBm signal, and the AP is wanted when the car stands - settings,
-downloads - not on the move. Driving is a fix and 20 km/h held 5 s; stopped is
-under 5 km/h or no fix held 60 s, so a red light does not restart it (each
-start takes ~46 KB of internal RAM, and `esp_wifi` panics rather than fails).
-Keyed on GNSS speed, not CAN: the bus is alive at the kerb with the engine
-running. Never dropped while a phone is connected, and restored only if we
-dropped it. ⚠ The premise is unmeasured: the comparison drive with the AP
+downloads - not on the move. Driving is 20 km/h held 5 s; stopped is under
+5 km/h or no speed held 60 s, so a red light does not restart it (each start
+takes ~46 KB of internal RAM, and `esp_wifi` panics rather than fails).
+Keyed on speed, not on the bus being alive: it is alive at the kerb with the
+engine running. Never dropped while a phone is connected.
+It was keyed on **GNSS** speed until 2026-10-24, and that was wrong in the
+way that matters most: with no fix yet - a cold start, the first minutes of
+nearly every drive - it counted as stopped, so the AP stayed up right
+through the time the receiver most needs a clean sky. 2026-10-23 and 24's
+logs: up 2¾, 5½ and 6 minutes into drives the car's own speed said were
+drives within seconds. It now follows the gauge's state (`podstate.h`, see
+Architecture): the car's speed (OBD), the GNSS's only while the car is
+silent. ⚠ The premise is still unmeasured: the comparison drive with the AP
 left up is still to do.
+
+**New drives are announced in the AP's beacons, not over Bluetooth.**
+(2026-10-22.) The phone should learn there is a drive it has not synced
+without joining the AP. A BLE advertisement was the obvious tool and was
+measured first: linking NimBLE alone makes the core keep the controller's
+~21 KB of internal RAM, and with the AP up the pod fell to 13 KB free and
+crashed - the AP needs 80 KB free just to start (`AP_MIN_INTERNAL_HEAP`). The
+AP beacons ten times a second anyway, so the news rides in it: one vendor
+element in the beacons and probe responses, `0xDD`, OUI `02:4E:47`
+(locally administered), type 1, then 8 bytes. It costs no RAM, and it is
+only on the air when the AP is - parked, never driving.
+The 8 bytes are a fingerprint, not the session: BLAKE2b-8 of the log key's
+public half, `"n-gauge beacon v1"` and the last drive's 6-character session
+(`logcrypt_beacon`; zeros for the key when none is set, as the app assumes).
+Only a phone holding the key can tell which drive it names; anyone else sees
+8 bytes that change once a drive. A timestamp was the other candidate and
+lost for the same reason - anyone could read it. The "last drive" is the
+session that last opened a CSV or GPX, kept in NVS (`lastDrive`).
+**A drive counts as known once any of it is on the phone.** A fingerprint
+that also covered the file size would say "the rest of a drive continued
+after a sync" - but parked, the logs keep growing, and it would change all
+the time. The rest comes with the next sync anyway, which resumes by bytes.
+The phone keeps every session it has ever had, synced or deleted since
+(`beacon.json`): a drive deleted from both the phone and the gauge is still
+known when the gauge names it.
+Phone side: Android gives WiFi scan results only with the location
+permission, and to a background check only with it "all the time" - so it
+is an opt-in switch ("Tell me about new drives"), off by default. The check
+is a WorkManager job every 15 minutes, the shortest periodic work allows; it
+reads the phone's own cached scans (an app's own scan requests are throttled
+to a few an hour in the background). It compares natively, with no JS - the
+app hands it the fingerprints it knows - and posts one note per
+fingerprint. The same scans give the AP's BSSID, which makes joining faster
+(`WifiNetworkSpecifier`). Seen working 2026-10-24.
 
 **No hidden SSID.** (Discussed 2026-10-11.) A hidden AP still sends beacons,
 so it does nothing for the GNSS reason above, and Android joins hidden
