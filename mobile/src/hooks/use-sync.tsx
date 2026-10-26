@@ -17,12 +17,14 @@ import { AppState, ToastAndroid } from 'react-native';
 import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
 import { loadBeaconAutoSync, newDriveBeacon, updateKnownBeacons } from '@/lib/beacon';
+import { saveNewLogs } from '@/lib/share';
 import { deletePodFile, getLive, listFiles } from '@/lib/pod';
 import {
   dropNonLogs,
   type Inbox,
   knownBytes,
   loadDeleted,
+  loadAutoSave,
   loadDisconnectAfterSync,
   loadInbox,
   loadLastSync,
@@ -201,7 +203,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const check = useCallback(() => run(async () => void (await listAndPlan())), [run]);
 
-  const sync = useCallback(
+  // "Save new logs after each sync" (Settings, Logs folder; asked
+  // 2026-10-26): what a sync brought goes into the logs folder too,
+  // decrypted - as "Save all" does, and like it skipping what is there, so
+  // only the new files are written. Never the picker: with no folder (or one
+  // gone) a toast says so. Said in a toast either way, as the sync is.
+  const saveAfter = useCallback(async () => {
+    try {
+      const r = await saveNewLogs();
+      if (!r) ToastAndroid.show(t('New logs not saved: choose a logs folder in Settings.'), ToastAndroid.LONG);
+      else if (r.failed.length)
+        ToastAndroid.show(
+          tn(r.failed.length, '1 log could not be saved to the folder.', '{n} logs could not be saved to the folder.'),
+          ToastAndroid.LONG,
+        );
+      else if (r.saved) ToastAndroid.show(tn(r.saved, 'Saved 1 log to the folder.', 'Saved {n} logs to the folder.'), ToastAndroid.SHORT);
+    } catch (e) {
+      ToastAndroid.show(t('Saving to the folder failed: {error}', { error: (e as Error).message }), ToastAndroid.LONG);
+    }
+  }, []);
+
+  const syncRun = useCallback(
     () =>
       run(async () => {
         const r = await listAndPlan();
@@ -229,6 +251,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       }),
     [run],
   );
+
+  const sync = useCallback(async () => {
+    const before = pulledThisSession.current;
+    await syncRun();
+    if (pulledThisSession.current > before && loadAutoSave()) await saveAfter();
+  }, [syncRun, saveAfter]);
 
   const cancel = useCallback(async () => {
     stopped.current = true;

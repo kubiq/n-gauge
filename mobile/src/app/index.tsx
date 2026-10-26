@@ -11,7 +11,7 @@ import { duration, km, mb, when } from '@/lib/format';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
-import { podTextLogNames, saveLogsToFolder, savedText, trackLogNames } from '@/lib/share';
+import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { type ListFacts, loadListFacts } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
@@ -143,13 +143,7 @@ export default function TripsScreen() {
       // Read now, not from `trips`: the header's ⋮ keeps the function it was
       // given when it last updated (the effect below), and so its list - drives
       // synced since were missing, and "Save all" said all was already there.
-      const now = tripFiles();
-      const names = [
-        ...now.flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n),
-        ...trackLogNames(),
-        ...podTextLogNames(),
-      ];
-      const r = await saveLogsToFolder(names, setStatus);
+      const r = await saveLogsToFolder(allLogNames(), setStatus);
       setStatus(null);
       // Done is a toast, like the sync's messages (asked 2026-10-24); files
       // left out keep the box - their names are a list to read.

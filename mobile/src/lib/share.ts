@@ -10,6 +10,7 @@ import { t } from '../i18n/index.ts';
 import { cleanGpx } from './gpx-share';
 import { readLogText } from './logtext';
 import { inboxFile, loadInbox, loadLogsFolder, saveLogsFolder } from './store';
+import { tripFiles } from './trip-cache';
 import { isGpxName, isVboName, plainName } from './trips';
 
 /**
@@ -97,8 +98,9 @@ export function folderName(uri: string): string {
 
 // The remembered folder and what is in it - or, with none remembered or the
 // remembered one gone (deleted, permission revoked: list() throws), the
-// picker, once.
-async function logsFolder(): Promise<{ target: Directory; there: Map<string, File | Directory> }> {
+// picker, once. Not asking (the save after a sync - nobody is there to
+// pick): null instead of the picker.
+async function logsFolder(ask: boolean): Promise<{ target: Directory; there: Map<string, File | Directory> } | null> {
   const listed = (target: Directory) => new Map(target.list().map((e) => [e.name, e] as const));
   const uri = loadLogsFolder();
   if (uri) {
@@ -109,8 +111,21 @@ async function logsFolder(): Promise<{ target: Directory; there: Map<string, Fil
       saveLogsFolder(null);
     }
   }
+  if (!ask) return null;
   const target = await pickLogsFolder();
   return { target, there: listed(target) };
+}
+
+/**
+ * Every log "Save all to a folder" takes: each drive's GPX and CSV, the
+ * track sessions' .vbo files and the pod's sleep and boot logs.
+ */
+export function allLogNames(): string[] {
+  return [
+    ...tripFiles().flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n),
+    ...trackLogNames(),
+    ...podTextLogNames(),
+  ];
 }
 
 /**
@@ -119,7 +134,24 @@ async function logsFolder(): Promise<{ target: Directory; there: Map<string, Fil
  * after the next sync only adds what is new. Throws if no folder is picked.
  */
 export async function saveLogsToFolder(names: string[], onProgress?: (text: string) => void): Promise<SaveResult> {
-  const { target, there } = await logsFolder();
+  return saveInto((await logsFolder(true))!, names, onProgress);
+}
+
+/**
+ * After a sync, with "Save new logs after each sync" on: every log into the
+ * remembered folder - only the new ones are written, the rest are there.
+ * Null with no folder remembered (or one gone): it never opens the picker.
+ */
+export async function saveNewLogs(): Promise<SaveResult | null> {
+  const folder = await logsFolder(false);
+  return folder ? saveInto(folder, allLogNames()) : null;
+}
+
+async function saveInto(
+  { target, there }: { target: Directory; there: Map<string, File | Directory> },
+  names: string[],
+  onProgress?: (text: string) => void,
+): Promise<SaveResult> {
   const res: SaveResult = { saved: 0, skipped: 0, failed: [] };
   for (const [i, name] of names.entries()) {
     const plain = plainName(name);

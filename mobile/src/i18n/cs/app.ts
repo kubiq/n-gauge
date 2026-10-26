@@ -73,6 +73,9 @@ export const app: Record<string, string> = {
   Change: 'Změnit',
   'Choose a folder': 'Zvolit složku',
   'Ask every time': 'Pokaždé se zeptat',
+  'Save new logs after each sync': 'Po každé synchronizaci uložit nové záznamy',
+  'What a sync brings is saved into the folder by itself, decrypted - nothing to do on the phone.':
+    'Co synchronizace přinese, se samo uloží do složky, dešifrované - v telefonu není co dělat.',
 
   // Log encryption screen (log-key.tsx)
   'Save the key in KeePass now': 'Uložte klíč hned do KeePassu',

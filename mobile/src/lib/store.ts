@@ -113,6 +113,19 @@ export function saveLogsFolder(uri: string | null): void {
   else if (logsFolderFile.exists) logsFolderFile.delete();
 }
 
+// Save new logs into that folder after each sync (use-sync.tsx). Off unless
+// switched on: the file exists only for "on".
+const autoSaveFile = new File(Paths.document, 'auto-save.txt');
+
+export function loadAutoSave(): boolean {
+  return autoSaveFile.exists;
+}
+
+export function saveAutoSave(on: boolean): void {
+  if (on) autoSaveFile.write('1');
+  else if (autoSaveFile.exists) autoSaveFile.delete();
+}
+
 function ensureDir() {
   if (!inboxDir.exists) inboxDir.create({ intermediates: true });
 }

@@ -3,6 +3,13 @@ export const lib: Record<string, string> = {
   // Sync status and errors (hooks/use-sync.tsx)
   'Pulled 1 file.|Pulled {n} files.': 'Stažen {n} soubor.|Staženy {n} soubory.|Staženo {n} souborů.',
   'Cancelled after {done} of {total}.': 'Zrušeno po {done} z {total}.',
+  // Saving to the folder after a sync (use-sync.tsx)
+  'New logs not saved: choose a logs folder in Settings.': 'Nové záznamy neuloženy: zvolte složku pro záznamy v Nastavení.',
+  '1 log could not be saved to the folder.|{n} logs could not be saved to the folder.':
+    '{n} záznam se nepodařilo uložit do složky.|{n} záznamy se nepodařilo uložit do složky.|{n} záznamů se nepodařilo uložit do složky.',
+  'Saved 1 log to the folder.|Saved {n} logs to the folder.':
+    'Uložen {n} záznam do složky.|Uloženy {n} záznamy do složky.|Uloženo {n} záznamů do složky.',
+  'Saving to the folder failed: {error}': 'Uložení do složky selhalo: {error}',
   'Stopped after {done} of {total}: {error}': 'Zastaveno po {done} z {total}: {error}',
   // Leaving the gauge's WiFi after a sync (a toast)
   '1 new file from the gauge - disconnected.|{n} new files from the gauge - disconnected.':
