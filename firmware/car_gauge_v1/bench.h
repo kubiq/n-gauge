@@ -22,7 +22,10 @@ bool bench_synth();
 // 'r': the notification rim hidden, as in the car, where nothing is
 // normally faulted.
 bool bench_no_rim();
+// 'A': the AP held down 25 s of every 33 - to have a phone join as it starts.
+bool bench_ap_held(uint32_t now);
 #else
 static inline bool bench_synth()  { return false; }
 static inline bool bench_no_rim() { return false; }
+static inline bool bench_ap_held(uint32_t) { return false; }
 #endif

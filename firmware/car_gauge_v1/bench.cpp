@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include "esp_heap_caps.h"   // 'h'
 #include "esp_task_wdt.h"    // 'x' waits 15 s
+#include <WiFi.h>            // 'H': the AP's DHCP server
+#include "esp_netif.h"
 #include "bsp.h"
 #include "obd.h"
 #include "gps.h"
@@ -22,6 +24,11 @@ static bool benchNoRim = false;
 
 bool bench_synth()  { return benchSynth; }
 bool bench_no_rim() { return benchNoRim; }
+
+static uint32_t benchApCycleT0 = 0;     // 0 = not cycling ('A')
+bool bench_ap_held(uint32_t now) {
+  return benchApCycleT0 && (now - benchApCycleT0) % 33000 < 25000;
+}
 
 // 'D': a drive played to the gauge's state (podstate.h) with no car - the
 // car's frames, rpm and speed written as the OBD task would, each pass, by
@@ -116,6 +123,19 @@ static void benchCommands(uint32_t now) {
     LoggerSdLock lock;
     Serial.printf("[..] bench: log key %s -> %s\n", hex.c_str(),
                   settings_set_log_key(hex.c_str()) ? "ok" : "rejected");
+  }
+  // 'A' cycles the AP, down 25 s and up 8 s, until pressed again (see
+  // bench_ap_held) - a phone waiting to join then joins as it starts, as one
+  // did at the end of a drive on 2026-10-26 and never got an address (DHCP).
+  if (cmd == 'A') {
+    benchApCycleT0 = benchApCycleT0 ? 0 : (now ? now : 1);
+    Serial.printf("[..] bench: AP cycle %s\n", benchApCycleT0 ? "on (down 25 s, up 8 s)" : "off");
+  }
+  // 'H' stops the AP's DHCP server: a phone that joins then gets no address,
+  // as in the car on 2026-10-26 - for dhcpWatch()'s repair (webapi.cpp).
+  if (cmd == 'H') {
+    const esp_err_t e = esp_netif_dhcps_stop(WiFi.AP.netif());
+    Serial.printf("[..] bench: DHCP server stopped (%s)\n", esp_err_to_name(e));
   }
   if (cmd == 'D') {
     benchDriveT0 = now ? now : 1;

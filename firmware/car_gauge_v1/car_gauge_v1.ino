@@ -479,9 +479,9 @@ static void apTask(uint32_t now) {
   // speed - the GPS's only when the car is silent. By the GPS alone it
   // stayed up 2-5 minutes into a drive, until the first fix (2026-10-23).
   // A connected phone keeps it up; not while a wake is still checking.
-  const bool want = podstate().wifiWanted;
+  const bool want = podstate().wifiWanted && !bench_ap_held(now);
 #else
-  const bool want = !power_wake_pending();
+  const bool want = !power_wake_pending() && !bench_ap_held(now);
 #endif
   static uint32_t lastTryMs = 0;           // 0 = not tried since it was last up
   if (want && !web_is_up() && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {
