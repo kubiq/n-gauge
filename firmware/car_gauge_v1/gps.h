@@ -9,6 +9,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "fixring.h"    // FixCursor: a reader's place in the queued fixes
 
 struct GpsState {
   // linkUp distinguishes "module not wired / wrong baud" from "wired but no
@@ -67,6 +68,33 @@ struct GpsFix {
   uint32_t seq;      // changes with every newly published fix
 };
 bool gps_read_fix(GpsFix *out);
+
+// ---- every fix, queued for the logs (fixring.h) --------------------------------
+// gps_read_fix() is the latest fix only - right for the screen and the lap
+// timer, which run on the loop. The logs read every fix: a card stall
+// (0.6-1.35 s, 2026-10-26) held the logger while ~30 fixes replaced each
+// other, and the GPX had a hole of that length. A sample is a fix with what
+// was true at it: its speed, course, satellites and hdop - and `car`, the car's
+// channels at the fix, filled by the sample hook (log_vbo.cpp) - so a row
+// written late says what it would have said on time.
+#define GPS_SAMPLE_CAR 28
+struct GpsSample {
+  GpsFix  fix;
+  float   speedKmh;
+  float   courseDeg;
+  float   hdop;
+  uint8_t sats;
+  float   car[GPS_SAMPLE_CAR];
+};
+// Each reader keeps its own place (zeroed to start: it then gets the fixes
+// after its first call). False when it has had them all; `lost` grows by any
+// it was too far behind to get (more than ~5 s of fixes). Without the ring
+// (no PSRAM for it) it is the latest fix, once, as before.
+bool gps_next_sample(FixCursor *c, GpsSample *out, uint32_t *lost);
+// Called on the GNSS task (core 0) as each fix is queued, to fill s->car.
+// Quick, and only what is safe to read from that core.
+typedef void (*GpsSampleHook)(GpsSample *s);
+void gps_set_sample_hook(GpsSampleHook h);
 
 // There is deliberately no degrees-as-double accessor here. Nothing needs one:
 // calc_implied_kmh() takes the 1e7 form and subtracts before scaling, and

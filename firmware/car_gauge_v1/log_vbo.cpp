@@ -31,17 +31,71 @@
 static constexpr size_t VBO_BUF_N = 4096;
 static LogFile  vbo;
 static bool     vboFailed = false;
-static uint32_t vboLastWriteMs = 0, vboLastSeq = 0, vboLastFixMs = UINT32_MAX;
+static uint32_t vboLastWriteMs = 0, vboLastFixMs = UINT32_MAX;
 static bool     vboDirty = false;      // rows since the last commit
+static FixCursor vboCursor = {};       // our place in the queued fixes
+static uint32_t vboLost = 0;
 RTC_DATA_ATTR static int nextTrackN = 0;
 
-bool vbolog_init() { return logfile_alloc(vbo, VBO_BUF_N); }
+// The car's channels, as each fix is queued (on the GNSS task - gps.h): a
+// row written late, after a card stall, carries what the car did at its fix,
+// not at the moment the row reached the file - for lap analysis, the engine
+// against the position is the point. Engine channels have no "missing" value
+// in a .vbo; a stale one is written as 0 rather than repeating a frozen
+// reading.
+enum {
+  CAR_BOOST, CAR_OIL, CAR_COOL, CAR_PEDAL, CAR_TORQUE, CAR_GLAT, CAR_GLONG, CAR_RPM,
+  CAR_TIMING, CAR_IAT, CAR_TYRE_BAR, CAR_TYRE_C = CAR_TYRE_BAR + 4, CAR_GEAR = CAR_TYRE_C + 4,
+  CAR_FUEL_LH, CAR_LAMBDA, CAR_LAMBDA_CMD, CAR_AMBIENT, CAR_FUEL_PCT, CAR_CAT, CAR_RAIL, CAR_N
+};
+static_assert(CAR_N <= GPS_SAMPLE_CAR, "the .vbo's car channels fit a GpsSample");
+
+static float gLateral = 0, gLongitudinal = 0;
+
+static void vboSampleHook(GpsSample *s) {
+  float *c = s->car;
+  c[CAR_BOOST]  = obd_boost_fresh()   ? obd.boostBar : 0.0f;
+  c[CAR_OIL]    = obd_oil_fresh()     ? (float)obd.oilTempC : 0.0f;
+  c[CAR_COOL]   = obd_coolant_fresh() ? (float)obd.coolantC : 0.0f;
+  c[CAR_PEDAL]  = obd_pedal_fresh()
+      ? constrain(((int)obd.pedalRaw - PEDAL_RAW_IDLE) * 100.0f /
+                  (PEDAL_RAW_FULL - PEDAL_RAW_IDLE), 0.0f, 100.0f) : 0.0f;
+  c[CAR_TORQUE] = obd_absload_fresh() ? TORQUE_NM_FROM_LOAD(obd.absLoadPct) : 0.0f;
+  c[CAR_GLAT]   = gLateral;
+  c[CAR_GLONG]  = gLongitudinal;
+  c[CAR_RPM]    = obd_rpm_fresh()     ? (float)obd.rpm : 0.0f;
+  c[CAR_TIMING] = obd_timing_fresh()  ? obd.timingDeg : 0.0f;
+  c[CAR_IAT]    = obd_iat_fresh()     ? (float)obd.iatC : 0.0f;
+  // Tyres are polled once a minute, so most rows repeat the last value;
+  // hot pressures over a session are what matters. FL, FR, RL, RR, as
+  // obd.tyreBar is (ui.h's Wheel).
+  for (int w = 0; w < 4; w++) {
+    const bool ok = obd_tyre_fresh(w);
+    c[CAR_TYRE_BAR + w] = ok ? obd.tyreBar[w] : 0.0f;
+    c[CAR_TYRE_C + w]   = ok ? (float)obd.tyreTempC[w] : 0.0f;
+  }
+  const int gear = log_gear();
+  c[CAR_GEAR] = (float)(gear > 0 ? gear : 0);    // 0 = none or not current
+  // 2026-10-16 (OBD_HZ1_PIDS): fuel rate at the fast request's rate, the
+  // rest once a second.
+  c[CAR_FUEL_LH]    = obd_fuel_lh_fresh()    ? obd.fuelLh : 0.0f;
+  c[CAR_LAMBDA]     = obd_lambda_fresh()     ? obd.lambda : 0.0f;
+  c[CAR_LAMBDA_CMD] = obd_lambda_cmd_fresh() ? obd.lambdaCmd : 0.0f;
+  c[CAR_AMBIENT]    = obd_ambient_fresh()    ? (float)obd.ambientC : 0.0f;
+  c[CAR_FUEL_PCT]   = obd_fuel_pct_fresh()   ? obd.fuelPct : 0.0f;
+  c[CAR_CAT]        = obd_cat_fresh()        ? obd.catC : 0.0f;
+  c[CAR_RAIL]       = obd_rail_fresh()       ? obd.railBar : 0.0f;
+}
+
+bool vbolog_init() {
+  gps_set_sample_hook(vboSampleHook);
+  return logfile_alloc(vbo, VBO_BUF_N);
+}
 bool vbolog_failed() { return vboFailed; }
 void vbolog_card_back() { vboFailed = false; }
 
 const char *vbolog_path() { return vbo.open ? vbo.path : ""; }
 
-static float gLateral = 0, gLongitudinal = 0;
 void logger_note_g(float lateral, float longitudinal) {
   gLateral = lateral;
   gLongitudinal = longitudinal;
@@ -134,72 +188,53 @@ void vbolog_task() {
   if (li.state < LAP_OUT_LAP) {         // no session, or the line not found yet
     vbolog_close();
     if (li.state == LAP_IDLE) vboFailed = false;   // a new session may try again
+    vboCursor.started = false;          // a file starts with the fixes after it
     return;
   }
   if (!vbo.open && !vboFailed) vboOpen();
-  if (!vbo.open) return;
+  if (!vbo.open) {
+    vboCursor.started = false;
+    return;
+  }
 
   const uint32_t now = millis();
-  GpsFix f;
-  // One row per NEW fix: RMC and GGA both publish, so one 40 ms epoch can
-  // bump seq twice with the same time - the second would duplicate the row.
-  if (gps.haveFix && gps_read_fix(&f) && f.seq != vboLastSeq && f.timeOk &&
-      f.fixMs != vboLastFixMs &&
-      calc_fix_quality_ok(gps.sats, gps.hdop, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG)) {
-    vboLastSeq = f.seq;
+  // Every fix since the last pass, each with the car as it was at it
+  // (vboSampleHook) - after a card stall, late, but all of them.
+  // The lap being driven: 1, 2, ... (0 only on an out-lap after a wake
+  // mid-session) - the pod's own split, to check the analyser's against.
+  // Read now, not per fix: it changes once a lap.
+  const float lap = li.state == LAP_TIMING ? (float)(li.laps + 1) : 0.0f;
+  const uint32_t lostBefore = vboLost;
+  GpsSample s;
+  while (gps_next_sample(&vboCursor, &s, &vboLost)) {
+    const GpsFix &f = s.fix;
+    // One row per NEW fix: RMC and GGA both publish, so one 40 ms epoch is
+    // queued twice with the same time - the second would duplicate the row.
+    if (!f.timeOk || f.fixMs == vboLastFixMs ||
+        !calc_fix_quality_ok(s.sats, s.hdop, GPS_MIN_SATS_LOG, GPS_MAX_HDOP_LOG))
+      continue;
     vboLastFixMs = f.fixMs;
     char t[16], lat[16], lon[16];
     calc_vbo_time(t, sizeof(t), f.fixMs);
     calc_vbo_minutes(lat, sizeof(lat), f.lat1e7, false);
     calc_vbo_minutes(lon, sizeof(lon), f.lon1e7, true);
-    // Engine channels have no "missing" value in a .vbo; a stale one is
-    // written as 0 rather than repeating a frozen reading.
-    const float boost  = obd_boost_fresh()   ? obd.boostBar : 0.0f;
-    const float oil    = obd_oil_fresh()     ? (float)obd.oilTempC : 0.0f;
-    const float cool   = obd_coolant_fresh() ? (float)obd.coolantC : 0.0f;
-    const float pedal  = obd_pedal_fresh()
-        ? constrain(((int)obd.pedalRaw - PEDAL_RAW_IDLE) * 100.0f /
-                    (PEDAL_RAW_FULL - PEDAL_RAW_IDLE), 0.0f, 100.0f) : 0.0f;
-    const float torque = obd_absload_fresh() ? TORQUE_NM_FROM_LOAD(obd.absLoadPct) : 0.0f;
-    const float rpm    = obd_rpm_fresh()     ? (float)obd.rpm : 0.0f;
-    const float timing = obd_timing_fresh()  ? obd.timingDeg : 0.0f;
-    const float iat    = obd_iat_fresh()     ? (float)obd.iatC : 0.0f;
-    // The lap being driven: 1, 2, ... (0 only on an out-lap after a wake
-    // mid-session) - the pod's own
-    // split, to check the analyser's against.
-    const float lap    = li.state == LAP_TIMING ? (float)(li.laps + 1) : 0.0f;
-    const int   gear   = log_gear();
-    // Tyres are polled once a minute, so most rows repeat the last value;
-    // hot pressures over a session are what matters.
-    // Indexed FL, FR, RL, RR, as obd.tyreBar is (ui.h's Wheel).
-    float tyreBar[4], tyreC[4];
-    for (int w = 0; w < 4; w++) {
-      const bool ok = obd_tyre_fresh(w);
-      tyreBar[w] = ok ? obd.tyreBar[w] : 0.0f;
-      tyreC[w]   = ok ? (float)obd.tyreTempC[w] : 0.0f;
-    }
-    // 2026-10-16 (OBD_HZ1_PIDS): fuel rate at the fast request's rate, the
-    // rest once a second.
-    const float fuelLh = obd_fuel_lh_fresh()    ? obd.fuelLh : 0.0f;
-    const float lam    = obd_lambda_fresh()     ? obd.lambda : 0.0f;
-    const float lamCmd = obd_lambda_cmd_fresh() ? obd.lambdaCmd : 0.0f;
-    const float amb    = obd_ambient_fresh()    ? (float)obd.ambientC : 0.0f;
-    const float fuelPc = obd_fuel_pct_fresh()   ? obd.fuelPct : 0.0f;
-    const float cat    = obd_cat_fresh()        ? obd.catC : 0.0f;
-    const float rail   = obd_rail_fresh()       ? obd.railBar : 0.0f;
+    const float *c = s.car;
     logfile_printf(vbo,
         "%03u %s %s %s %07.3f %06.2f %+09.2f %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
         " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E"
         " %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E %+.6E\r\n",
-        gps.sats, t, lat, lon, gps.speedKmh, gps.courseDeg, f.altM,
-        boost, oil, cool, pedal, torque, gLateral, -gLongitudinal, rpm,
-        timing, iat, lap,
-        tyreBar[0], tyreBar[1], tyreBar[2], tyreBar[3],
-        tyreC[0], tyreC[1], tyreC[2], tyreC[3],
-        (float)(gear > 0 ? gear : 0),    // 0 = none or not current
-        fuelLh, lam, lamCmd, amb, fuelPc, cat, rail);
+        s.sats, t, lat, lon, s.speedKmh, s.courseDeg, f.altM,
+        c[CAR_BOOST], c[CAR_OIL], c[CAR_COOL], c[CAR_PEDAL], c[CAR_TORQUE],
+        c[CAR_GLAT], -c[CAR_GLONG], c[CAR_RPM], c[CAR_TIMING], c[CAR_IAT], lap,
+        c[CAR_TYRE_BAR], c[CAR_TYRE_BAR + 1], c[CAR_TYRE_BAR + 2], c[CAR_TYRE_BAR + 3],
+        c[CAR_TYRE_C], c[CAR_TYRE_C + 1], c[CAR_TYRE_C + 2], c[CAR_TYRE_C + 3],
+        c[CAR_GEAR], c[CAR_FUEL_LH], c[CAR_LAMBDA], c[CAR_LAMBDA_CMD], c[CAR_AMBIENT],
+        c[CAR_FUEL_PCT], c[CAR_CAT], c[CAR_RAIL]);
     vboDirty = true;
   }
+  if (vboLost != lostBefore)
+    Serial.printf("[ERR] track log: %lu fixes lost - the logger fell >5 s behind\n",
+                  (unsigned long)(vboLost - lostBefore));
   // A full batch goes to the card by itself (logfile_printf drains it); the
   // flush - what survives a power cut - on VBO_FLUSH_MS, and only after rows.
   // It used to commit every second whether anything was written or not, and

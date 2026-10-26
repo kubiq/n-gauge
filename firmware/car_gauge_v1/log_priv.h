@@ -114,6 +114,9 @@ void gpxlog_close();
 bool gpxlog_failed();
 void gpxlog_card_back();
 const char *gpxlog_path();
+// Fixes the queue could not keep for the GPX (more than ~5 s behind) since
+// boot - the drive CSV's fixLost; 0 is the point of the queue.
+uint32_t gpxlog_fixes_lost();
 
 bool vbolog_init();
 void vbolog_task();                 // per GNSS fix, in a track session

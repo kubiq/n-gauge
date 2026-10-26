@@ -8,6 +8,7 @@
 #include "rtc.h"        // clock_valid(): step a clock not yet set, slew a set one
 #include "taskwdt.h"
 #include <Arduino.h>
+#include <esp_heap_caps.h>  // the fix queue, in PSRAM
 #include <TinyGPSPlus.h>
 #include <sys/time.h>
 #include <time.h>
@@ -86,6 +87,38 @@ bool gps_read_fix(GpsFix *out) {
   // Still mid-update after all that: something is badly wrong. Refusing is
   // safer than returning a position we know might be torn.
   return false;
+}
+
+// ---- every fix, queued (gps.h, fixring.h) -----------------------------------
+// 256: each fix is published twice (RMC and GGA), ~50 a second - ~5 s, four
+// times the longest card stall seen. In PSRAM (~45 KB), not the internal RAM
+// the AP needs; allocated in gps_init().
+static constexpr uint32_t GPS_RING_N = 256;
+static FixRing<GpsSample, GPS_RING_N> ring = {nullptr, 0};
+static volatile GpsSampleHook sampleHook = nullptr;
+
+void gps_set_sample_hook(GpsSampleHook h) { sampleHook = h; }
+
+// A sample of the fix just published, with what is true at it now.
+static void sampleNow(GpsSample *s, const GpsFix &f) {
+  s->fix = f;
+  s->speedKmh = gps.speedKmh;
+  s->courseDeg = gps.courseDeg;
+  s->hdop = gps.hdop;
+  s->sats = gps.sats;
+  const GpsSampleHook h = sampleHook;
+  if (h) h(s);
+}
+
+bool gps_next_sample(FixCursor *c, GpsSample *out, uint32_t *lost) {
+  if (ring.slots) return fixring_next(&ring, c, out, lost);
+  // No ring: the latest fix, once - what the logs read before it.
+  GpsFix f;
+  if (!gps.haveFix || !gps_read_fix(&f) || (c->started && f.seq == c->next)) return false;
+  c->started = true;
+  c->next = f.seq;
+  sampleNow(out, f);
+  return true;
 }
 
 bool gps_read_position(int32_t *lat, int32_t *lon, float *alt) {
@@ -348,6 +381,10 @@ static void gpsConfigure() {
 }
 
 void gps_init() {
+  // The queue for the logs, before the task that fills it. Without PSRAM for
+  // it, the logs fall back to the latest fix (gps_next_sample).
+  ring.slots = (GpsSample *)heap_caps_calloc(GPS_RING_N, sizeof(GpsSample), MALLOC_CAP_SPIRAM);
+  if (!ring.slots) Serial.println(F("[ERR] GPS: no PSRAM for the fix queue - a card stall will drop fixes"));
   openPort(0);
 
 #if GPS_SLEEP_ON_PARK
@@ -539,6 +576,12 @@ static void gpsPoll() {
     __sync_synchronize();
     posSeq = posSeq + 1;                          // even: consistent
     gps.fixes = gps.fixes + 1;                    // this task is the only writer
+    // And into the queue for the logs, every one (gps_next_sample).
+    if (ring.slots) {
+      GpsSample s;
+      sampleNow(&s, GpsFix{lat, lon, alt, tMs, tOk, posSeq});
+      fixring_push(&ring, s);
+    }
   }
   gps.haveFix = fix;
 

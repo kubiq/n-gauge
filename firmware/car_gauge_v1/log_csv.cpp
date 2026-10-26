@@ -207,6 +207,9 @@ static const CsvCol COLS[] = {
   // What holds sleep off (PS_AWAKE_*), hex: 0 = it may sleep. "Why did it
   // not sleep" in one column.
   {"awake",      [](const CsvRow &r) { put("%02x", r.st.awakeBecause); }},
+  // GNSS fixes the GPX never got, since boot: the queue (gps.h) holds ~5 s,
+  // so a card stall loses none - this says if one ever outlasted it.
+  {"fixLost",    [](const CsvRow &) { put("%lu", (unsigned long)gpxlog_fixes_lost()); }},
 };
 
 // Create the drive log on first use, not at boot.

@@ -11,27 +11,17 @@
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // tripGapMin: the trip-reset gap is user-editable
 #include "SD_MMC.h"
-#include <sys/time.h>
+#include <time.h>       // time(): the date for a fix's stamp
 
-// ISO 8601 with centiseconds. GPX and xsd:dateTime both allow a fractional
-// part, and it is essential here: written to whole seconds, all ~25 points
-// inside one second carried an IDENTICAL timestamp (measured: 42381 points
-// collapsing into 1902 distinct stamps). Anything deriving speed or
-// acceleration from consecutive points then divides by a zero time delta, so
-// the 25 Hz data was unusable for exactly the analysis it exists for.
-//
-// The sub-second phase is arbitrary relative to true GPS epoch, because the
-// clock is set from NMEA on whole-second boundaries - but the spacing is
-// correct and monotonic, which is what those derivatives need.
-static void isoStamp(char *out, size_t n) {
-  struct timeval tv;
-  gettimeofday(&tv, nullptr);
-  struct tm tm;
-  gmtime_r(&tv.tv_sec, &tm);
-  const size_t len = strftime(out, n, "%Y-%m-%dT%H:%M:%S", &tm);
-  if (len && len + 5 < n) snprintf(out + len, n - len, ".%02dZ",
-                                   (int)(tv.tv_usec / 10000));
-}
+// A point's time is ISO 8601 with centiseconds. GPX and xsd:dateTime both
+// allow a fractional part, and it is essential here: written to whole
+// seconds, all ~25 points inside one second carried an IDENTICAL timestamp
+// (measured: 42381 points collapsing into 1902 distinct stamps). Anything
+// deriving speed or acceleration from consecutive points then divides by a
+// zero time delta, so the 25 Hz data was unusable for exactly the analysis it
+// exists for. It was the clock when the point was written; since 2026-10-26
+// it is the fix's own time (calc_fix_iso) - exact, and still right for a
+// point written late after a card stall.
 
 // Points accumulate in the batch and go to the card on GPX_FLUSH_MS (2 s) or
 // when it is nearly full. At 25 Hz a write plus seek() per point would be 25
@@ -179,6 +169,12 @@ bool gpxlog_failed() { return gpxOpenFailed; }
 // before the gates, so the trip read 0.0 km for the whole drive. No card is the
 // normal bench configuration. Deciding what counts as a real point has nothing
 // to do with whether it can be stored.
+static void gpxPoint(const GpsSample &s, uint32_t now);
+static FixCursor gpxCursor = {};
+static uint32_t  gpxLost = 0;          // fixes the queue could not keep for us
+
+uint32_t gpxlog_fixes_lost() { return gpxLost; }
+
 void gpxlog_task() {
   // The time half of "commit on size or on time", up here, before anything
   // can return. Down by the point it only ran when a point was accepted: a
@@ -189,27 +185,36 @@ void gpxlog_task() {
     gpxLastWriteMs = now;
     gpxCommit();
   }
-  if (!gps.haveFix) return;            // nothing worth recording yet
+  // Every fix since the last pass, oldest first (gps_next_sample) - not the
+  // latest only: a card stall (up to 1.35 s, 2026-10-26) held this pass while
+  // ~30 fixes replaced each other, and the track had a hole that long.
+  // After one, they all come at once, late; each says what was true at it.
+  const uint32_t lostBefore = gpxLost;
+  GpsSample s;
+  while (gps_next_sample(&gpxCursor, &s, &gpxLost)) gpxPoint(s, now);
+  if (gpxLost != lostBefore)
+    Serial.printf("[ERR] GPX: %lu fixes lost - the logger fell >5 s behind\n",
+                  (unsigned long)(gpxLost - lostBefore));
+}
 
-  // ONE snapshot of the fix, used for every decision below and for the point
-  // written. The GNSS runs on core 0, so reading gps.lat1e7/lon1e7 afresh at
-  // each step let a new fix land between the jump check and the write.
-  // gps_read_fix() also refuses until a position has actually been
-  // published, which is what stopped (0,0) being accepted on the first fix
-  // after a wake.
-  //
-  // And each fix ONCE. This ran every logger pass and took whatever position
-  // was there, new or not: with the receiver at 1 Hz (the carrier PCB,
+// One fix. A sample is ONE snapshot of it - position, time, speed, sats,
+// hdop - used for every decision below and for the point written. The GNSS
+// runs on core 0, so reading gps.lat1e7/lon1e7 afresh at each step let a new
+// fix land between the jump check and the write. Nothing is queued until a
+// position has actually been published, which is what stopped (0,0) being
+// accepted on the first fix after a wake.
+static void gpxPoint(const GpsSample &s, uint32_t now) {
+  const GpsFix &fix = s.fix;
+  if (!fix.timeOk) return;
+  // Each fix ONCE. This ran every logger pass and took whatever position was
+  // there, new or not: with the receiver at 1 Hz (the carrier PCB,
   // 2026-10-19) every fix was written ~25 times, and the jump check timed the
   // next real step from the last copy - a second's travel in 40 ms, ~500 m/s,
   // refused - so the trip read a fraction of the distance. RMC and GGA both
-  // publish, so one epoch can bump seq twice with the same time: that one is
-  // skipped too (as the .vbo does).
-  GpsFix fix;
-  if (!gps_read_fix(&fix) || !fix.timeOk) return;
-  static uint32_t lastSeq = 0, lastFixMs = UINT32_MAX;
-  if (fix.seq == lastSeq || fix.fixMs == lastFixMs) return;
-  lastSeq = fix.seq;
+  // publish, so one epoch is queued twice with the same time: the second is
+  // skipped (as the .vbo does).
+  static uint32_t lastFixMs = UINT32_MAX;
+  if (fix.fixMs == lastFixMs) return;
   lastFixMs = fix.fixMs;
   const int32_t posLat = fix.lat1e7, posLon = fix.lon1e7;
   const float   posAlt = fix.altM;
@@ -238,8 +243,8 @@ void gpxlog_task() {
     GPX_SATS_WAIT_MS,
   };
   CalcGpxStep step;
-  if (!calc_gpx_gate(&gate, &lim, fixClock, log_idle(), gps.sats, gps.hdop,
-                     posLat, posLon, gps.speedKmh, &step))
+  if (!calc_gpx_gate(&gate, &lim, fixClock, log_idle(), s.sats, s.hdop,
+                     posLat, posLon, s.speedKmh, &step))
     return;
 
   // Trip distance, summed HERE and only here - past every gate, so a tunnel
@@ -260,7 +265,7 @@ void gpxlog_task() {
   // list, per wake (2026-10-20: two of them, 20:37 and 21:36). So a track
   // opens only once the car is on (a CAN frame, as the drive CSV waits for)
   // or moving - walking pace and up, for a track without the car's bus.
-  if (!gpx.open && obd.lastFrameMs == 0 && gps.speedKmh < LOG_IDLE_SPEED_KMH) return;
+  if (!gpx.open && obd.lastFrameMs == 0 && s.speedKmh < LOG_IDLE_SPEED_KMH) return;
   if (!gpx.open) gpxOpen();            // lazily, on the first accepted point
   if (!gpx.open) return;
 
@@ -276,8 +281,10 @@ void gpxlog_task() {
   // and kilobytes a second of nothing, with SD flushes to match.
   if (step.gap) logfile_puts(gpx, "</trkseg><trkseg>\n");
 
+  // The fix's own time (the date from the clock): a point written late, after
+  // a card stall, is stamped when it was, not when it reached the file.
   char stamp[32] = "";
-  if (clock_valid()) isoStamp(stamp, sizeof(stamp));
+  if (clock_valid()) calc_fix_iso(stamp, sizeof(stamp), (long long)time(nullptr), fix.fixMs);
 
   // ele/time/sat/hdop are standard GPX 1.1 trackpoint elements. Speed is NOT:
   // <speed> was a GPX 1.0 element and was dropped from the 1.1 schema, so in a
@@ -299,8 +306,8 @@ void gpxlog_task() {
       "<extensions><gpxtpx:TrackPointExtension>"
       "<gpxtpx:speed>%.2f</gpxtpx:speed>"
       "</gpxtpx:TrackPointExtension></extensions></trkpt>\n",
-      latS, lonS, posAlt, stamp, gps.sats, gps.hdop,
-      gps.speedKmh / 3.6f);             // m/s, per the TrackPointExtension schema
+      latS, lonS, posAlt, stamp, s.sats, s.hdop,
+      s.speedKmh / 3.6f);               // m/s, per the TrackPointExtension schema
   gpxDirty = true;
 
   // Commit on size, or on time - checked here too, so a steady 25 Hz commits

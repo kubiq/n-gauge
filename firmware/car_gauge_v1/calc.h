@@ -77,6 +77,42 @@ static inline long long calc_timegm(int year, unsigned month, unsigned day,
        + (long long)hour * 3600LL + (long long)min * 60LL + (long long)sec;
 }
 
+// The inverse: days since 1970-01-01 to year, month 1-12, day 1-31
+// (Hinnant's civil_from_days).
+static inline void calc_civil_from_days(long long z, int *y, unsigned *m, unsigned *d) {
+  z += 719468;
+  const long long era = (z >= 0 ? z : z - 146096) / 146097;
+  const unsigned doe = (unsigned)(z - era * 146097);                       // [0, 146096]
+  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;  // [0, 399]
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);            // [0, 365]
+  const unsigned mp = (5 * doy + 2) / 153;                                 // [0, 11]
+  *d = doy - (153 * mp + 2) / 5 + 1;
+  *m = mp < 10 ? mp + 3 : mp - 9;
+  *y = (int)(yoe + era * 400) + (*m <= 2);
+}
+
+// A fix's own time as an ISO stamp, "2026-10-26T17:05:04.36Z": the time of
+// day from the fix (ms since UTC midnight), the date from the clock `now`
+// (epoch s). A GPX point used the clock at the moment it was written - up to
+// a card stall (1.35 s) after its fix once fixes were queued (fixring.h).
+// Around midnight the two days differ: a fix more than 12 h after the clock's
+// time of day is from the day before (written just past midnight), more than
+// 12 h before it from the next (the clock a touch behind the fix).
+static inline void calc_fix_iso(char *out, size_t n, long long now, uint32_t fixMsOfDay) {
+  long long day = now / 86400;
+  if (now % 86400 < 0) day--;                       // floor, for before 1970
+  const long long nowSod = now - day * 86400;
+  const long long fixSod = fixMsOfDay / 1000;
+  if (fixSod > nowSod + 43200) day--;
+  else if (fixSod + 43200 < nowSod) day++;
+  int y;
+  unsigned m, d;
+  calc_civil_from_days(day, &y, &m, &d);
+  const unsigned s = (unsigned)fixSod;
+  snprintf(out, n, "%04d-%02u-%02uT%02u:%02u:%02u.%02uZ", y, m, d, s / 3600, s / 60 % 60, s % 60,
+           (unsigned)(fixMsOfDay % 1000 / 10));
+}
+
 // ---- Text tidying -----------------------------------------------------------
 // Copy src into dst with leading and trailing whitespace removed; returns the
 // resulting length.
