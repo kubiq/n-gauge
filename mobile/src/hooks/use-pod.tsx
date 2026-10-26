@@ -2,7 +2,7 @@
 // credentials and whether the app is on its network right now.
 
 import { useFocusEffect } from 'expo-router';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Linking, ToastAndroid } from 'react-native';
 
 import PodWifi from '@modules/pod-wifi';
@@ -79,6 +79,7 @@ export function PodProvider({ children }: { children: ReactNode }) {
         if (code === 'ERR_WIFI_OFF') {
           setError(t('WiFi is off'));
           if (asked) {
+            retryOnWifi.current = true;
             ToastAndroid.show(t('WiFi is off - turn it on to reach the gauge.'), ToastAndroid.LONG);
             Linking.sendIntent('android.settings.panel.action.WIFI').catch(() => {});
           }
@@ -100,6 +101,24 @@ export function PodProvider({ children }: { children: ReactNode }) {
     },
     [creds],
   );
+
+  // WiFi switched on after a connect you asked for failed for it being off
+  // (most likely in the panel that connect opened): the reason goes, and it
+  // connects again - which syncs. Once: a later switch-on is no request.
+  const retryOnWifi = useRef(false);
+  const connectRef = useRef(connect);
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+  useEffect(() => {
+    const sub = PodWifi.addListener('onWifiOn', () => {
+      setError((e) => (e === t('WiFi is off') ? null : e));
+      if (!retryOnWifi.current) return;
+      retryOnWifi.current = false;
+      connectRef.current();
+    });
+    return () => sub.remove();
+  }, []);
 
   const disconnect = useCallback(() => {
     PodWifi.disconnect();

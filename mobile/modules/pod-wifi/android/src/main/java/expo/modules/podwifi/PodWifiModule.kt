@@ -1,6 +1,9 @@
 package expo.modules.podwifi
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.MacAddress
 import android.net.Network
@@ -9,6 +12,7 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
+import androidx.core.content.ContextCompat
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -34,6 +38,7 @@ class PodWifiModule : Module() {
   @Volatile private var requested: ConnectivityManager.NetworkCallback? = null
   @Volatile private var watching: ConnectivityManager.NetworkCallback? = null
   @Volatile private var bound: Network? = null
+  private var wifiReceiver: BroadcastReceiver? = null
 
   private val cm: ConnectivityManager
     get() = appContext.reactContext?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -44,7 +49,25 @@ class PodWifiModule : Module() {
 
     // The pod dropped off (out of range, or it went to sleep). JS hears it so
     // a sync in progress can stop and resume later instead of hanging.
-    Events("onLost")
+    // onWifiOn: the phone's WiFi was switched on - after a connect that
+    // failed for it being off, the app tries again (2026-10-26: switched on
+    // in the panel the app opened, the chip still said "WiFi is off").
+    Events("onLost", "onWifiOn")
+
+    OnCreate {
+      val r = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+          if (i.getIntExtra(WifiManager.EXTRA_WIFI_STATE, -1) == WifiManager.WIFI_STATE_ENABLED)
+            sendEvent("onWifiOn", mapOf<String, Any>())
+        }
+      }
+      // A system broadcast: delivered to a receiver that is not exported.
+      runCatching {
+        ContextCompat.registerReceiver(ctx.applicationContext, r,
+          IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+        wifiReceiver = r
+      }
+    }
 
     AsyncFunction("connect") { ssid: String, passphrase: String, timeoutMs: Int, promise: Promise ->
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -172,6 +195,8 @@ class PodWifiModule : Module() {
     }
 
     OnDestroy {
+      wifiReceiver?.let { r -> runCatching { ctx.applicationContext.unregisterReceiver(r) } }
+      wifiReceiver = null
       release()
     }
   }
