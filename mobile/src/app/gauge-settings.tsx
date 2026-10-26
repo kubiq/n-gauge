@@ -202,7 +202,7 @@ export default function GaugeSettingsScreen() {
               'The settings are read from the gauge itself - it must be awake (car on, or a door opened). Meanwhile the phone has no internet.',
             )}
           </Note>
-          <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={pod.connect} />
+          <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={() => pod.connect()} />
           {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
         </Card>
         {another}

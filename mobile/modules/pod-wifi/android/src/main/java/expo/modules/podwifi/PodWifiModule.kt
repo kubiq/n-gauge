@@ -6,6 +6,7 @@ import android.net.MacAddress
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import expo.modules.kotlin.Promise
@@ -48,6 +49,14 @@ class PodWifiModule : Module() {
     AsyncFunction("connect") { ssid: String, passphrase: String, timeoutMs: Int, promise: Promise ->
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         promise.reject(CodedException("ERR_OLD_ANDROID", "Needs Android 10 or newer", null))
+        return@AsyncFunction
+      }
+      // WiFi switched off: the request would wait out its whole timeout for
+      // a network it cannot find, and then fail with no word of why
+      // (2026-10-26). Said at once; the app offers the switch.
+      val wifi = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+      if (wifi != null && !wifi.isWifiEnabled) {
+        promise.reject(CodedException("ERR_WIFI_OFF", "WiFi is off", null))
         return@AsyncFunction
       }
       release()

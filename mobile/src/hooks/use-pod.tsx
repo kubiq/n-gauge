@@ -3,6 +3,7 @@
 
 import { useFocusEffect } from 'expo-router';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { Linking, ToastAndroid } from 'react-native';
 
 import PodWifi from '@modules/pod-wifi';
 import { t } from '@/i18n';
@@ -21,7 +22,8 @@ type Pod = {
   state: State;
   error: string | null;
   setCreds: (c: WifiCreds) => Promise<void>;
-  connect: () => Promise<boolean>;
+  /** `asked` false: a connect nobody tapped for - no toast, no WiFi panel. */
+  connect: (asked?: boolean) => Promise<boolean>;
   disconnect: () => void;
   /** Counts connections: a new one, a new number. */
   session: number;
@@ -56,21 +58,48 @@ export function PodProvider({ children }: { children: ReactNode }) {
     setCredsState(c);
   }, []);
 
-  const connect = useCallback(async () => {
-    if (!creds) return false;
-    setError(null);
-    setState('connecting');
-    try {
-      await PodWifi.connect(creds.ssid, creds.pass, CONNECT_TIMEOUT_MS);
-      setSession((n) => n + 1);
-      setState('connected');
-      return true;
-    } catch (e) {
-      setState('idle');
-      setError(e instanceof Error ? e.message : String(e));
-      return false;
-    }
-  }, [creds]);
+  // A failed connect says why (2026-10-26: with the phone's WiFi off, a tap
+  // on the gauge waited 30 s and went back to "Not connected", no word of
+  // why): the reason short in `error` - the header chip shows it - and, when
+  // asked for, a toast; WiFi off also opens Android's WiFi panel, one tap to
+  // switch it on. Not asked for (the sync on opening the app): quiet.
+  const connect = useCallback(
+    async (asked = true) => {
+      if (!creds) return false;
+      setError(null);
+      setState('connecting');
+      try {
+        await PodWifi.connect(creds.ssid, creds.pass, CONNECT_TIMEOUT_MS);
+        setSession((n) => n + 1);
+        setState('connected');
+        return true;
+      } catch (e) {
+        setState('idle');
+        const code = (e as { code?: string }).code;
+        if (code === 'ERR_WIFI_OFF') {
+          setError(t('WiFi is off'));
+          if (asked) {
+            ToastAndroid.show(t('WiFi is off - turn it on to reach the gauge.'), ToastAndroid.LONG);
+            Linking.sendIntent('android.settings.panel.action.WIFI').catch(() => {});
+          }
+        } else if (code === 'ERR_UNAVAILABLE') {
+          setError(t('Gauge not found'));
+          if (asked) {
+            ToastAndroid.show(
+              t('Gauge not found, or the prompt was declined. It must be awake: car on, or a door opened.'),
+              ToastAndroid.LONG,
+            );
+          }
+        } else {
+          const msg = e instanceof Error ? e.message : String(e);
+          setError(msg);
+          if (asked) ToastAndroid.show(t('Could not connect: {error}', { error: msg }), ToastAndroid.LONG);
+        }
+        return false;
+      }
+    },
+    [creds],
+  );
 
   const disconnect = useCallback(() => {
     PodWifi.disconnect();

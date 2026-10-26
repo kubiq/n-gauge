@@ -18,6 +18,9 @@ function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>
   const synced = sync.lastSync ? t('Synced {when}', { when: shortWhen(sync.lastSync) }) : null;
   if (!pod.creds) return { title: t('Set up the gauge'), detail: null, ring: C.dim, busy: false };
   if (pod.state === 'connecting') return { title: t('Connecting…'), detail: synced, ring: C.dim, busy: true };
+  // Why the last connect failed, until the next one: WiFi off, not found.
+  if (pod.state === 'idle' && pod.error)
+    return { title: t('Not connected'), detail: pod.error, ring: C.bad, busy: false, bad: true };
   if (pod.state === 'idle') return { title: t('Not connected'), detail: synced, ring: C.dim, busy: false };
   if (sync.progress) {
     const p = sync.progress;

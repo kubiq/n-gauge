@@ -11,6 +11,13 @@ export const lib: Record<string, string> = {
 
   // The connection (hooks/use-pod.tsx)
   'Lost the gauge’s WiFi': 'Spojení s Wi-Fi budíku ztraceno',
+  // A connect that failed (use-pod.tsx)
+  'WiFi is off': 'Wi-Fi je vypnutá',
+  'WiFi is off - turn it on to reach the gauge.': 'Wi-Fi je vypnutá - zapněte ji, ať se telefon spojí s budíkem.',
+  'Gauge not found': 'Budík nenalezen',
+  'Gauge not found, or the prompt was declined. It must be awake: car on, or a door opened.':
+    'Budík nenalezen, nebo byla výzva odmítnuta. Musí být vzhůru: auto zapnuté, nebo otevřené dveře.',
+  'Could not connect: {error}': 'Nepodařilo se připojit: {error}',
 
   // Talking to the gauge (lib/pod.ts)
   'The gauge did not answer': 'Budík neodpovídá',

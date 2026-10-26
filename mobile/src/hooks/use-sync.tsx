@@ -287,7 +287,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       const fp = await newDriveBeacon();
       if (!fp || fp === triedBeacon.current) return;
       triedBeacon.current = fp;
-      connect();
+      connect(false);
     };
     look().catch((e) => console.warn('beacon', e));
     const sub = AppState.addEventListener('change', (s) => {
