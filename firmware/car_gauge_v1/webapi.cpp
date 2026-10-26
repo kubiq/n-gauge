@@ -1371,6 +1371,58 @@ void web_stop() {
   Serial.println(F("[..] settings AP stopped"));
 }
 
+// ---- a phone that joins and gets no address ------------------------------------
+// 2026-10-26, after a drive: the phone joined the AP (WPA done) as it came
+// back up, sent five DHCP DISCOVERs in 18 s, got no answer, and every retry
+// for a minute after failed the same way - "gauge not found" in the app. On
+// the bench it never happened, through dozens of AP restarts and joins. So:
+// notice it, repair it, and say so on the card. A phone joined and no lease
+// handed out within DHCP_WAIT_MS: the DHCP server is restarted; still none
+// after another DHCP_WAIT_MS: the whole AP (apTask brings it back). Each
+// lease, and each repair, is a bootlog line with the internal RAM and its
+// largest block - 62 KB free that evening against 73 on the bench, the
+// clearest difference.
+static constexpr uint32_t DHCP_WAIT_MS = 8000;
+static volatile uint32_t staJoinMs = 0;     // a station joined, no lease yet; 0 = none
+static volatile uint32_t leaseTookMs = 0;
+static volatile bool     leaseSeen = false;
+
+static void ramNote(char *out, size_t n) {
+  snprintf(out, n, "ram %u KB, largest %u KB",
+           (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+           (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
+}
+
+static void dhcpWatch(uint32_t now) {
+  static uint8_t repairs = 0;               // for the phone waiting now
+  char ram[48], line[128];
+  if (leaseSeen) {
+    leaseSeen = false;
+    ramNote(ram, sizeof(ram));
+    snprintf(line, sizeof(line), "AP: address handed out, %lu ms after the join%s (%s)",
+             (unsigned long)leaseTookMs, repairs ? ", after a repair" : "", ram);
+    logger_note_boot(line);
+    repairs = 0;
+  }
+  const uint32_t joined = staJoinMs;
+  if (!up || !joined || !calc_elapsed(now, joined, DHCP_WAIT_MS)) return;
+  ramNote(ram, sizeof(ram));
+  if (repairs++ == 0) {
+    // Stops the server, sets the portal option, starts it again.
+    const bool ok = WiFi.AP.enableDhcpCaptivePortal();
+    snprintf(line, sizeof(line), "AP: a phone joined, no address in %lu s - DHCP server restarted%s (%s)",
+             (unsigned long)(DHCP_WAIT_MS / 1000), ok ? "" : " (failed)", ram);
+    staJoinMs = now ? now : 1;              // another wait, for its retry
+  } else {
+    snprintf(line, sizeof(line), "AP: still no address after the DHCP restart - AP restarted (%s)", ram);
+    staJoinMs = 0;
+    repairs = 0;
+    web_stop();                             // apTask() starts it again
+  }
+  Serial.printf("[ERR] %s\n", line);
+  logger_note_boot(line);
+}
+
 // Times web_start() declined for want of internal RAM, since boot - in the
 // drive log, where the serial console's "[ERR] not starting AP" never is.
 static uint32_t apRefused = 0;
@@ -1379,6 +1431,7 @@ uint32_t web_ap_refused() { return apRefused; }
 void web_start() {
   if (up) return;
   loopTask = xTaskGetCurrentTaskHandle();   // called from loop()
+  staJoinMs = 0;                            // nobody waits on an AP that was down
 
   // esp_wifi takes its buffers from internal RAM and is NOT defensive about
   // running out: a failed allocation deep inside ieee80211_hostap_attach
@@ -1402,11 +1455,21 @@ void web_start() {
   static bool eventsHooked = false;
   if (!eventsHooked) {
     eventsHooked = true;
+    // On the WiFi event task: only stamps here - dhcpWatch() (loop) acts.
     WiFi.onEvent([](arduino_event_id_t e, arduino_event_info_t info) {
       (void)info;
-      if (e == ARDUINO_EVENT_WIFI_AP_STACONNECTED)         Serial.println(F("[AP] station connected"));
-      else if (e == ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED)   Serial.println(F("[AP] lease handed out"));
-      else if (e == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) Serial.println(F("[AP] station left"));
+      const uint32_t t = millis() ? millis() : 1;
+      if (e == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
+        Serial.println(F("[AP] station connected"));
+        if (!staJoinMs) staJoinMs = t;
+      } else if (e == ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED) {
+        Serial.println(F("[AP] lease handed out"));
+        if (staJoinMs) leaseTookMs = t - staJoinMs;
+        staJoinMs = 0;
+        leaseSeen = true;
+      } else if (e == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
+        Serial.println(F("[AP] station left"));
+      }
     });
   }
 
@@ -1496,6 +1559,8 @@ void web_task() {
     ota_reboot();
   }
   if (!up) return;
+  dhcpWatch(millis());        // a phone that joined and got no address
+  if (!up) return;            // ... and the AP restarted for it
   // A non-blocking poll. The portal sheet only appears if the name lookup is
   // answered before the HTTP probe is attempted.
   dns.processNextRequest();
