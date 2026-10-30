@@ -56,7 +56,7 @@ const SettingDef settings_table[] = {
   // 0 = off; 1-29 becomes 30 in settings_fixup().
   { "womMg",    "motionWakeMg",  SET_U8,   &settings.motionWakeMg,   MOTION_WAKE_MG_DEFAULT,     0,     255 },
   { "sleepMin", "sleepAfterMin", SET_U8,   &settings.sleepAfterMin,  BUS_IDLE_SLEEP_MS / 60000,  1,     60 },
-  { "logLvl",   "logLevel",      SET_U8,   &settings.logLevel,       LOG_LEVEL_DEFAULT,          0,     3 },
+  { "logLvl",   "logLevel",      SET_U8,   &settings.logLevel,       LOG_LEVEL_DEFAULT,          0,     2 },
   // A warning at 0 would leave the gauge permanently in alarm, which trains
   // the driver to ignore it - worse than no warning at all.
   { "oilRdy",   "oilReadyC",     SET_I16,  &settings.oilReadyC,      OIL_READY_C,                40,    150 },

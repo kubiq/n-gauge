@@ -13,7 +13,7 @@ struct Settings {
   uint8_t nightBright;    // 10-255
   uint8_t motionWakeMg;   // wake-on-motion threshold, mg; 0 = off
   uint8_t sleepAfterMin;  // sleep this long after the car goes quiet, 1-60
-  uint8_t logLevel;       // LogLevel (logger.h): 0 off .. 3 full
+  uint8_t logLevel;       // LogLevel (logger.h): 0 off .. 2 normal
   int16_t oilReadyC;      // below this = "cold, take it easy"
   int16_t oilWarnC;       // at/above = over-temp alarm
   int16_t coolantWarnC;

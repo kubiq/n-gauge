@@ -110,7 +110,8 @@ enum LogLevel : uint8_t {
   LOG_OFF    = 0,   // nothing but the sleeplog
   LOG_TRIPS  = 1,   // GPX tracks, and the .vbo in track mode
   LOG_NORMAL = 2,   // + the drive CSV, decoded values
-  LOG_FULL   = 3,   // + the CSV's raw hex payloads (TPMS, oil DID)
+  // 3, Full, added the raw hex payloads (TPMS, oil DID) until 2026-10-30. A
+  // gauge with 3 stored loads the default (settings.cpp: out of range).
 };
 
 // The g-meter's latest horizontal g (calibrated, as the screen shows it):

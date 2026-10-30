@@ -70,9 +70,8 @@ export const gauge: Record<string, string> = {
   Off: 'Vypnuto',
   'Trips - GPS tracks only': 'Jízdy - jen trasy GPS',
   'Normal - tracks + drive data': 'Běžný - trasy + data jízdy',
-  'Full - + raw diagnostic bytes': 'Úplný - + surové diagnostické bajty',
-  'Applies at once and starts new files. Track sessions (.vbo) are recorded at every level but Off; the sleep log always is. Full is for checking new values against the car.':
-    'Platí hned a začne nové soubory. Jízdy na okruhu (.vbo) se zaznamenávají na každé úrovni kromě Vypnuto; záznam uspání vždy. Úplný slouží k ověřování nových hodnot na autě.',
+  'Applies at once and starts new files. Track sessions (.vbo) are recorded at every level but Off; the sleep log always is.':
+    'Platí hned a začne nové soubory. Jízdy na okruhu (.vbo) se zaznamenávají na každé úrovni kromě Vypnuto; záznam uspání vždy.',
   'New trip after a stop of': 'Nová jízda po zastávce',
   'not a number': 'není číslo',
   'whole numbers only': 'jen celá čísla',

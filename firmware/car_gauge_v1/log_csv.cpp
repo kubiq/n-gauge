@@ -3,7 +3,7 @@
 // See log_priv.h.
 // ============================================================================
 #include "log_priv.h"
-#include "logger.h"     // LOG_NORMAL / LOG_FULL
+#include "logger.h"     // LOG_NORMAL
 #include "config.h"
 #include "calc.h"       // calc_fmt_deg
 #include "obd.h"
@@ -72,7 +72,6 @@ struct CsvRow {
   char     lat[16], lon[16];
   bool     haveG;
   float    gx, gy, gz;
-  bool     full;                // LOG_FULL: the raw hex columns
   PodState st;                  // the gauge's state - one copy for the row
 };
 
@@ -83,15 +82,6 @@ static void put(const char *fmt, ...) {
   va_start(ap, fmt);
   logfile_vprintf(csv, fmt, ap);
   va_end(ap);
-}
-
-// A raw payload as hex, at LOG_FULL - one whole reply, copied out under the
-// CAN task's lock (obd_copy_raw), so a newer one cannot land mid-cell.
-static void putRaw(bool full, ObdRaw which) {
-  if (!full) return;
-  uint8_t b[48];
-  const uint8_t n = obd_copy_raw(which, b, sizeof(b));
-  for (uint8_t i = 0; i < n; i++) put(i ? " %02X" : "%02X", b[i]);
 }
 
 struct CsvCol {
@@ -137,20 +127,10 @@ static const CsvCol COLS[] = {
   {"t1c",   [](const CsvRow &) { if (obd_tyre_fresh(1)) put("%d", obd.tyreTempC[1]); }},
   {"t2c",   [](const CsvRow &) { if (obd_tyre_fresh(2)) put("%d", obd.tyreTempC[2]); }},
   {"t3c",   [](const CsvRow &) { if (obd_tyre_fresh(3)) put("%d", obd.tyreTempC[3]); }},
-  // Raw DID 0xC00B payload as hex. This is the field that will actually
-  // solve the wheel layout - space-separated so it stays one CSV column.
-  // The two raw payload columns deliberately stay "last payload received",
-  // not aged out: they are for decoding the format offline, and the decoded
-  // columns beside them already say whether the reading is current.
-  // The two raw hex columns are LOG_FULL only; below that they stay as
-  // empty columns, so the CSV layout is the same at every level.
-  {"tpmsRaw", [](const CsvRow &r) { putRaw(r.full, OBD_RAW_TPMS); }},
-  // Raw DID 0xE001 payload as hex. The byte we decode as oil temp disagreed
-  // with the dashboard by ~20 C on the first drive, and one byte of stored
-  // history cannot settle which one is right. With the whole payload, a single
-  // cold-start warm-up drive plus a few noted dash readings identifies the
-  // correct offset offline. See the note in obd.h.
-  {"oilRawPayload", [](const CsvRow &r) { putRaw(r.full, OBD_RAW_OIL); }},
+  // (The raw hex payloads of DID 0xC00B and 0xE001 - tpmsRaw, oilRawPayload -
+  // were columns here until 2026-10-30: they found the tyre layout and the
+  // oil byte, and were 44 % of every CSV after. DECISIONS.md, "Logging is a
+  // level".)
   // With the GPX's per-point sat/hdop it answers whether the AP near the GNSS
   // antenna hurts the fix (see AP_DRIVE_OFF).
   {"apUp",   [](const CsvRow &) { put("%d", web_is_up() ? 1 : 0); }},
@@ -298,7 +278,6 @@ void csvlog_task() {
 
   CsvRow r;
   r.now = now;
-  r.full = settings.logLevel >= LOG_FULL;
   r.st = podstate_copy();
   r.utc[0] = '\0';
   if (clock_valid()) {

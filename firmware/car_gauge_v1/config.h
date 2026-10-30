@@ -725,12 +725,11 @@
 #define BOOT_LOG_RATE_FROM_MS 20000   // fix rate measured from here to AFTER_MS
 
 // How much goes on the card (LogLevel in logger.h; a phone setting): 0 off,
-// 1 trips (GPX), 2 normal (+ drive CSV), 3 full (+ the raw diagnostic hex
-// columns). The track .vbo follows track mode from 1 up. Normal since
-// 2026-10-26: full was the default while the values were verified against
-// the car, and they are (oil byte 34, coolant 25, the tyres) - and the two
-// raw columns were 44 % of every CSV (oilRawPayload 30 %, tpmsRaw 14 %).
-// Full is still there for the next thing to decode.
+// 1 trips (GPX), 2 normal (+ drive CSV). The track .vbo follows track mode
+// from 1 up. There was a 3, full (+ the raw diagnostic hex columns), the
+// default while the values were verified against the car; they are (oil
+// byte 34, coolant 25, the tyres), and the two raw columns were 44 % of
+// every CSV - gone 2026-10-30.
 #define LOG_LEVEL_DEFAULT     2
 #define LOG_INTERVAL_MS       500
 // The logger task's pace on core 0 - about what loop() used to give it, and

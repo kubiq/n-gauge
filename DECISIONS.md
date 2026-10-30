@@ -383,13 +383,22 @@ cell: the only place to fit one on this board is soldering to CP13, rejected
 as too risky on so small a PCB and not sturdy in a car.
 
 **Logging is a level, not a switch.** (2026-10-09; setting `logLevel`,
-default Full.) Off (the sleep log only), Trips (GPX, and the VBO in track
-mode), Normal (adds the drive CSV), Full (adds the raw hex columns: TPMS and
-the oil DID). Below Full those stay as empty columns, so the CSV's layout
-never depends on the level. A change closes every file; what the new level
-allows reopens as new files. Asked as "a switch to turn logging off if it
-slows the gauge": measured instead (above), and fixed where it cost - a switch
-would have lost the logs that diagnosed the oil byte, sleep and coolant.
+default Normal.) Off (the sleep log only), Trips (GPX, and the VBO in track
+mode), Normal (adds the drive CSV). A change closes every file; what the new
+level allows reopens as new files. Asked as "a switch to turn logging off if
+it slows the gauge": measured instead (above), and fixed where it cost - a
+switch would have lost the logs that diagnosed the oil byte, sleep and
+coolant.
+There was a fourth, **Full**, the default until 2026-10-26: it added the raw
+hex payloads of the tyre DID and the oil DID as two CSV columns. They are
+how both were decoded - the tyre layout, and that oil is byte 34, not the
+byte first picked for following the coolant curve, which is what a coolant
+value would do and real oil temperature would not. The lesson stands: for a
+format not yet known, log the bytes, never values at guessed offsets - an
+earlier version did, and its logs could not find the real ones. Once the
+values were verified the columns were 44 % of every CSV, and on 2026-10-30
+they went, with the level and the CAN task's copy of each reply. The next
+unknown format gets its own raw column while it is being decoded.
 
 **Every log name carries a session id.** (2026-10-13, bb8b288.) Six random
 hex digits per boot or wake, before the extension:

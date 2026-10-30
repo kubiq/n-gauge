@@ -52,15 +52,14 @@ export const SETTINGS: SettingDef[] = [
   { key: 'tHighR', json: 'tpmsHighBarRear', type: 'f32', lo: 0.5, hi: 5, label: N_('Rear high'), unit: 'bar', group: 'Tyres' },
   // Labels and hint as on the pod's own Car page (webapi.cpp); LogLevel in logger.h.
   {
-    key: 'logLvl', json: 'logLevel', type: 'u8', lo: 0, hi: 3, label: N_('What goes on the SD card'), group: 'Logging',
+    key: 'logLvl', json: 'logLevel', type: 'u8', lo: 0, hi: 2, label: N_('What goes on the SD card'), group: 'Logging',
     options: [
       { value: 0, label: N_('Off') },
       { value: 1, label: N_('Trips - GPS tracks only') },
       { value: 2, label: N_('Normal - tracks + drive data') },
-      { value: 3, label: N_('Full - + raw diagnostic bytes') },
     ],
     hint: N_(
-      'Applies at once and starts new files. Track sessions (.vbo) are recorded at every level but Off; the sleep log always is. Full is for checking new values against the car.',
+      'Applies at once and starts new files. Track sessions (.vbo) are recorded at every level but Off; the sleep log always is.',
     ),
   },
   {

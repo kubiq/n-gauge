@@ -15,15 +15,6 @@ struct ObdState {
   bool     haveCoolant   = false;
   int      oilTempC      = 0;
   uint8_t  oilRaw        = 0;       // raw DID byte, for offline formula checks
-  // The WHOLE DID 0xE001 payload, not just the byte we currently decode.
-  // On the first drive our "oil temp" read ~70 C while the dashboard showed
-  // ~50 C, and the byte was originally picked for correlating tightly with
-  // the coolant curve - which is exactly what a coolant-derived value would
-  // do, and what real oil temp would NOT do during warm-up. Keeping the full
-  // payload lets the right byte be found offline from one logged drive
-  // instead of guessing and reflashing. Same lesson as the TPMS layout.
-  uint8_t  oilPayload[48] = { 0 };
-  uint8_t  oilPayloadLen  = 0;
   uint32_t oilMs         = 0;       // when oilTempC was last actually updated,
                                     // so a stale value can be shown as "--"
   int      coolantC      = 0;       // as the dashboard shows it - see COOLANT_FROM_E001
@@ -90,13 +81,6 @@ struct ObdState {
   // intermittently while the sensors wake, so the consumer ages values out
   // over TPMS_STALE_MS instead of trusting a single empty reply.
   uint32_t tyreMs[4]     = { 0, 0, 0, 0 };
-  // Raw DID 0xC00B payload. Logged verbatim because the byte layout is NOT
-  // yet known: only offset 4 (front left pressure) is confirmed. Logging
-  // derived values at guessed offsets - as an earlier version did - made the
-  // log useless for finding the real ones. Never do that for an unverified
-  // format: log the bytes.
-  uint8_t  tpmsRaw[48]   = { 0 };
-  uint8_t  tpmsRawLen    = 0;
   uint32_t lastFrameMs   = 0;       // last time ANY frame was seen (for sleep)
   // Diagnostics: a dropped Consecutive Frame silently aborts an ISO-TP
   // transaction, which looks like "the value just doesn't update much".
@@ -151,14 +135,6 @@ bool obd_fuel_pct_fresh();
 bool obd_cat_fresh();
 bool obd_rail_fresh();
 bool obd_tyre_fresh(int wheel);
-
-// The raw payloads (oilPayload, tpmsRaw) are the exception to "every field is
-// atomic": arrays, written by the CAN task on core 0 while the logger - same
-// core, lower priority - printed them a byte at a time, so a reply landing
-// mid-row mixed two payloads in one CSV cell. Read them only through this:
-// one reply, whole, copied out under the writer's lock. Returns the length.
-enum ObdRaw { OBD_RAW_OIL, OBD_RAW_TPMS };
-uint8_t obd_copy_raw(ObdRaw which, uint8_t *out, uint8_t outMax);
 
 // Put the transceiver into (or out of) low-current standby by driving its Rs
 // pin - see CAN_RS_CONTROL in config.h for the mode table and the wiring
