@@ -16,6 +16,15 @@ export const gauge: Record<string, string> = {
   Logs: 'Záznamy',
   Cancel: 'Zrušit',
   Actions: 'Akce',
+  // The networks seen while parked (networks-card.tsx)
+  'WiFi where the car parks': 'Wi-Fi tam, kde auto parkuje',
+  'None yet: the gauge looks just before it sleeps after a drive.':
+    'Zatím žádné: budík se dívá těsně předtím, než po jízdě usne.',
+  open: 'otevřená',
+  password: 's heslem',
+  'seen once|seen {n}×': 'viděna jednou|viděna {n}×|viděna {n}×',
+  'Seen by the gauge just before it slept after a drive. Allowing one, to upload the logs from there, comes next.':
+    'Viděné budíkem těsně předtím, než po jízdě usnul. Povolit některou, aby odtud nahrával záznamy, přijde příště.',
   'Set the gauge’s clock from this phone': 'Nastavit hodiny budíku podle telefonu',
   Clock: 'Hodiny',
   'Zero the g-meter here': 'Vynulovat g-metr zde',

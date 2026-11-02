@@ -3,6 +3,7 @@ import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { NetworksCard } from '@/components/networks-card';
 import { ScreenOrderCard } from '@/components/screen-order-card';
 import { SystemCard } from '@/components/system-card';
 import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
@@ -277,6 +278,7 @@ export default function GaugeSettingsScreen() {
         <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
+      <NetworksCard />
       {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
       {another}
     </Screen>
