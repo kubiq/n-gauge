@@ -7,8 +7,7 @@
 #include "config.h"
 #include "calc.h"       // GPS plausibility checks, shared with tests/
 #include "gps.h"
-#include "obd.h"        // lastFrameMs: the car is on - a track may open
-#include "podstate.h"   // ... or it is moving
+#include "podstate.h"   // points while the car talks, or moves
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // tripGapMin: the trip-reset gap is user-editable
 #include "SD_MMC.h"
@@ -260,18 +259,18 @@ static void gpxPoint(const GpsSample &s, uint32_t now) {
   if (!log_may_write()) return;        // no card, or writes given up on
   if (settings.logLevel < LOG_TRIPS) return;   // logging off: count, don't write
   if (gpxOpenFailed) return;           // see gpxOpen(): do not retry forever
-  // Not for a parked car. A motion wake - a door, a bump - keeps the pod up
-  // for a minute; with sky view it got a fix, the file opened on it, and the
-  // pod slept again: a one-point "drive" at the parking spot in the app's
-  // list, per wake (2026-10-20: two of them, 20:37 and 21:36). So a track
-  // opens only once the car is on (a CAN frame, as the drive CSV waits for)
-  // or moving - by the gauge's state, for a track without the car's bus:
-  // the GPS's speed held, not one fix. A single fix at 13 km/h on a parked
-  // wake (2026-11-01) opened a 0.3 km "drive" of the receiver settling, its
-  // position 200 m off and sliding back for minutes (podstate.h).
-  if (!gpx.open && obd.lastFrameMs == 0) {
-    const PsMotion m = podstate_copy().motion;
-    if (m != PS_MOVING && m != PS_DRIVING) return;
+  // Points only while the car is talking, or moving by the gauge's state
+  // (the GPS's speed held, not one fix) - so a CAN fault or a tow still has
+  // its track (2026-10-19: a broken CAN wire, the GPX the drive's only record).
+  // With the car off and standing, a point is the receiver's noise: a motion
+  // wake - a door, a bump - kept the pod up a minute, a fix opened a
+  // one-point "drive" at the parking spot (2026-10-20, twice); one fix at 13
+  // km/h on a parked wake opened a 0.3 km "drive" of the receiver settling,
+  // its position 200 m off and sliding back for minutes (2026-11-01); and
+  // the 5 minutes awake after switching off added drift to every track.
+  {
+    const PodState st = podstate_copy();
+    if (st.car == PS_CAR_OFF && st.motion != PS_MOVING && st.motion != PS_DRIVING) return;
   }
   if (!gpx.open) gpxOpen();            // lazily, on the first accepted point
   if (!gpx.open) return;
