@@ -25,6 +25,8 @@ export const gauge: Record<string, string> = {
   'seen once|seen {n}×': 'viděna jednou|viděna {n}×|viděna {n}×',
   'Seen by the gauge just before it slept after a drive. Allowing one, to upload the logs from there, comes next.':
     'Viděné budíkem těsně předtím, než po jízdě usnul. Povolit některou, aby odtud nahrával záznamy, přijde příště.',
+  'Only 2.4 GHz: the gauge’s radio cannot see 5 GHz networks.':
+    'Jen 2,4 GHz: rádio budíku sítě 5 GHz nevidí.',
   'Set the gauge’s clock from this phone': 'Nastavit hodiny budíku podle telefonu',
   Clock: 'Hodiny',
   'Zero the g-meter here': 'Vynulovat g-metr zde',

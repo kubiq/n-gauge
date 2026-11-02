@@ -42,6 +42,9 @@ export function NetworksCard() {
       {nets?.length ? (
         <Note>{t('Seen by the gauge just before it slept after a drive. Allowing one, to upload the logs from there, comes next.')}</Note>
       ) : null}
+      {nets !== null ? (
+        <Note>{t('Only 2.4 GHz: the gauge’s radio cannot see 5 GHz networks.')}</Note>
+      ) : null}
     </Card>
   );
 }
