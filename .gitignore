@@ -65,3 +65,7 @@ firmware/car_gauge_v1/build_info.h
 # Working notes - open work and measurements, kept local, not published.
 TODO.md
 TODO-done.md
+
+# The WireGuard test's keys, network password and VPN address - never
+# published; secrets.example.h is the template.
+firmware/wgtest/secrets.h
