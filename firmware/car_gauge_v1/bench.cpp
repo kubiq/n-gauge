@@ -15,6 +15,7 @@
 #include "rtc.h"
 #include "settings.h"
 #include "webapi.h"
+#include "netscan.h"         // 'W'
 #include "logger.h"
 #include "ui.h"
 
@@ -136,6 +137,16 @@ static void benchCommands(uint32_t now) {
   if (cmd == 'H') {
     const esp_err_t e = esp_netif_dhcps_stop(WiFi.AP.netif());
     Serial.printf("[..] bench: DHCP server stopped (%s)\n", esp_err_to_name(e));
+  }
+  // 'W' scans the WiFi as before sleeping after a drive (netscan.h), then
+  // prints the list it keeps.
+  if (cmd == 'W') {
+    netscan_now();
+    NetList l;
+    netscan_load(&l);
+    for (uint8_t i = 0; i < l.n; i++)
+      Serial.printf("[..] bench: %-32s %4d dBm %s seen %u\n", l.nets[i].ssid, l.nets[i].rssi,
+                    l.nets[i].open ? "open   " : "secured", (unsigned)l.nets[i].count);
   }
   if (cmd == 'D') {
     benchDriveT0 = now ? now : 1;
