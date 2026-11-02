@@ -32,6 +32,7 @@ static void ram(const char *step) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setDebugOutput(true);   // the core's log_i (the library's handshakes) here too
   delay(3000);
   Serial.println("\n=== WireGuard test ===");
   ram("boot");
@@ -59,8 +60,9 @@ void setup() {
   Serial.printf("[ok] WireGuard up in %lu ms\n", (unsigned long)(millis() - t2));
   ram("wg up");
 
-  // The first packets wait for the handshake; a few tries.
-  for (int i = 0; i < 5; i++) {
+  // The first packets wait for the handshake (the tunnel's link is down
+  // until it completes, and a request fails at once): tries for ~30 s.
+  for (int i = 0; i < 15; i++) {
     HTTPClient http;
     http.setTimeout(5000);
     const uint32_t t3 = millis();
