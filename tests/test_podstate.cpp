@@ -8,7 +8,7 @@
 #include "../firmware/car_gauge_v1/config.h"
 
 static const PsCfg CFG = {
-  OBD_STALE_MS, ENGINE_RUNNING_RPM, MOVING_OBD_KMH, SLEEP_HOLD_MOVING_KMH,
+  OBD_STALE_MS, ENGINE_RUNNING_RPM, MOVING_OBD_KMH, SLEEP_HOLD_MOVING_KMH, GPS_MOVING_HOLD_MS,
   AP_DRIVE_ON_KMH, AP_DRIVE_ON_MS, AP_DRIVE_OFF_KMH, AP_DRIVE_OFF_MS,
   LOG_IDLE_AFTER_MS, BUS_IDLE_SLEEP_MS, COLD_BOOT_AWAKE_MS,
   CAN_MISSING_GRACE_MS, GPS_MISSING_GRACE_MS,
@@ -105,8 +105,20 @@ static void standing_is_still_by_either_speed() {
 static void the_gps_says_moving_when_the_car_cannot() {
   Sim m;
   m.silent(1000, true, 30.0f);
-  CHECK_EQ(m.s.motion, PS_MOVING);
+  CHECK(m.s.motion != PS_MOVING);                // not on one fix
+  m.silent(1000 + GPS_MOVING_HOLD_MS, true, 30.0f);
+  CHECK_EQ(m.s.motion, PS_MOVING);               // held: moving
   CHECK(m.s.awakeBecause & PS_AWAKE_MOVING);
+}
+
+// 2026-11-01, a parked wake: the GPS read 13 km/h for one fix, ~0 otherwise.
+// That opened a track of drift and held sleep off for 5 minutes.
+static void one_gps_spike_standing_is_no_movement() {
+  Sim m;
+  for (uint32_t t = 1000; t < 20000; t += 40) m.silent(t, true, t == 5000 ? 13.0f : 0.4f);
+  CHECK(m.s.motion != PS_MOVING);
+  CHECK_EQ(m.s.lastMovingMs, 0);
+  CHECK_EQ(m.s.awakeBecause & PS_AWAKE_MOVING, 0);
 }
 
 static void parked_after_a_while_still_thins_the_log() {
@@ -201,6 +213,7 @@ int main() {
   TEST(a_drive_takes_the_wifi_down_and_a_red_light_does_not_end_it);
   TEST(standing_is_still_by_either_speed);
   TEST(the_gps_says_moving_when_the_car_cannot);
+  TEST(one_gps_spike_standing_is_no_movement);
   TEST(parked_after_a_while_still_thins_the_log);
   TEST(sleep_waits_for_the_car_the_phone_and_the_user);
   TEST(a_cold_boot_with_no_car);

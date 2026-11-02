@@ -8,6 +8,7 @@
 #include "calc.h"       // GPS plausibility checks, shared with tests/
 #include "gps.h"
 #include "obd.h"        // lastFrameMs: the car is on - a track may open
+#include "podstate.h"   // ... or it is moving
 #include "rtc.h"        // clock_valid(): asks the clock, not one of its sources
 #include "settings.h"   // tripGapMin: the trip-reset gap is user-editable
 #include "SD_MMC.h"
@@ -264,8 +265,14 @@ static void gpxPoint(const GpsSample &s, uint32_t now) {
   // pod slept again: a one-point "drive" at the parking spot in the app's
   // list, per wake (2026-10-20: two of them, 20:37 and 21:36). So a track
   // opens only once the car is on (a CAN frame, as the drive CSV waits for)
-  // or moving - walking pace and up, for a track without the car's bus.
-  if (!gpx.open && obd.lastFrameMs == 0 && s.speedKmh < LOG_IDLE_SPEED_KMH) return;
+  // or moving - by the gauge's state, for a track without the car's bus:
+  // the GPS's speed held, not one fix. A single fix at 13 km/h on a parked
+  // wake (2026-11-01) opened a 0.3 km "drive" of the receiver settling, its
+  // position 200 m off and sliding back for minutes (podstate.h).
+  if (!gpx.open && obd.lastFrameMs == 0) {
+    const PsMotion m = podstate_copy().motion;
+    if (m != PS_MOVING && m != PS_DRIVING) return;
+  }
   if (!gpx.open) gpxOpen();            // lazily, on the first accepted point
   if (!gpx.open) return;
 

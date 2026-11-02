@@ -131,7 +131,8 @@ struct PsCfg {
   uint32_t staleMs;             // no frame this long: the car is off
   int16_t  runningRpm;          // the engine is running from here
   float    obdMovingKmh;        // moving, by the car's speed (0 standing)
-  float    gpsMovingKmh;        // moving, by the GPS's - above its wander
+  float    gpsMovingKmh;        // moving, by the GPS's - above its wander ...
+  uint32_t gpsMovingHoldMs;     // ... this long: one spike is no movement
   float    driveOnKmh;          // a drive: this fast ...
   uint32_t driveOnMs;           // ... this long
   float    driveOffKmh;         // the drive over: under this ...
@@ -162,6 +163,7 @@ struct PodState {
   CalcDrive   drive;
   uint32_t    stillSince;       // 0 = moving
   uint32_t    lastMovingMs;     // 0 = not since boot
+  uint32_t    gpsFastSince;     // GPS speed over gpsMovingKmh since; 0 = not now
   uint32_t    lastPhoneMs;      // 0 = not since boot
   bool        started;          // a first pass has run
 };
@@ -189,9 +191,15 @@ static inline void podstate_step(PodState *s, const PsFacts &f, const PsCfg &c) 
   if (f.obdKmhFresh) { s->speedFrom = PS_SPEED_OBD; s->kmh = f.obdKmh; }
   else if (f.gpsFix) { s->speedFrom = PS_SPEED_GPS; s->kmh = f.gpsKmh; }
   else               { s->speedFrom = PS_SPEED_NONE; s->kmh = 0; }
+  // The car's speed is exact and 0 standing: moving at once. The GPS's
+  // wanders and spikes standing still - one fix read 13 km/h on a parked wake
+  // (2026-11-01), which opened a 0.3 km "drive" of drift and held sleep off
+  // for 5 minutes - so it must stay up for gpsMovingHoldMs first.
+  const bool gpsFast = s->speedFrom == PS_SPEED_GPS && s->kmh >= c.gpsMovingKmh;
+  if (!gpsFast) s->gpsFastSince = 0;
+  else if (!s->gpsFastSince) s->gpsFastSince = ps_stamp(now);
   const bool moving = s->speedFrom == PS_SPEED_OBD ? s->kmh >= c.obdMovingKmh
-                    : s->speedFrom == PS_SPEED_GPS ? s->kmh >= c.gpsMovingKmh
-                    : false;
+                    : gpsFast && calc_elapsed(now, s->gpsFastSince, c.gpsMovingHoldMs);
   if (moving) { s->lastMovingMs = ps_stamp(now); s->stillSince = 0; }
   else if (!s->stillSince) s->stillSince = ps_stamp(now);
 

@@ -571,6 +571,11 @@
 // 0 standing, so any speed at all is movement. GPS speed, the fallback when
 // the car is not talking, needs SLEEP_HOLD_MOVING_KMH.
 #define MOVING_OBD_KMH        1.0f
+// ... and the GPS's must stay at SLEEP_HOLD_MOVING_KMH this long first: a
+// receiver waking from backup spikes and slides at a standstill (2026-11-01:
+// one fix at 13 km/h, the position 200 m off and gliding back for minutes,
+// its speed otherwise ~0).
+#define GPS_MOVING_HOLD_MS    3000
 // Safety net only: if the CAN-RX edge wake were misconfigured, this is the
 // longest the board could stay asleep with the engine running. Long enough to
 // be cheap (one boot an hour), short enough that the failure is survivable.
