@@ -47,6 +47,12 @@ struct GpsState {
   // boot log - a module left at its 1 Hz default looks fine on screen.
   uint8_t  configAck = 0;
   uint32_t fixes     = 0;       // positions published since boot - their rate
+  // The signal itself, from GSV once a second - only in the WiFi/GPS test
+  // build (wifitest.h), 0 otherwise. The mean C/N0 of the four strongest
+  // satellites, dB-Hz: a few dB of interference shows here long before
+  // the sat count or hdop move. cn0Sats: how many had a C/N0 at all.
+  float    cn0Top4   = 0.0f;
+  uint8_t  cn0Sats   = 0;
 };
 
 extern GpsState gps;

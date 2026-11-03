@@ -12,6 +12,7 @@
 #include "settings.h"
 #include "webapi.h"     // web_is_up(), web_ap_refused()
 #include "podstate.h"   // the car, motion and sleep columns
+#include "wifitest.h"   // its columns, in the WiFi/GPS test build
 #include <esp_heap_caps.h>
 #include "SD_MMC.h"
 
@@ -190,6 +191,22 @@ static const CsvCol COLS[] = {
   // GNSS fixes the GPX never got, since boot: the queue (gps.h) holds ~5 s,
   // so a card stall loses none - this says if one ever outlasted it.
   {"fixLost",    [](const CsvRow &) { put("%lu", (unsigned long)gpxlog_fixes_lost()); }},
+#if WIFI_GPS_TEST
+  // The WiFi/GPS test (wifitest.h): 0 radio off, 1 joining, 2 sending; what
+  // went out since the previous row; the hotspot's RSSI; the GNSS signal.
+  {"wtPhase",    [](const CsvRow &) { put("%u", wifitest.phase); }},
+  {"wtKbps",     [](const CsvRow &r) {
+    static uint32_t lastBytes = 0, lastMs = 0;
+    const uint32_t b = wifitest.sentBytes;
+    if (lastMs && r.now != lastMs)
+      put("%lu", (unsigned long)((uint64_t)(b - lastBytes) * 8 / (r.now - lastMs)));
+    lastBytes = b;
+    lastMs = r.now;
+  }},
+  {"wtRssi",     [](const CsvRow &) { if (wifitest.rssi) put("%d", wifitest.rssi); }},
+  {"cn0",        [](const CsvRow &) { if (gps.cn0Sats) put("%.1f", gps.cn0Top4); }},
+  {"cn0Sats",    [](const CsvRow &) { put("%u", gps.cn0Sats); }},
+#endif
 };
 
 // Create the drive log on first use, not at boot.

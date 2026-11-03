@@ -30,6 +30,7 @@
 #include "bench.h"        // the desk tools; empty in the car's build
 #include "bootlog.h"      // one line per boot on the card
 #include "prof.h"         // FRAME_STATS timing; nothing in the car's build
+#include "wifitest.h"     // the WiFi/GPS test build; nothing otherwise
 
 
 // Raw accelerometer reading -> horizontal g on the screen's axes plus a
@@ -473,6 +474,10 @@ static void usbTask() {
 // (2026-10-19 review, A4).
 static void apTask(uint32_t now) {
   (void)now;
+  // (WIFI_GPS_TEST below needs AP_DRIVE_OFF: the AP down while driving.)
+#if WIFI_GPS_TEST && !AP_DRIVE_OFF
+#error "WIFI_GPS_TEST needs AP_DRIVE_OFF"
+#endif
 #if WIFI_AP_ALWAYS
 #if AP_DRIVE_OFF
   // The gauge's state (podstate.h): down while driving, by the car's own
@@ -482,6 +487,11 @@ static void apTask(uint32_t now) {
   const bool want = podstate().wifiWanted && !bench_ap_held(now);
 #else
   const bool want = !power_wake_pending() && !bench_ap_held(now);
+#endif
+#if WIFI_GPS_TEST
+  // The WiFi/GPS test (wifitest.h) has the radio while the AP is down for a
+  // drive, and lets go of it first whenever the AP is wanted again.
+  wifitest_task(now, !want && !web_is_up() && podstate().motion == PS_DRIVING);
 #endif
   static uint32_t lastTryMs = 0;           // 0 = not tried since it was last up
   if (want && !web_is_up() && (lastTryMs == 0 || now - lastTryMs >= AP_RETRY_MS)) {

@@ -329,7 +329,12 @@ static void gpsConfigure() {
   // in 38400 baud. RMC gives time/date/position/speed, GGA altitude/sats/HDOP.
   u1(0x209100bb, 1);                    // GGA on
   u1(0x209100ac, 1);                    // RMC on
+#if WIFI_GPS_TEST
+  // Once a second (the rate is per nav solution): the C/N0 for the test.
+  u1(0x209100c5, 1000 / GPS_NAV_RATE_MS);
+#else
   u1(0x209100c5, 0);                    // GSV off
+#endif
   u1(0x209100c0, 0);                    // GSA off
   u1(0x209100ca, 0);                    // GLL off
   u1(0x209100b1, 0);                    // VTG off
@@ -475,6 +480,80 @@ void gps_park() {}
 
 // One pass: drain the UART, parse, hunt the baud, configure once, keep the
 // clock. Called only from gpsTask() below.
+#if WIFI_GPS_TEST
+// GSV -> gps.cn0Top4 (wifitest.h). TinyGPSPlus parses only GGA and RMC, so
+// GSV is read here, from the same bytes. A second's GSV comes as one burst
+// of sentences (per constellation, 4 satellites each); a gap of more than
+// GSV_GAP_MS ends it. "$GPGSV,3,1,11,05,40,083,46,...*hh": the C/N0 is the
+// 4th field of each satellite's group of 4, from field 4 on.
+#define GSV_GAP_MS   300
+#define GSV_MAX_SATS 64
+static char     gsvLine[100];
+static uint8_t  gsvLen = 0;
+static bool     gsvIn = false;            // inside a $... line that fits
+static uint8_t  gsvCn0[GSV_MAX_SATS];
+static uint8_t  gsvN = 0;
+static uint32_t gsvLastMs = 0;            // 0 = none yet
+
+static void gsvBurstDone() {
+  // The four strongest, by a partial selection sort - 64 at most.
+  uint32_t sum = 0;
+  const uint8_t top = gsvN < 4 ? gsvN : 4;
+  for (uint8_t i = 0; i < top; i++) {
+    uint8_t best = i;
+    for (uint8_t j = i + 1; j < gsvN; j++) if (gsvCn0[j] > gsvCn0[best]) best = j;
+    const uint8_t t = gsvCn0[i]; gsvCn0[i] = gsvCn0[best]; gsvCn0[best] = t;
+    sum += gsvCn0[i];
+  }
+  gps.cn0Top4 = top ? (float)sum / top : 0.0f;
+  gps.cn0Sats = gsvN;
+  gsvN = 0;
+}
+
+static void gsvSentence(uint32_t now) {
+  // "$xxGSV," with a valid checksum, or nothing.
+  if (gsvLen < 10 || strncmp(gsvLine + 3, "GSV,", 4) != 0) return;
+  const char *star = (const char *)memchr(gsvLine, '*', gsvLen);
+  if (!star || star + 3 > gsvLine + gsvLen) return;
+  uint8_t x = 0;
+  for (const char *p = gsvLine + 1; p < star; p++) x ^= (uint8_t)*p;
+  if (x != (uint8_t)strtoul(star + 1, nullptr, 16)) return;
+
+  if (gsvN && now - gsvLastMs > GSV_GAP_MS) gsvBurstDone();
+  gsvLastMs = now ? now : 1;
+  // Field 7, 11, 15, 19: each group's C/N0, empty when not tracked. The
+  // NMEA 4.10 signal id after the last group is field 4 + 4k, never one.
+  int field = 0;
+  for (const char *p = gsvLine; p < star; p++) {
+    if (*p != ',') continue;
+    field++;
+    if (field >= 7 && (field - 7) % 4 == 0 && p[1] != ',' && p[1] != '*') {
+      const int v = atoi(p + 1);
+      if (v > 0 && gsvN < GSV_MAX_SATS) gsvCn0[gsvN++] = (uint8_t)v;
+    }
+  }
+}
+
+static void gsvFeed(int c, uint32_t now) {
+  if (c == '$') { gsvIn = true; gsvLen = 0; }
+  if (!gsvIn) return;
+  if (c == '\r' || c == '\n') {
+    gsvIn = false;
+    gsvLine[gsvLen] = '\0';                 // strtoul/atoi stop here
+    gsvSentence(now);
+    return;
+  }
+  if (gsvLen >= sizeof(gsvLine) - 1) { gsvIn = false; return; }   // not a GSV
+  gsvLine[gsvLen++] = (char)c;
+}
+
+// After the bytes: a burst that has ended, and none for 3 s = no figure.
+static void gsvAge(uint32_t now) {
+  if (gsvN && now - gsvLastMs > GSV_GAP_MS) gsvBurstDone();
+  if (gsvLastMs && now - gsvLastMs > 3000) { gps.cn0Top4 = 0.0f; gps.cn0Sats = 0; }
+}
+#endif
+
 static void gpsPoll() {
   // Raw dump of the first bytes we ever see. "Bytes arriving but nothing
   // parses" (wrong baud / noise) and "no bytes at all" (wiring, power, wrong
@@ -493,7 +572,13 @@ static void gpsPoll() {
       gps.sentences++;
       lastSentenceMs = millis() ? millis() : 1;
     }
+#if WIFI_GPS_TEST
+    gsvFeed(c, millis());
+#endif
   }
+#if WIFI_GPS_TEST
+  gsvAge(millis());
+#endif
 
   // The link is sentences arriving NOW, not ever. It used to be
   // "sentences > 0", so a module that died mid-drive never showed FAULT_GPS,

@@ -69,3 +69,7 @@ TODO-done.md
 # The WireGuard test's keys, network password and VPN address - never
 # published; secrets.example.h is the template.
 firmware/wgtest/secrets.h
+
+# The WiFi/GPS test build's hotspot password - the template is
+# wifitest_secrets.example.h.
+firmware/car_gauge_v1/wifitest_secrets.h
