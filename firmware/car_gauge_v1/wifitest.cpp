@@ -18,10 +18,20 @@
 
 WifiTestState wifitest = {};
 
+// One step each WIFI_TEST_STEP_MS, round and round from the first.
+struct WtStep { bool radio; bool send; wifi_power_t power; };
+static const WtStep WT_STEPS[] = {
+  {false, false, WIFI_POWER_19_5dBm},  // off: the baseline
+  {true,  false, WIFI_POWER_19_5dBm},  // joined, idle: about what the AP costs
+  {true,  true,  WIFI_POWER_8_5dBm},   // an upload, at a quarter of the power
+  {true,  true,  WIFI_POWER_2dBm},     // and at the least that still joins
+};
+static const uint8_t WT_NSTEPS = sizeof(WT_STEPS) / sizeof(WT_STEPS[0]);
+
 static bool     active = false;        // this test has the radio
-static bool     onHalf = false;
-static uint32_t halfStartMs = 0;
-static bool     joinedThisHalf = false;
+static uint8_t  step = 0;
+static uint32_t stepStartMs = 0;
+static bool     joinedThisSpell = false;
 static volatile uint32_t dstAddr = 0;  // the hotspot's address, network order
 static volatile bool senderIdle = true;
 static TaskHandle_t sender = nullptr;
@@ -71,19 +81,27 @@ static void radioOn() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(WT_SSID, WT_PASS);
   wifitest.phase = WT_JOINING;
-  joinedThisHalf = false;
+  joinedThisSpell = false;
   Serial.println(F("[..] wifitest: on - joining the hotspot"));
+}
+
+// The step's power, and the CSV's record of it - set again once joined, in
+// case the connect put its own back.
+static void setPower() {
+  WiFi.setTxPower(WT_STEPS[step].power);
+  wifitest.txQdbm = (int8_t)WiFi.getTxPower();
 }
 
 static void radioOff() {
   if (wifitest.phase == WT_OFF) return;
-  if (!joinedThisHalf) wifitest.joinFails++;
+  if (!joinedThisSpell) wifitest.joinFails++;
   wifitest.phase = WT_OFF;
   // The sender sees OFF within a pass of its loop and closes its socket.
   for (int i = 0; i < 10 && !senderIdle; i++) delay(5);
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   wifitest.rssi = 0;
+  wifitest.txQdbm = 0;
   Serial.println(F("[..] wifitest: off"));
 }
 
@@ -102,26 +120,31 @@ static void stop() {
 
 void wifitest_task(uint32_t now, bool driving) {
   if (!driving) { stop(); return; }
-  if (!active) {                       // a drive starts with an off half
+  if (!active) {                       // a drive starts with the off step
     active = true;
-    onHalf = false;
-    halfStartMs = now;
+    step = 0;
+    stepStartMs = now;
   }
-  if (now - halfStartMs >= WIFI_TEST_HALF_MS) {
-    halfStartMs = now;
-    onHalf = !onHalf;
-    if (onHalf) radioOn(); else radioOff();
+  if (now - stepStartMs >= WIFI_TEST_STEP_MS) {
+    stepStartMs = now;
+    step = (step + 1) % WT_NSTEPS;
+    if (!WT_STEPS[step].radio) radioOff();
+    else if (wifitest.phase == WT_OFF) radioOn();   // stays joined between on-steps
+    if (wifitest.phase != WT_OFF) setPower();
+    Serial.printf("[..] wifitest: step %u\n", step);
   }
   if (wifitest.phase == WT_OFF) return;
   const bool joined = WiFi.status() == WL_CONNECTED;
-  if (wifitest.phase == WT_JOINING && joined) {
-    dstAddr = (uint32_t)WiFi.gatewayIP();
-    if (!joinedThisHalf) wifitest.joins++;
-    joinedThisHalf = true;
-    wifitest.phase = WT_SENDING;
-    Serial.println(F("[..] wifitest: joined - sending"));
-  } else if (wifitest.phase == WT_SENDING && !joined) {
-    wifitest.phase = WT_JOINING;       // auto-reconnect is on
+  const uint8_t want = !joined ? WT_JOINING : WT_STEPS[step].send ? WT_SENDING : WT_IDLE;
+  if (want != wifitest.phase) {
+    if (wifitest.phase == WT_JOINING) {          // just joined
+      dstAddr = (uint32_t)WiFi.gatewayIP();
+      if (!joinedThisSpell) wifitest.joins++;
+      joinedThisSpell = true;
+      setPower();
+      Serial.println(F("[..] wifitest: joined"));
+    }
+    wifitest.phase = want;             // auto-reconnect is on, if it dropped
   }
   wifitest.rssi = joined ? (int8_t)WiFi.RSSI() : 0;
 }

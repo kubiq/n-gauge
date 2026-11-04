@@ -192,9 +192,11 @@ static const CsvCol COLS[] = {
   // so a card stall loses none - this says if one ever outlasted it.
   {"fixLost",    [](const CsvRow &) { put("%lu", (unsigned long)gpxlog_fixes_lost()); }},
 #if WIFI_GPS_TEST
-  // The WiFi/GPS test (wifitest.h): 0 radio off, 1 joining, 2 sending; what
-  // went out since the previous row; the hotspot's RSSI; the GNSS signal.
+  // The WiFi/GPS test (wifitest.h): 0 radio off, 1 joining, 2 sending,
+  // 3 joined and idle; the TX power; what went out since the previous row;
+  // the hotspot's RSSI; the GNSS signal.
   {"wtPhase",    [](const CsvRow &) { put("%u", wifitest.phase); }},
+  {"wtTxDbm",    [](const CsvRow &) { if (wifitest.txQdbm) put("%.1f", wifitest.txQdbm / 4.0f); }},
   {"wtKbps",     [](const CsvRow &r) {
     static uint32_t lastBytes = 0, lastMs = 0;
     const uint32_t b = wifitest.sentBytes;
