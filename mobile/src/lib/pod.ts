@@ -88,27 +88,6 @@ export async function getSettings(): Promise<PodSettings> {
   return (await call('/api/settings')).json();
 }
 
-/** A WiFi network the gauge saw while parked (netscan.h on the gauge). */
-export type SeenNetwork = {
-  ssid: string;
-  /** The best signal seen, dBm. */
-  rssi: number;
-  open: boolean;
-  /** How many scans it was in. */
-  count: number;
-  /** Epoch s of the last scan it was in; 0 if the gauge's clock was not set. */
-  lastSeen: number;
-};
-
-/** The networks seen while parked. Older firmware has no list: empty. */
-export async function getNetworks(): Promise<SeenNetwork[]> {
-  try {
-    return ((await (await call('/api/networks')).json()) as { networks: SeenNetwork[] }).networks;
-  } catch {
-    return [];
-  }
-}
-
 /** `body` from saveForm(). Returns the pod's message ("Saved." etc). */
 export async function saveSettings(body: string): Promise<string> {
   return (await postForm('/save', body)).text();

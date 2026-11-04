@@ -11,7 +11,6 @@
 #include "ui.h"             // ui_show_notice(), from loop() only - see postNotice
 #include "calc.h"           // calc_parse_range(), the form and multipart parsers
 #include "logcrypt.h"       // logcrypt_fingerprint(), for /api/settings
-#include "netscan.h"        // /api/networks: what it saw while parked
 #include "taskwdt.h"        // taskwdt_feed(): the server's task is not watched
 #include <sys/stat.h>       // stat(), for file sizes without opening them
 #include <dirent.h>         // readdir(): the card's names without a String each
@@ -1314,28 +1313,6 @@ static esp_err_t handlePortal(httpd_req_t *r, httpd_err_code_t) {
   return reply(r, 200, "text/html", body, (size_t)n);
 }
 
-// ---- the networks seen while parked (netscan.h) ---------------------------------
-// {"networks":[{"ssid":"...","rssi":-61,"open":false,"count":3,"lastSeen":1793634005}]}
-// For the app's list, to allow one for uploading the logs. lastSeen is epoch
-// s, 0 if the clock was not set at the scan.
-static esp_err_t handleNetworksJson(httpd_req_t *r) {
-  NetList l;
-  netscan_load(&l);
-  httpd_resp_set_type(r, "application/json");
-  chunk(r, "{\"networks\":[");
-  char b[160];
-  for (uint8_t i = 0; i < l.n; i++) {
-    const SeenNet &e = l.nets[i];
-    snprintf(b, sizeof(b), "%s{\"ssid\":\"%s\",\"rssi\":%d,\"open\":%s,\"count\":%u,\"lastSeen\":%lu}",
-             i ? "," : "", jsonEscape(e.ssid), e.rssi, e.open ? "true" : "false", (unsigned)e.count,
-             (unsigned long)e.lastSeen);
-    chunk(r, b);
-  }
-  chunk(r, "]}");
-  chunkEnd(r);
-  return ESP_OK;
-}
-
 // ---- up and down ---------------------------------------------------------------
 static bool startServer() {
   httpd_config_t c = HTTPD_DEFAULT_CONFIG();
@@ -1366,7 +1343,6 @@ static bool startServer() {
     {"/api/files",    HTTP_GET,  handleFilesJson,    nullptr},
     {"/dl",           HTTP_GET,  handleDownload,     nullptr},
     {"/api/delete",   HTTP_POST, handleDelete,       nullptr},
-    {"/api/networks", HTTP_GET,  handleNetworksJson, nullptr},
   };
   for (const httpd_uri_t &u : routes) httpd_register_uri_handler(httpd, &u);
   httpd_register_err_handler(httpd, HTTPD_404_NOT_FOUND, handlePortal);

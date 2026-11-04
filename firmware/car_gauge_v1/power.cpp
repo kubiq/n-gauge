@@ -32,7 +32,6 @@
 
 #include "bsp.h"          // bsp_prepare_sleep()
 #include "gps.h"          // gps_park()
-#include "netscan.h"      // netscan_parked(): before the sleep after a drive
 #include "ui.h"           // ui_show_notice(): the sleep reason, on the panel
 #include "settings.h"     // settings_log_sleep(): the sleep reason, in NVS
 #include "ota.h"          // ota_confirm(): a wake is a reboot
@@ -476,9 +475,6 @@ void power_task() {
   // out at the top of this pass. These decided here, one by one, until then;
   // the state was checked against them first, on real drives - it would have
   // slept at the same second.
-  if (podstate().sleepOk) {
-    netscan_parked();         // the networks around where it parked (netscan.h)
-    goToSleep();
-  }
+  if (podstate().sleepOk) goToSleep();
 #endif
 }

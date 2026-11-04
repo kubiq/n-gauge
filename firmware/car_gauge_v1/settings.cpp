@@ -202,6 +202,22 @@ void settings_load() {
   }
 
   settings_apply_tz();
+
+  // The networks seen while parked (2026-11-02..04, then dropped for the
+  // phone's hotspot): their names, which can place home and work, stayed in
+  // NVS under "netscan", key "seen". Wiped once - opened read-only first,
+  // because a writable open would create the namespace on a board that
+  // never had it.
+  Preferences scan;
+  if (scan.begin("netscan", /*readOnly=*/true)) {
+    const bool had = scan.isKey("seen");
+    scan.end();
+    if (!had) return;
+    scan.begin("netscan", /*readOnly=*/false);
+    scan.clear();
+    scan.end();
+    Serial.println(F("[OK] wiped the old parked-WiFi list"));
+  }
 }
 
 void settings_save() {
