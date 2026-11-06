@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, Note, Row, useUi } from '@/components/ui';
+import { useSync } from '@/hooks/use-sync';
 import { N_, t } from '@/i18n';
 import { shortWhen } from '@/lib/format';
 import { loadHome, saveHome } from '@/lib/home';
@@ -22,6 +23,11 @@ import { S, themed, useColors } from '@/theme';
 // English in every language - they are the words the router's own page
 // and WireGuard use, to be matched against them.
 type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'upMaxMin' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr';
+// Saved this long after the last keystroke - longer than the switches'
+// second on the rest of the screen: these are typed, keys pasted, a pause
+// mid-password should not send half of it (it would, harmlessly, and the
+// rest a moment later).
+const SAVE_AFTER_MS = 1500;
 type FieldDef = {
   key: Field;
   label: string;
@@ -77,6 +83,9 @@ export function UploadCard() {
   // Whether the phone has the server's token (home.ts) - it is set here,
   // once, beside the gauge's: the gauge never gives it back.
   const [phoneToken, setPhoneToken] = useState(true);
+  // A save stops a running sync first and starts it again after, as the
+  // rest of Gauge settings: the gauge serves one request at a time.
+  const sync = useSync();
 
   // The phone pulls from the same server (home.ts, by itself), so what
   // is set here is the phone's too - set in one place. The address comes
@@ -95,11 +104,6 @@ export function UploadCard() {
     setUp(u);
     if (u) setForm(fromPod(u));
   };
-  const load = async (token = '') => {
-    const u = await getUpload();
-    apply(u);
-    if (u) await toPhone(u, token);
-  };
   useEffect(() => {
     let live = true;
     getUpload().then((u) => {
@@ -112,28 +116,56 @@ export function UploadCard() {
     };
   }, []);
 
-  if (up === undefined) return null;
-  if (up === null || !form) return null; // older firmware: no upload
-
-  const was = fromPod(up);
-  const changed = (Object.keys(form) as Field[]).filter((k) => form[k] !== was[k]);
+  // Saved by themselves (asked 2026-11-06), as the rest of Gauge settings:
+  // SAVE_AFTER_MS after the last keystroke, the fields changed, in one /save.
+  // The gauge saves every value (cleaned up: http://, /32, host:port) and
+  // says what still looks wrong. What was sent then shows as the gauge holds
+  // it (the password and token cleared - "set"); a field typed in meanwhile
+  // stays as typed, for the next save.
+  const changed: Field[] =
+    up && form ? (Object.keys(form) as Field[]).filter((k) => form[k] !== fromPod(up)[k]) : [];
   const save = async () => {
+    if (!form) return;
+    const sent: Partial<Record<Field, string>> = {};
+    for (const k of changed) sent[k] = form[k];
     setBusy(true);
     setMsg(null);
     try {
+      await sync.cancel();                      // the gauge serves one request at a time
       const body = changed.map((k) => `${k}=${encodeURIComponent(form[k].trim())}`).join('&');
       const said = await saveSettings(body);
       setMsg(said);
-      // The gauge saves every value (cleaned up: http://, /32, host:port)
-      // and says what still looks wrong - so the form shows what it holds.
-      // Any other answer leaves the form as typed, nothing to type again.
-      if (said.startsWith('Saved')) await load(form.upToken.trim());
+      if (said.startsWith('Saved')) {
+        const u = await getUpload();
+        setUp(u);
+        if (u) {
+          const held = fromPod(u);
+          setForm((f) => {
+            if (!f) return f;
+            const next = { ...f };
+            for (const k of Object.keys(sent) as Field[]) if (next[k] === sent[k]) next[k] = held[k];
+            return next;
+          });
+          await toPhone(u, (sent.upToken ?? '').trim());
+        }
+      }
     } catch (e) {
       setMsg(String(e));
     } finally {
       setBusy(false);
+      sync.sync();
     }
   };
+  // Re-run on every keystroke, so the timer holds this render's save().
+  const changeKey = form ? JSON.stringify(changed.map((k) => [k, form[k]])) : '';
+  useEffect(() => {
+    if (!changed.length || busy) return;
+    const timer = setTimeout(save, SAVE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [changeKey, busy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (up === undefined) return null;
+  if (up === null || !form) return null; // older firmware: no upload
   const copyKey = async () => {
     await Clipboard.setStringAsync(up.wgPub);
     setCopied(true);
@@ -208,10 +240,14 @@ export function UploadCard() {
         <Note tone="bad">{t('Type the token once more, for the phone: the gauge never gives it back.')}</Note>
       ) : null}
 
-      <Button title={changed.length ? t('Save') : t('No changes')} disabled={!changed.length} busy={busy} onPress={save} />
-      {/* The gauge's own words, in English like its other answers. */}
-      {/* "Saved, but ...": saved all the same - the note says what to look at. */}
-      {msg ? <Note tone={msg === 'Saved.' ? 'good' : 'bad'}>{msg}</Note> : null}
+      {/* Saved by themselves. The gauge's own words, in English like its
+          other answers; "Saved, but ...": saved all the same - the note
+          says what to look at. */}
+      {busy || changed.length ? (
+        <Note>{t('Saving…')}</Note>
+      ) : msg ? (
+        <Note tone={msg === 'Saved.' ? 'good' : 'bad'}>{msg}</Note>
+      ) : null}
     </Card>
   );
 }

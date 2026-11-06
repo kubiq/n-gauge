@@ -41,8 +41,6 @@ export const gauge: Record<string, string> = {
   'The settings are read from the gauge itself - it must be awake (car on, or a door opened). Meanwhile the phone has no internet.':
     'Nastavení se čte přímo z budíku - ten musí být vzhůru (auto nastartované, nebo otevřené dveře). Telefon mezitím nemá internet.',
   'Reading the gauge’s settings…': 'Načítám nastavení budíku…',
-  'Save 1 change|Save {n} changes': 'Uložit {n} změnu|Uložit {n} změny|Uložit {n} změn',
-  'No changes': 'Žádné změny',
   'Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.':
     'Vyberte soubor car_gauge_v1 .bin v telefonu. Pokud nová verze selže, budík se sám vrátí k předchozí.',
   'Update firmware': 'Aktualizovat firmware',

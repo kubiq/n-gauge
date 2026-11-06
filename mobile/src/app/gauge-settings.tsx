@@ -9,7 +9,7 @@ import { UploadCard } from '@/components/upload-card';
 import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
-import { N_, t, tn } from '@/i18n';
+import { N_, t } from '@/i18n';
 import { getLive, getSettings, type PodLive, saveSettings, setClock, uploadFirmware, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
 import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
@@ -18,6 +18,9 @@ import { setMph } from '@/lib/units';
 import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
+// A change goes to the gauge this long after the last one: switches flipped
+// together, a number typed digit by digit, go as one save.
+const SAVE_AFTER_MS = 1000;
 
 // The gauge's own screen, from the main ⋮ (under Settings, which is the
 // phone's): setting it up, its settings and screen order, its firmware and
@@ -122,30 +125,56 @@ export default function GaugeSettingsScreen() {
   const viewsChanged = views !== null && !!orig?.views && views !== orig.views;
   const nChanged = Object.keys(changes).length + (viewsChanged ? 1 : 0);
 
-  // The gauge's answer to the last save, shown under the button: a quiet
-  // line for "Saved.", not an alert to tap away. Errors still alert.
+  // The gauge's answer to the last save, a quiet line under the settings:
+  // "Saved.", or what went wrong.
   const [saved, setSaved] = useState<string | null>(null);
 
   // The pod serves one request at a time, and a download holds it for up to
   // two minutes: a running sync is stopped first, and picked up again after.
   const sync = useSync();
 
+  // Saved by themselves (asked 2026-11-06), no Save button: SAVE_AFTER_MS
+  // after the last change, everything changed and valid in one /save - a
+  // number still being typed, or out of range, waits (it is marked). What
+  // was sent leaves the edits once the gauge has it; anything changed
+  // meanwhile stays, and goes with the next save.
   const save = async () => {
+    const sent = { ...changes };
+    const sentViews = viewsChanged ? views : null;
     setBusy('save');
     setSaved(null);
     try {
       await sync.cancel();
-      const body = [saveForm(changes), viewsChanged ? `views=${views}` : ''].filter(Boolean).join('&');
+      const body = [saveForm(sent), sentViews ? `views=${sentViews}` : ''].filter(Boolean).join('&');
       setSaved(await saveSettings(body));
-      setViews(null);
-      await load();
+      const s = await getSettings();
+      setOrig(s);
+      if (typeof s.mph === 'boolean') setMph(s.mph);
+      setEdit((e) => {
+        const left = { ...e };
+        for (const k of Object.keys(sent)) {
+          const v = left[k];
+          const now = typeof v === 'boolean' ? v : Number(String(v).replace(',', '.'));
+          if (now === sent[k]) delete left[k];
+        }
+        return left;
+      });
+      if (sentViews) setViews((v) => (v === sentViews ? null : v));
     } catch (e) {
-      Alert.alert(t('Settings'), String((e as Error).message));
+      setSaved(String((e as Error).message));
     } finally {
       setBusy(null);
       sync.sync();
     }
   };
+  // Re-run on every change (changeKey), so the timer holds this render's
+  // save() - the changes as they are now.
+  const changeKey = JSON.stringify([changes, viewsChanged ? views : null]);
+  useEffect(() => {
+    if (!nChanged || busy) return;
+    const timer = setTimeout(save, SAVE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [changeKey, nChanged, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const firmware = async () => {
     const r = await File.pickFileAsync({ mimeTypes: ['application/octet-stream'] });
@@ -249,13 +278,12 @@ export default function GaugeSettingsScreen() {
       {orig ? (
         <>
           {problems.length ? <Note tone="bad">{problems.join('\n')}</Note> : null}
-          <Button
-            title={nChanged ? tn(nChanged, 'Save 1 change', 'Save {n} changes') : t('No changes')}
-            disabled={!nChanged || problems.length > 0}
-            busy={busy === 'save'}
-            onPress={save}
-          />
-          {saved && !nChanged ? <Note tone={saved.startsWith('Saved') ? 'good' : 'bad'}>{saved}</Note> : null}
+          {/* Saved by themselves; the gauge's answer, or that it is going. */}
+          {busy === 'save' || nChanged ? (
+            <Note>{t('Saving…')}</Note>
+          ) : saved ? (
+            <Note tone={saved.startsWith('Saved') ? 'good' : 'bad'}>{saved}</Note>
+          ) : null}
         </>
       ) : null}
       <Card title={t('Actions')}>
