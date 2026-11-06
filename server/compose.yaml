@@ -1,6 +1,11 @@
-# docker compose up -d --build. The token in .env (UPLOAD_TOKEN=...), not here:
-# this file is public. The folder ./data holds the uploads, as the gauge
-# wrote them (encrypted to the phone's key).
+# docker compose up -d --build. Settings in .env, not here - this file is
+# public:
+#   UPLOAD_TOKEN=...            required, the gauge's token
+#   UPLOAD_DATA=/storage/gauge  where the uploads go (default ./data) - as the
+#                               gauge wrote them, encrypted to the phone's key.
+#                               It must exist and be writable by uid 1000 (the
+#                               container's user): a folder Docker creates for
+#                               a missing path is root's, and the uploads fail.
 services:
   n-gauge-upload:
     build: .
@@ -10,4 +15,4 @@ services:
     environment:
       UPLOAD_TOKEN: ${UPLOAD_TOKEN:?set UPLOAD_TOKEN in .env}
     volumes:
-      - ./data:/data
+      - ${UPLOAD_DATA:-./data}:/data

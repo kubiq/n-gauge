@@ -18,9 +18,11 @@ docker compose up -d --build
 curl http://localhost:8650/health        # ok
 ```
 
-The uploads go to `server/data/`. The gauge needs the same token, and the
+The uploads go to `server/data/`, or wherever `UPLOAD_DATA` in `.env` says
+(`UPLOAD_DATA=/storage/gauge`) - a folder that exists and that uid 1000, the
+container's user, can write. The gauge needs the same token, and the
 service's address as seen from inside the tunnel, such as
-`http://192.168.1.10:8650`.
+`http://gauge.example.org` behind a proxy or `http://192.168.1.10:8650`.
 
 Without Docker: `UPLOAD_TOKEN=... python3 upload_server.py` (standard library
 only; `UPLOAD_DIR`, `UPLOAD_PORT` and `UPLOAD_BIND` set the rest).
