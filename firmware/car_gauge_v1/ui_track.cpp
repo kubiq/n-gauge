@@ -126,6 +126,8 @@ lv_obj_t *ui_build_track() {
   lv_obj_set_style_text_font(trkDelta, &lv_font_montserrat_48, 0);
   lv_obj_add_flag(trkDelta, LV_OBJ_FLAG_HIDDEN);
   trkCurrent = make_big_label(s, COL_INK, -72);
+  // 72 px, not the other screens' 96: "1:23.4" at 96 would not fit the ring.
+  lv_obj_set_style_text_font(trkCurrent, &font_big_72, 0);
   trkLast    = make_tyre_val(s, 0, -14);
   trkBest    = make_tyre_val(s, 0, 24);
   lv_obj_set_style_text_color(trkBest, COL_GOOD, 0);

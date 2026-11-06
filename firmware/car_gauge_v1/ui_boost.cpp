@@ -19,7 +19,7 @@ lv_obj_t *ui_build_boost() {
   // value past the end to the end.
   boostArc = make_arc(s, COL_BLUE, 0, (int)(BOOST_ARC_MAX_BAR * 100.0f + 0.5f));
   torqueArc = make_arc_sized(s, COL_INK, 0, TORQUE_ARC_MAX_NM, RING_INNER_PX, RING_INNER_W);
-  torqueVal = make_tyre_val(s, 0, 84);        // 28px, under "bar"
+  torqueVal = make_tyre_val(s, 0, 90);        // 28px, under "bar"
   // Accelerator pedal: a short bar in the open bottom quarter both arcs
   // leave (their ends sit ~148 px below centre, so 175 clears them and stays
   // inside the round panel).
@@ -36,10 +36,11 @@ lv_obj_t *ui_build_boost() {
   lv_obj_clear_flag(pedalBar, LV_OBJ_FLAG_CLICKABLE);
   // Turbo symbol beside the number, like the oil screen. The unit stays as a
   // caption: unlike a temperature, "1.23" does not say what it is in.
-  lv_obj_t *boostRow = make_icon_row(s, -10, &icon_turbo, &boostIcon);
+  // The number 96 px since 2026-11-06: the row up, "bar" and the torque down.
+  lv_obj_t *boostRow = make_icon_row(s, -22, &icon_turbo, &boostIcon);
   boostVal = make_big_label(boostRow, COL_BLUE, 0);
   fix_value_width(boostVal, "8.88");                // ui_update_boost clamps < 0 to 0
-  make_name(s, "bar", 40);
+  make_name(s, "bar", 36);
   return s;
 }
 

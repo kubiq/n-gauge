@@ -32,10 +32,13 @@ lv_obj_t *ui_build_temps() {
   // Each reading is its dashboard symbol beside the number, in place of the
   // old "OIL / COOLANT" caption - the same symbols as the car's own warning
   // lights, so they need no reading. Coloured by state in the updaters.
-  lv_obj_t *oilRow  = make_icon_row(s, -34, &icon_oil,     &oilIcon);
-  lv_obj_t *coolRow = make_icon_row(s,  16, &icon_coolant, &coolIcon);
+  // The numbers 96 and 48 px since 2026-11-06 (were 48 and 28): the rows
+  // further apart for them.
+  lv_obj_t *oilRow  = make_icon_row(s, -46, &icon_oil,     &oilIcon);
+  lv_obj_t *coolRow = make_icon_row(s,  40, &icon_coolant, &coolIcon);
   oilVal   = make_big_label(oilRow, COL_OIL, 0);
-  coolVal  = make_tyre_val(coolRow, 0, 0);          // 28px label, reused
+  coolVal  = make_tyre_val(coolRow, 0, 0);
+  lv_obj_set_style_text_font(coolVal, &lv_font_montserrat_48, 0);
   lv_obj_set_style_text_color(coolVal, COL_BLUE, 0);
   fix_value_width(oilVal,  "888\xC2\xB0");          // widest: three digits + degree
   // One column (2026-10-09): each row is centred on its own, and the coolant
@@ -49,17 +52,18 @@ lv_obj_t *ui_build_temps() {
   make_sliding(oilVal);
   make_sliding(coolVal);
   // And the same size: the two symbols are different artwork, 58x46 (oil)
-  // and 43x40 (coolant). Each goes in a 50x40 box, the oil one scaled to the
-  // coolant one's height, both centred in it.
-  lv_image_set_scale(oilIcon, 256 * 40 / 46);       // -> ~50x40
+  // and 43x40 (coolant). Each goes in a 66x52 box, both scaled to 52 high
+  // (beside the bigger numbers since 2026-11-06; it was 50x40), centred.
+  lv_image_set_scale(oilIcon, 256 * 52 / 46);       // -> ~66x52
+  lv_image_set_scale(coolIcon, 256 * 52 / 40);      // -> ~56x52
   lv_obj_t *const tempIcons[] = { oilIcon, coolIcon };
   for (lv_obj_t *ic : tempIcons) {
-    lv_obj_set_size(ic, 50, 40);
+    lv_obj_set_size(ic, 66, 52);
     lv_image_set_inner_align(ic, LV_IMAGE_ALIGN_CENTER);
   }
   // One state line for both: coolant has none of its own - an over-temp
   // coolant shows as a red inner arc, and this line carries the wording.
-  oilState = make_name(s, "", 84);
+  oilState = make_name(s, "", 104);
   return s;
 }
 

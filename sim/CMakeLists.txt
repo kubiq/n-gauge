@@ -25,7 +25,7 @@ target_include_directories(lvgl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRE
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 target_link_libraries(lvgl PUBLIC ${SDL2_LIBRARIES})
 
-file(GLOB FW_IMAGES ${FW}/*_img.c ${FW}/icon_*.c)
+file(GLOB FW_IMAGES ${FW}/*_img.c ${FW}/icon_*.c ${FW}/font_*.c)
 # The UI is ui.cpp plus one ui_<part>.cpp per screen (see ui_priv.h).
 # CONFIGURE_DEPENDS so a new screen file is picked up without a re-run of cmake.
 file(GLOB FW_UI CONFIGURE_DEPENDS ${FW}/ui.cpp ${FW}/ui_*.cpp)

@@ -77,7 +77,9 @@ lv_obj_t* make_arc(lv_obj_t *parent, lv_color_t c, int min, int max) {
 lv_obj_t* make_big_label(lv_obj_t *parent, lv_color_t c, int dy) {
   lv_obj_t *l = lv_label_create(parent);
   lv_obj_set_style_text_color(l, c, 0);
-  lv_obj_set_style_text_font(l, &lv_font_montserrat_48, 0);  // enable in lv_conf.h
+  // 96 px since 2026-11-06 (asked: "much larger"), twice the 48 it was -
+  // digits and " +-.:°" only (ui_priv.h). The lap time sets font_big_72.
+  lv_obj_set_style_text_font(l, &font_big_96, 0);
   lv_label_set_text(l, "--");
   lv_obj_align(l, LV_ALIGN_CENTER, 0, dy);
   return l;

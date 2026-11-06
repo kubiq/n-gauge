@@ -22,6 +22,12 @@
 #include "config.h"
 #include "lvgl.h"
 
+// The big numbers, bigger than LVGL's largest built-in Montserrat (48 px):
+// font_big_96.c (oil, boost, GPS speed) and font_big_72.c (the lap time).
+// Digits and " +-.:°" only - anything else would not draw.
+LV_FONT_DECLARE(font_big_96);
+LV_FONT_DECLARE(font_big_72);
+
 // palette (matches the guide's instrument look)
 #define COL_BG      lv_color_hex(0x0d1116)
 #define COL_OIL     lv_color_hex(0xE8A33D)

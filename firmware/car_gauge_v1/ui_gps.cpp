@@ -20,16 +20,17 @@ lv_obj_t *ui_build_gps() {
   lv_obj_t *s = make_screen();
   // Satellite beside the speed: says "this is GPS speed" in place of the old
   // "(GPS)", and its colour is the fix state at a glance.
-  lv_obj_t *gpsRow = make_icon_row(s, -10, &icon_sat, &gpsIcon);
+  // The number 96 px since 2026-11-06: the row up, the lines under it down.
+  lv_obj_t *gpsRow = make_icon_row(s, -22, &icon_sat, &gpsIcon);
   gpsSpeed = make_big_label(gpsRow, COL_GOOD, 0);
   fix_value_width(gpsSpeed, "888");
   make_sliding(gpsSpeed);                // faster: in from below; slower: from above
-  gpsUnit = make_name(s, "km/h", 40);
-  gpsState = make_name(s, "", 80);
+  gpsUnit = make_name(s, "km/h", 36);
+  gpsState = make_name(s, "", 82);
   // Below the fix state rather than beside the speed: at 466 px the speed is
   // already the full chord width, and crowding a second number next to it
   // would shrink both.
-  gpsTrip  = make_tyre_val(s, 0, 120);
+  gpsTrip  = make_tyre_val(s, 0, 124);
   return s;
 }
 

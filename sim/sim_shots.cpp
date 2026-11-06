@@ -35,11 +35,16 @@ static bool cornering() { return std::fabs(simImu[1]) > 0.8f; }
 // The over-temperature warning, on the track screen: the made-up session's
 // oil passes the gauge's warning in its last laps, so this one waits longer.
 static bool oilHot() { return obd.haveOil && obd.oilTempC >= settings.oilWarnC + 2; }
+// Between two slides of the GPS speed: a new number slides in over the old
+// one, and a still frame mid-slide shows half of each - the 96 px digits
+// (2026-11-06) made that plain. At the replay's speed the number never
+// holds still for long, so: the moment no animation is running.
+static bool notSliding() { return lv_anim_count_running() == 0; }
 struct Shot { const char *name; GaugeView view; bool (*ready)(); uint32_t giveUpMs; };
 static const Shot SHOTS[] = {
     {"oil", VIEW_OIL, anytime, 30000},       {"boost", VIEW_BOOST, boosting, 30000},
     {"gmeter", VIEW_GMETER, cornering, 30000}, {"tyres", VIEW_TPMS, anytime, 30000},
-    {"gps", VIEW_GPS, anytime, 30000},       {"track", VIEW_TRACK, anytime, 30000},
+    {"gps", VIEW_GPS, notSliding, 30000},    {"track", VIEW_TRACK, anytime, 30000},
     {"oilhot", VIEW_TRACK, oilHot, 300000},
 };
 static const uint32_t SETTLE_MS = 1500;    // after switching: values, the g-meter's trail
