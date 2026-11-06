@@ -158,7 +158,9 @@ export function UploadCard() {
   return (
     <Card title={t('Upload to the home server')}>
       <Note>
-        {t('As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the logs the server lacks.')}
+        {t(
+          'As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the new logs to the server. The phone then syncs them from the server by itself whenever it can reach it - at home on WiFi, or with its own VPN on - so the drives reach the phone without connecting to the gauge.',
+        )}
       </Note>
       {last.at || last.msg ? (
         <Row
@@ -193,7 +195,11 @@ export function UploadCard() {
 
       <Text style={styles.section}>{t('Upload server')}</Text>
       {SERVER.map((f) => input(f, t(f.label)))}
-      <Note>{t('The server at home, as seen through the VPN (server/README.md). The phone pulls the drives from it too.')}</Note>
+      <Note>
+        {t(
+          'The server at home, as the gauge reaches it through the VPN. The phone syncs the drives from the same address with the same token - set here once, for both.',
+        )}
+      </Note>
       {up.tokenSet && !phoneToken ? (
         <Note tone="bad">{t('Type the token once more, for the phone: the gauge never gives it back.')}</Note>
       ) : null}
