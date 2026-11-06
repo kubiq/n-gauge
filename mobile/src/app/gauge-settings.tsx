@@ -274,12 +274,14 @@ export default function GaugeSettingsScreen() {
         />
         {done ? <Note tone="good">{done}</Note> : null}
       </Card>
+      <UploadCard />
+      {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
+      {/* Last (asked 2026-11-06): not the first thing passed on the way to
+          the other cards. */}
       <Card title={t('Firmware')}>
         <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
-      <UploadCard />
-      {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
       {another}
     </Screen>
   );
