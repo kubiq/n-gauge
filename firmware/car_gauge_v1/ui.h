@@ -91,13 +91,18 @@ enum UiFault : uint8_t {
   FAULT_SD       = 1u << 4,   // no SD card: nothing is being logged           (amber)
   FAULT_SD_WRITE = 1u << 5,   // a card, but a log could not be opened on it -
                               // full or failing (logger_write_failed)       (amber)
+  // Not a fault: a phone is on the gauge's WiFi (asked 2026-10-18) - seen
+  // from whichever screen is up, as a sync or a settings change is going
+  // on. Last, so any real fault wins the text and the rim's colour.  (blue)
+  FAULT_PHONE    = 1u << 6,
 };
-#define FAULT_COUNT 6   // bits in UiFault - the notice's text table has one each
+#define FAULT_COUNT 7   // bits in UiFault - the notice's text table has one each
 // A fault added without raising FAULT_COUNT would have no text, and its bit
 // would never be found by the notice (ui_notice.cpp).
-static_assert(FAULT_SD_WRITE == 1u << (FAULT_COUNT - 1), "FAULT_COUNT is the last bit + 1");
-// The faults shown red; the rest are amber.
+static_assert(FAULT_PHONE == 1u << (FAULT_COUNT - 1), "FAULT_COUNT is the last bit + 1");
+// The faults shown red; the calm notices (blue) - the rest are amber.
 #define FAULTS_RED (FAULT_OIL_HOT | FAULT_COOL_HOT | FAULT_CAN)
+#define FAULTS_CALM (FAULT_PHONE)
 
 // Show the given faults (a mask of UiFault), with the temperatures the hot
 // ones name. Safe to call every loop: it compares before touching anything,

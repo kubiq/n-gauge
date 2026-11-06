@@ -205,6 +205,7 @@ static void noticeRedraw() {
     "no GPS module",                      // FAULT_GPS
     "no SD card - not logging",           // FAULT_SD
     "SD card full or failing",            // FAULT_SD_WRITE
+    "phone connected",                    // FAULT_PHONE
   };
   static_assert(sizeof(text) / sizeof(text[0]) == FAULT_COUNT, "one text per UiFault bit");
   // Bounded: a selection with no bit the table knows - none should reach
@@ -233,17 +234,21 @@ static void noticeRedraw() {
   // gauge cannot do its job" (no bus, no readings), amber for "degraded" (it
   // still shows everything, but a log or a feature is missing). Otherwise a
   // missing SD card would look exactly as alarming as losing the bus.
-  static int rimRed = -1, txtRed = -1;      // -1: never drawn
-  const int rimNowRed = (noticeShown & FAULTS_RED) ? 1 : 0;
-  const int txtNowRed = (noticeSel   & FAULTS_RED) ? 1 : 0;
-  if (rimNowRed != rimRed) {
-    rimRed = rimNowRed;
-    lv_style_set_line_color(&rimStyle, rimNowRed ? COL_BAD : COL_WARN);
+  // And blue for what is no fault at all (FAULTS_CALM: a phone connected),
+  // only when nothing else is up - so it is never read as one.
+  static int rimLevel = -1, txtLevel = -1;  // 2 red, 1 amber, 0 blue; -1 never drawn
+  auto level = [](uint8_t m) { return (m & FAULTS_RED) ? 2 : (m & ~FAULTS_CALM) ? 1 : 0; };
+  static const lv_color_t colour[] = {COL_BLUE, COL_WARN, COL_BAD};
+  const int rimNow = level(noticeShown);
+  const int txtNow = level(noticeSel);
+  if (rimNow != rimLevel) {
+    rimLevel = rimNow;
+    lv_style_set_line_color(&rimStyle, colour[rimNow]);
     lv_obj_report_style_change(&rimStyle);  // all RIM_SEG segments at once
   }
-  if (txtNowRed != txtRed) {
-    txtRed = txtNowRed;
-    lv_obj_set_style_text_color(noticeText, txtNowRed ? COL_BAD : COL_WARN, 0);
+  if (txtNow != txtLevel) {
+    txtLevel = txtNow;
+    lv_obj_set_style_text_color(noticeText, colour[txtNow], 0);
   }
   char line[56];
   if (count > 1) snprintf(line, sizeof(line), "%s  %d/%d", what, pos, count);

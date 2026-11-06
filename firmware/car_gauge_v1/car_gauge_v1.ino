@@ -347,6 +347,8 @@ static void bootSplashTask(uint32_t now, bool canGrace) {
 // lent to a PC is not missing, the WiFi screen says so; a card failing.
 static void faultsTask() {
   uint8_t faults = podstate().faults;
+  // And a phone on the WiFi, in blue below any fault (ui.h, FAULT_PHONE).
+  if (web_clients() > 0) faults |= FAULT_PHONE;
   if (bench_no_rim()) faults = 0;
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }
