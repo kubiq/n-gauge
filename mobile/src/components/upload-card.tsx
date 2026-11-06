@@ -77,7 +77,7 @@ export function UploadCard() {
   // once, beside the gauge's: the gauge never gives it back.
   const [phoneToken, setPhoneToken] = useState(true);
 
-  // The phone pulls from the same server (Settings > Home server), so what
+  // The phone pulls from the same server (home.ts, by itself), so what
   // is set here is the phone's too - set in one place. The address comes
   // from the gauge each time; the token only when typed here, as the gauge
   // never gives it back. `token`: just typed, or '' to keep the phone's.
