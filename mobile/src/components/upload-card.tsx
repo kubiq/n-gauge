@@ -14,16 +14,37 @@ import { S, themed, useColors } from '@/theme';
 // tunnel - the gauge makes its own key, and its public half goes on the
 // router as a peer. The password and token are never read back: an empty
 // field leaves them as they are.
+//
+// In three sections, as the way goes: the phone's hotspot, the WireGuard
+// VPN through the router, the upload server at home. The VPN's words stay
+// English in every language - they are the words the router's own page
+// and WireGuard use, to be matched against them.
 type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr';
-const FIELDS: { key: Field; label: string; secret?: boolean; hint?: string; numeric?: boolean }[] = [
-  { key: 'upSsid', label: N_('Hotspot name') },
-  { key: 'upPass', label: N_('Hotspot password'), secret: true },
-  { key: 'upUrl', label: N_('Server'), hint: 'http://192.168.1.10:8650' },
-  { key: 'upToken', label: N_('Server token'), secret: true },
-  { key: 'wgHost', label: N_('Router address'), hint: 'vpn.example.org' },
-  { key: 'wgPort', label: N_('Router port'), numeric: true },
-  { key: 'wgPeer', label: N_('Router public key') },
-  { key: 'wgAddr', label: N_('Gauge’s tunnel address'), hint: '10.0.0.7' },
+type FieldDef = {
+  key: Field;
+  label: string;
+  secret?: boolean;
+  hint?: string;
+  numeric?: boolean;
+};
+const HOTSPOT: FieldDef[] = [
+  { key: 'upSsid', label: N_('Name') },
+  { key: 'upPass', label: N_('Password'), secret: true },
+];
+// Not translated (above).
+const VPN: FieldDef[] = [
+  {
+    key: 'wgHost',
+    label: 'Endpoint (router address)',
+    hint: 'vpn.example.org',
+  },
+  { key: 'wgPort', label: 'Endpoint port', numeric: true },
+  { key: 'wgPeer', label: 'Router public key' },
+  { key: 'wgAddr', label: 'Gauge address in the tunnel', hint: '10.0.0.7' },
+];
+const SERVER: FieldDef[] = [
+  { key: 'upUrl', label: N_('Address'), hint: 'http://192.168.1.10:8650' },
+  { key: 'upToken', label: N_('Token'), secret: true },
 ];
 
 function fromPod(u: PodUpload): Record<Field, string> {
@@ -63,7 +84,7 @@ export function UploadCard() {
   }, []);
 
   if (up === undefined) return null;
-  if (up === null || !form) return null;        // older firmware: no upload
+  if (up === null || !form) return null; // older firmware: no upload
 
   const was = fromPod(up);
   const changed = (Object.keys(form) as Field[]).filter((k) => form[k] !== was[k]);
@@ -89,11 +110,30 @@ export function UploadCard() {
     setCopied(true);
   };
 
+  const input = (f: FieldDef, label: string) => (
+    <View key={f.key} style={styles.field}>
+      <Text style={ui.rowLabel}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={form[f.key]}
+        onChangeText={(v) => setForm({ ...form, [f.key]: v })}
+        placeholder={
+          f.secret ? ((f.key === 'upPass' ? up.passSet : up.tokenSet) ? t('set - type to change') : t('not set')) : f.hint
+        }
+        placeholderTextColor={C.dim}
+        secureTextEntry={f.secret}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={f.numeric ? 'number-pad' : 'default'}
+      />
+    </View>
+  );
+
   const last = up.last;
   return (
     <Card title={t('Upload to the home server')}>
       <Note>
-        {t('As the car starts, the gauge joins this hotspot, opens a WireGuard tunnel home and uploads the logs the server lacks.')}
+        {t('As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the logs the server lacks.')}
       </Note>
       {last.at || last.msg ? (
         <Row
@@ -112,45 +152,28 @@ export function UploadCard() {
       ) : (
         <Row label={t('Last upload')} value={up.configured ? t('none since it woke') : t('not set up')} tone="dim" />
       )}
-      {FIELDS.map((f) => (
-        <View key={f.key} style={styles.field}>
-          <Text style={ui.rowLabel}>{t(f.label)}</Text>
-          <TextInput
-            style={styles.input}
-            value={form[f.key]}
-            onChangeText={(v) => setForm({ ...form, [f.key]: v })}
-            placeholder={
-              f.secret
-                ? (f.key === 'upPass' ? up.passSet : up.tokenSet)
-                  ? t('set - type to change')
-                  : t('not set')
-                : f.hint
-            }
-            placeholderTextColor={C.dim}
-            secureTextEntry={f.secret}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType={f.numeric ? 'number-pad' : 'default'}
-          />
-        </View>
-      ))}
-      <Button
-        title={changed.length ? t('Save') : t('No changes')}
-        disabled={!changed.length}
-        busy={busy}
-        onPress={save}
-      />
-      {/* The gauge's own words, in English like its other answers. */}
-      {/* "Saved, but ...": saved all the same - the note says what to look at. */}
-      {msg ? <Note tone={msg === 'Saved.' ? 'good' : 'bad'}>{msg}</Note> : null}
+      <Text style={styles.section}>{t('Phone hotspot')}</Text>
+      {HOTSPOT.map((f) => input(f, t(f.label)))}
+
+      <Text style={styles.section}>WireGuard VPN</Text>
+      {VPN.map((f) => input(f, f.label))}
       <View style={styles.field}>
-        <Text style={ui.rowLabel}>{t('Gauge’s public key')}</Text>
+        <Text style={ui.rowLabel}>Gauge public key</Text>
         <Text style={styles.key} selectable>
           {up.wgPub}
         </Text>
       </View>
-      <Note>{t('Add it on the router as a WireGuard peer, allowed the gauge’s tunnel address only.')}</Note>
-      <Button title={copied ? t('Copied') : t('Copy the public key')} kind="plain" onPress={copyKey} />
+      <Note>Add it on the router as a peer, with Allowed IPs = the gauge address in the tunnel (/32).</Note>
+      <Button title={copied ? 'Copied' : 'Copy the public key'} kind="plain" onPress={copyKey} />
+
+      <Text style={styles.section}>{t('Upload server')}</Text>
+      {SERVER.map((f) => input(f, t(f.label)))}
+      <Note>{t('The server at home, as seen through the VPN (server/README.md).')}</Note>
+
+      <Button title={changed.length ? t('Save') : t('No changes')} disabled={!changed.length} busy={busy} onPress={save} />
+      {/* The gauge's own words, in English like its other answers. */}
+      {/* "Saved, but ...": saved all the same - the note says what to look at. */}
+      {msg ? <Note tone={msg === 'Saved.' ? 'good' : 'bad'}>{msg}</Note> : null}
     </Card>
   );
 }
@@ -158,6 +181,12 @@ export function UploadCard() {
 const useStyles = themed((C) =>
   StyleSheet.create({
     field: { gap: S.xs },
+    section: {
+      color: C.text,
+      fontSize: 15,
+      fontWeight: '600',
+      marginTop: S.sm,
+    },
     input: {
       color: C.text,
       borderColor: C.border,

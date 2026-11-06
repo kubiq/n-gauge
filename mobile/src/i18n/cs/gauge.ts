@@ -98,26 +98,22 @@ export const gauge: Record<string, string> = {
 
   // upload-card.tsx
   'Upload to the home server': 'Nahrávání na domácí server',
-  'As the car starts, the gauge joins this hotspot, opens a WireGuard tunnel home and uploads the logs the server lacks.':
-    'Při startu auta se budík připojí k tomuto hotspotu, otevře tunel WireGuard domů a nahraje záznamy, které server ještě nemá.',
+  'As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the logs the server lacks.':
+    'Při startu auta se budík připojí k hotspotu telefonu, otevře VPN domů a nahraje záznamy, které server ještě nemá.',
   'Last upload': 'Poslední nahrání',
   '{files} files, {kb} KB, {when}': '{files} souborů, {kb} KB, {when}',
   'none since it woke': 'od probuzení žádné',
   'not set up': 'nenastaveno',
-  'Hotspot name': 'Název hotspotu',
-  'Hotspot password': 'Heslo hotspotu',
-  Server: 'Server',
-  'Server token': 'Token serveru',
-  'Router address': 'Adresa routeru',
-  'Router port': 'Port routeru',
-  'Router public key': 'Veřejný klíč routeru',
-  'Gauge’s tunnel address': 'Adresa budíku v tunelu',
+  // (The WireGuard VPN section stays English: the router's own words.)
+  'Phone hotspot': 'Hotspot telefonu',
+  Password: 'Heslo',
+  'Upload server': 'Server pro nahrávání',
+  Address: 'Adresa',
+  Token: 'Token',
+  'The server at home, as seen through the VPN (server/README.md).':
+    'Server doma, jak je vidět přes VPN (server/README.md).',
   'set - type to change': 'nastaveno - pro změnu přepište',
   'not set': 'nenastaveno',
-  'Gauge’s public key': 'Veřejný klíč budíku',
-  'Add it on the router as a WireGuard peer, allowed the gauge’s tunnel address only.':
-    'Přidejte ho na routeru jako protějšek WireGuard, povolený jen pro adresu budíku v tunelu.',
-  'Copy the public key': 'Zkopírovat veřejný klíč',
 
   // system-card.tsx
   System: 'Systém',
