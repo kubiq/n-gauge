@@ -17,6 +17,7 @@
 #include "webapi.h"
 #include "logger.h"
 #include "power.h"
+#include "taskwdt.h"      // taskwdt_last_culprit(): after a watchdog reset
 
 void bootlog_task(uint32_t now) {
   static bool written = false;
@@ -45,6 +46,12 @@ void bootlog_task(uint32_t now) {
            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
            (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
            web_is_up() ? 1 : 0);
+  // After a watchdog reset, which task it was (taskwdt.cpp).
+  const char *wdt = taskwdt_last_culprit();
+  if (*wdt) {
+    const size_t n = strlen(line);
+    snprintf(line + n, sizeof(line) - n, " | wdt:%s", wdt);
+  }
   Serial.printf("[..] boot log: %s\n", line);
   logger_note_boot(line);
 }

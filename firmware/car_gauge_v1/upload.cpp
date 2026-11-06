@@ -23,7 +23,11 @@
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
 #define UP_NTP_MS        15000   // the clock, when the gauge has none
+#if UP_SHORT_TEST                // FW_TEST_DEFINE=UP_SHORT_TEST: the end, quickly
+#define UP_MAX_MS        60000
+#else
 #define UP_MAX_MS       600000   // the whole upload, at most
+#endif
 #define UP_HTTP_MS       10000
 #define UP_CHUNK          4096   // a card read, under the lock (internal: SD DMA)
 #define UP_PLAN_MAX    (48 * 1024)
@@ -85,7 +89,13 @@ static void getStr(Preferences &p, const char *k, char *out, size_t n) {
   strlcpy(out, s.c_str(), n);
 }
 
+// WireGuard.cpp's step in end(), kept across a reset: 0x5747000N.
+extern volatile uint32_t wg_end_step;
+static uint8_t endStepSeen = 0;         // printed from upload_task, after USB is up
+
 void upload_init() {
+  if ((wg_end_step & 0xFFFFFFF0u) == 0x57470000u) endStepSeen = wg_end_step & 0xF;
+  wg_end_step = 0;
   memset(&cfg, 0, sizeof(cfg));
   cfg.wgPort = 51820;
   bool haveKey = false;
@@ -461,9 +471,13 @@ static void uploadTask(void *arg) {
   }
 
 out:
+  Serial.printf("[..] upload: closing (%s)\n", r.ok ? "done" : r.msg);
   if (wgUp) wg.end();
+  Serial.println(F("[..] upload: tunnel closed"));
   WiFi.disconnect(true);
+  Serial.println(F("[..] upload: hotspot left"));
   WiFi.mode(WIFI_OFF);
+  Serial.println(F("[..] upload: radio off"));
   free(buf);
   free(plan);
   snprintf(line, sizeof(line), "upload: %s - %u files, %lu KB in %lu ms (%u logs on the card)",
@@ -486,8 +500,11 @@ bool upload_holds_radio() { return state != UP_IDLE; }
 bool upload_busy() { return state != UP_IDLE; }
 
 void upload_task(uint32_t now) {
-  (void)now;
   static UpConfig taskCfg;            // the task's copy: /save may change cfg
+  if (endStepSeen && now > 10000) {
+    Serial.printf("[..] upload: the last tunnel close reached step %u of 6\n", endStepSeen);
+    endStepSeen = 0;
+  }
   if (state == UP_RUNNING) {
     if (taskDone) state = UP_IDLE;    // the radio goes back to the AP
     return;

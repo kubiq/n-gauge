@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
+#include "esp_attr.h"     // RTC_NOINIT_ATTR: wg_end_step
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -132,22 +133,36 @@ bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const ch
 	return WireGuard::begin(localIP, subnet, gateway, privateKey, remotePeerAddress, remotePeerPublicKey, remotePeerPort);
 }
 
+// Which step of end() was reached, kept across a reset (RTC memory): the
+// gauge's upload crashed in end() (2026-11-06) with no console to say where.
+RTC_NOINIT_ATTR volatile uint32_t wg_end_step;
+
 void WireGuard::end() {
 	if( !this->_is_initialized ) return;
 
+	wg_end_step = 0x57470001;
 	LOCK_TCPIP_CORE();             // as in begin()
 	// Restore the default interface.
 	netif_set_default(previous_default_netif);
 	previous_default_netif = nullptr;
+	wg_end_step = 0x57470002;
 	// Disconnect the WG interface.
 	wireguardif_disconnect(wg_netif, wireguard_peer_index);
+	wg_end_step = 0x57470003;
 	// Remove peer from the WG interface
 	wireguardif_remove_peer(wg_netif, wireguard_peer_index);
 	wireguard_peer_index = WIREGUARDIF_INVALID_INDEX;
+	wg_end_step = 0x57470004;
+	// PATCHED (car-mod, 2026-11-06): remove the interface BEFORE shutting it
+	// down. The original order freed the device (netif->state) first, and
+	// netif_remove() then ran on it - the gauge crashed on every close, at
+	// this step (wg_end_step 5). Unlinked first, nothing reaches it any more
+	// when it is freed.
+	netif_remove(wg_netif);
+	wg_end_step = 0x57470005;
 	// Shutdown the wireguard interface.
 	wireguardif_shutdown(wg_netif);
-	// Remove the WG interface;
-	netif_remove(wg_netif);
+	wg_end_step = 0x57470006;
 	wg_netif = nullptr;
 	UNLOCK_TCPIP_CORE();
 

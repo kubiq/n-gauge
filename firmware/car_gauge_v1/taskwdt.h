@@ -17,6 +17,11 @@
 
 inline volatile bool taskwdt_armed = false;
 
+// The tasks that tripped the watchdog before the last reset, as it named
+// them ("" if it was not the watchdog) - kept across the reset in RTC
+// memory (taskwdt.cpp), for the boot log.
+const char *taskwdt_last_culprit();
+
 // For a long walk that may run on a watched task or not (a directory scan):
 // feeds the watchdog only if this task is subscribed - esp_task_wdt_reset()
 // from any other logs an error.
