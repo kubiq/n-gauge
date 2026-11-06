@@ -77,8 +77,8 @@ export const app: Record<string, string> = {
   'What a sync brings is saved into the folder by itself, decrypted - nothing to do on the phone.':
     'Co synchronizace přinese, se samo uloží do složky, dešifrované - v telefonu není co dělat.',
 
-  // Home server (home-server-card.tsx, home.ts, use-sync.tsx); Address, Token,
-  // "set - type to change" and "not set" are the gauge's (cs/gauge.ts)
+  // Home server (home-server-card.tsx, home.ts, use-sync.tsx); Address is
+  // the gauge's (cs/gauge.ts)
   'Home server': 'Domácí server',
   'Where the gauge uploads its logs as the car starts. The phone pulls them from there too, whenever it can reach it - at home, or with its VPN on.':
     'Sem budík nahrává záznamy při startu auta. Telefon si je odtud stahuje také, kdykoli se k serveru dostane - doma, nebo se zapnutou VPN.',
@@ -87,7 +87,11 @@ export const app: Record<string, string> = {
   '{when}, 1 new file|{when}, {n} new files': '{when}, 1 nový soubor|{when}, {n} nové soubory|{when}, {n} nových souborů',
   '{when}, nothing new': '{when}, nic nového',
   'Sync from the home server': 'Synchronizovat z domácího serveru',
-  'Set up the home server first (Settings).': 'Nejdřív nastavte domácí server (Nastavení).',
+  'Set up the home server first, in the gauge’s settings.': 'Nejdřív nastavte domácí server, v nastavení budíku.',
+  'No token yet: type it in the gauge’s settings, Upload to the home server.':
+    'Zatím bez tokenu: zadejte ho v nastavení budíku, Nahrávání na domácí server.',
+  'Set it up in the gauge’s settings, Upload to the home server - the phone takes it from there.':
+    'Nastavte ho v nastavení budíku, Nahrávání na domácí server - telefon si ho vezme odtud.',
   'the home server is not reachable from here': 'domácí server odsud není dostupný',
   'the home server refused the token': 'domácí server odmítl token',
   'the home server did not answer': 'domácí server neodpověděl',

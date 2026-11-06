@@ -111,8 +111,10 @@ export const gauge: Record<string, string> = {
   Address: 'Adresa',
   Token: 'Token',
   'Time limit, minutes': 'Časový limit, minuty',
-  'The server at home, as seen through the VPN (server/README.md).':
-    'Server doma, jak je vidět přes VPN (server/README.md).',
+  'The server at home, as seen through the VPN (server/README.md). The phone pulls the drives from it too.':
+    'Server doma, jak je vidět přes VPN (server/README.md). Telefon si z něj jízdy stahuje také.',
+  'Type the token once more, for the phone: the gauge never gives it back.':
+    'Zadejte token ještě jednou, pro telefon: budík ho nikdy nevrací.',
   'set - type to change': 'nastaveno - pro změnu přepište',
   'not set': 'nenastaveno',
 

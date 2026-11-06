@@ -296,7 +296,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     async (asked: boolean) => {
       const h = await loadHome();
       if (!h) {
-        if (asked) ToastAndroid.show(t('Set up the home server first (Settings).'), ToastAndroid.LONG);
+        if (asked) ToastAndroid.show(t('Set up the home server first, in the gauge’s settings.'), ToastAndroid.LONG);
         return;
       }
       if (running.current) return;

@@ -5,6 +5,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, Note, Row, useUi } from '@/components/ui';
 import { N_, t } from '@/i18n';
 import { shortWhen } from '@/lib/format';
+import { loadHome, saveHome } from '@/lib/home';
 import { getUpload, type PodUpload, saveSettings } from '@/lib/pod';
 import { S, themed, useColors } from '@/theme';
 
@@ -72,15 +73,36 @@ export function UploadCard() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Whether the phone has the server's token (home.ts) - it is set here,
+  // once, beside the gauge's: the gauge never gives it back.
+  const [phoneToken, setPhoneToken] = useState(true);
 
+  // The phone pulls from the same server (Settings > Home server), so what
+  // is set here is the phone's too - set in one place. The address comes
+  // from the gauge each time; the token only when typed here, as the gauge
+  // never gives it back. `token`: just typed, or '' to keep the phone's.
+  const toPhone = async (u: PodUpload, token: string) => {
+    const h = await loadHome();
+    const next = { url: u.url, token: token || h?.token || '' };
+    if (u.url && (next.url !== h?.url || next.token !== h?.token)) await saveHome(next);
+    setPhoneToken(!!next.token);
+  };
   const apply = (u: PodUpload | null) => {
     setUp(u);
     if (u) setForm(fromPod(u));
   };
-  const load = async () => apply(await getUpload());
+  const load = async (token = '') => {
+    const u = await getUpload();
+    apply(u);
+    if (u) await toPhone(u, token);
+  };
   useEffect(() => {
     let live = true;
-    getUpload().then((u) => live && apply(u));
+    getUpload().then((u) => {
+      if (!live) return;
+      apply(u);
+      if (u) toPhone(u, '').catch((e) => console.warn('home server', e));
+    });
     return () => {
       live = false;
     };
@@ -101,7 +123,7 @@ export function UploadCard() {
       // The gauge saves every value (cleaned up: http://, /32, host:port)
       // and says what still looks wrong - so the form shows what it holds.
       // Any other answer leaves the form as typed, nothing to type again.
-      if (said.startsWith('Saved')) await load();
+      if (said.startsWith('Saved')) await load(form.upToken.trim());
     } catch (e) {
       setMsg(String(e));
     } finally {
@@ -171,7 +193,10 @@ export function UploadCard() {
 
       <Text style={styles.section}>{t('Upload server')}</Text>
       {SERVER.map((f) => input(f, t(f.label)))}
-      <Note>{t('The server at home, as seen through the VPN (server/README.md).')}</Note>
+      <Note>{t('The server at home, as seen through the VPN (server/README.md). The phone pulls the drives from it too.')}</Note>
+      {up.tokenSet && !phoneToken ? (
+        <Note tone="bad">{t('Type the token once more, for the phone: the gauge never gives it back.')}</Note>
+      ) : null}
 
       <Button title={changed.length ? t('Save') : t('No changes')} disabled={!changed.length} busy={busy} onPress={save} />
       {/* The gauge's own words, in English like its other answers. */}
