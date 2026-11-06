@@ -9,6 +9,7 @@
 #include <WireGuard-ESP32.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
+#include <esp_sntp.h>    // the clock from NTP, when the gauge has none
 #include <mbedtls/base64.h>
 #include <time.h>
 #include "upload.h"
@@ -21,6 +22,7 @@
 // ---- timings ---------------------------------------------------------------
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
+#define UP_NTP_MS        15000   // the clock, when the gauge has none
 #define UP_MAX_MS       600000   // the whole upload, at most
 #define UP_HTTP_MS       10000
 #define UP_CHUNK          4096   // a card read, under the lock (internal: SD DMA)
@@ -374,19 +376,38 @@ static void uploadTask(void *arg) {
   Serial.printf("[..] upload: joined the hotspot in %lu ms, RSSI %d\n",
                 (unsigned long)(millis() - t0), WiFi.RSSI());
 
+  // The handshake carries a timestamp the router checks against the last
+  // one it saw: with no clock (an RTC that lost power, no GNSS fix yet) it
+  // is set from NTP first, over the hotspot. esp_sntp directly, not
+  // configTime(): that would also set TZ, the gauge's own (settings.tz).
+  if (!clock_valid()) {
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+    const uint32_t tn = millis();
+    while (!clock_valid() && millis() - tn < UP_NTP_MS) delay(200);
+    esp_sntp_stop();
+    if (!clock_valid()) { finish(r, t0, false, "no clock (NTP)"); goto out; }
+    Serial.printf("[..] upload: clock set from NTP in %lu ms\n", (unsigned long)(millis() - tn));
+  }
+
   {
     IPAddress addr;
     addr.fromString(c.wgAddr);
     char priv[45];
     b64(priv, sizeof(priv), c.wgPriv, sizeof(c.wgPriv));
+    Serial.println(F("[..] upload: starting the tunnel"));
     wgUp = wg.begin(addr, priv, c.wgHost, c.wgPeer, c.wgPort);
     memset(priv, 0, sizeof(priv));
   }
   if (!wgUp) { finish(r, t0, false, "tunnel did not start"); goto out; }
+  Serial.printf("[..] upload: tunnel up, %u B internal free\n",
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
 
   {
     const size_t len = listCard(plan, UP_PLAN_MAX, &onCard);
     if (!len) { finish(r, t0, false, "card not readable"); goto out; }
+    Serial.printf("[..] upload: %u logs on the card, asking the server\n", onCard);
     // The first request waits for the handshake: tried until it answers.
     const uint32_t tw = millis();
     int code = -1;
@@ -402,6 +423,7 @@ static void uploadTask(void *arg) {
       code = http.POST((uint8_t *)plan, len);
       if (code == 200) todo = http.getString();
       http.end();
+      Serial.printf("[..] upload: plan -> %d after %lu ms\n", code, (unsigned long)(millis() - tw));
       if (code > 0) break;
       delay(2000);
     }
@@ -481,14 +503,21 @@ void upload_task(uint32_t now) {
     }
     return;
   }
-  if (triedThisBoot || !configured()) return;
-  // The car is on (talking), the clock is right (the handshake carries a
-  // timestamp the router checks), the card is in and the gauge's own, and
-  // nobody is on the AP. Or the bench says now.
+  if (triedThisBoot) return;
+  // The car is on (talking), the card is in and the gauge's own, and nobody
+  // is on the AP. Or the bench says now - and is told what stops it, once.
+  // (No clock is no reason: the task sets it over the hotspot first.)
   const bool carOn = podstate().car != PS_CAR_OFF;
-  if (!(carOn || requested) || !clock_valid() || !logger_card_ok() || logger_card_shared() ||
-      web_clients() > 0)
+  if (!carOn && !requested) return;
+  const char *why = !configured()                          ? "not set up (the app's Upload card)"
+                    : !logger_card_ok() || logger_card_shared() ? "no card, or it is lent to a PC"
+                    : web_clients() > 0                     ? "a phone is on the gauge's WiFi"
+                                                            : nullptr;
+  if (why) {
+    if (requested) Serial.printf("[..] upload: not now - %s\n", why);
+    requested = false;
     return;
+  }
   requested = false;
   triedThisBoot = true;
   state = UP_WAIT_AP;
