@@ -68,6 +68,31 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.req("PUT", "/f/d.csv?offset=0", b"x", token=None)[0], 401)
         self.assertEqual(self.req("GET", "/health", token=None), (200, "ok\n"))
 
+    def test_the_phone_lists_and_pulls_with_range(self):
+        self.req("PUT", "/f/b.gpx?offset=0", b"0123456789")
+        self.req("PUT", "/f/a.csv?offset=0", b"ab")
+        self.assertEqual(self.req("GET", "/files"), (200, "a.csv 2\nb.gpx 10\n"))
+        self.assertEqual(self.req("GET", "/f/b.gpx"), (200, "0123456789"))
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/f/b.gpx", headers={"Authorization": "Bearer tok", "Range": "bytes=4-6"})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.read(), r.getheader("Content-Range")), (206, b"456", "bytes 4-6/10"))
+        c.close()
+        self.assertEqual(self.req("GET", "/files", token="wrong")[0], 401)
+        self.assertEqual(self.req("GET", "/f/nope.csv")[0], 404)
+
+    def test_a_deleted_drive_stays_deleted(self):
+        self.req("PUT", "/f/d.csv?offset=0", b"abc")
+        self.assertEqual(self.req("DELETE", "/f/d.csv"), (200, "deleted\n"))
+        self.assertEqual(self.req("GET", "/files"), (200, ""))
+        # The gauge still has it: not asked for, refused if sent anyway.
+        self.assertEqual(self.req("POST", "/plan", b"d.csv 3\ne.csv 1\n"), (200, "e.csv 0\n"))
+        self.assertEqual(self.req("PUT", "/f/d.csv?offset=0", b"abc")[0], 410)
+        # Deleting what is not there buries the name all the same.
+        self.assertEqual(self.req("DELETE", "/f/never.csv"), (200, "deleted\n"))
+        self.assertEqual(self.req("POST", "/plan", b"never.csv 5\n"), (200, ""))
+        self.assertEqual(self.req("DELETE", "/f/x.csv", token="wrong")[0], 401)
+
     def test_no_way_out_of_the_folder(self):
         self.assertEqual(self.req("PUT", "/f/..%2Fx?offset=0", b"x")[0], 400)
         self.assertEqual(self.req("PUT", "/f/../x?offset=0", b"x")[0], 400)

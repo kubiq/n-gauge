@@ -39,6 +39,9 @@ size, as the phone's sync does:
 | `POST /plan` | the gauge's files, `name size` per line | `name offset` per line for each file held shorter (offset = bytes held); a file held *longer* is another file under the same name: offset 0 |
 | `PUT /f/<name>?offset=N` | the bytes from N on | the new size; `409` with the size held if N is not it; offset 0 replaces |
 | `GET /health` | | `ok` (no token) |
+| `GET /files` | | `name size` per line - for the phone, which pulls from here too |
+| `GET /f/<name>` | | the file; with `Range: bytes=a-b` those bytes (206) |
+| `DELETE /f/<name>` | | `deleted` - a drive deleted in the app: the file goes and its name is buried in `.deleted`, never asked of the gauge again (410 if sent) nor listed |
 
 Every request but `/health` needs `Authorization: Bearer <token>`. An upload
 is written to a side file and renamed into place once complete, so a

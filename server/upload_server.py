@@ -20,6 +20,17 @@ appended), so an upload resumes by size, as the phone's sync does:
                         gauge can carry on from there. Offset 0 replaces.
   GET  /health          "ok", for a check from a browser.
 
+And for the phone, which pulls the logs from here too (the app's home
+server sync) - so they reach it without a trip to the gauge's WiFi:
+
+  GET  /files           one "name size" per line, what is held.
+  GET  /f/<name>        the file; with "Range: bytes=a-b" just those bytes
+                        (206), as the gauge's own /dl, for a log that grew.
+  DELETE /f/<name>      a drive deleted in the app: the file goes, and its
+                        name is kept (TOMBSTONES) - never asked of the gauge
+                        again nor listed, or the gauge's next upload and the
+                        phone's next pull would bring it straight back.
+
 With UPLOAD_TOKEN set, every request but /health needs
 "Authorization: Bearer <token>" - a second lock behind the tunnel's.
 
@@ -34,6 +45,7 @@ import hmac
 import os
 import re
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -42,16 +54,23 @@ from urllib.parse import parse_qs, urlsplit
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
 MAX_PLAN = 256 * 1024          # bytes of plan: ~5000 files
 CHUNK = 64 * 1024
+# The names of deleted drives' files, one per line, in UPLOAD_DIR. A
+# leading dot: no file name can be that (NAME_RE), so it is never listed.
+TOMBSTONES = ".deleted"
+RANGE_RE = re.compile(r"^bytes=(\d+)-(\d*)$")
 
 
-def plan(held: dict, offered: str) -> str:
-    """The "name offset" lines for what `offered` has beyond `held`."""
+def plan(held: dict, offered: str, buried: frozenset = frozenset()) -> str:
+    """The "name offset" lines for what `offered` has beyond `held`.
+    A buried name - deleted in the app - is never asked for."""
     out = []
     for line in offered.splitlines():
         parts = line.split()
         if len(parts) != 2 or not NAME_RE.match(parts[0]) or not parts[1].isdigit():
             continue
         name, size = parts[0], int(parts[1])
+        if name in buried:
+            continue
         have = held.get(name, 0)
         if have > size:
             out.append(f"{name} 0")
@@ -65,6 +84,7 @@ class Handler(BaseHTTPRequestHandler):
     # Set by serve().
     root = "data"
     token = ""
+    bury_lock = threading.Lock()
 
     def _reply(self, code: int, text: str = "") -> None:
         body = text.encode()
@@ -94,10 +114,80 @@ class Handler(BaseHTTPRequestHandler):
                 held[entry.name] = entry.stat().st_size
         return held
 
+    def _buried(self) -> frozenset:
+        try:
+            with open(os.path.join(self.root, TOMBSTONES)) as f:
+                return frozenset(line.strip() for line in f if line.strip())
+        except FileNotFoundError:
+            return frozenset()
+
+    def _name(self, path: str):
+        """The file name in /f/<name>, or None if it is not one."""
+        if not path.startswith("/f/"):
+            return None
+        name = path[3:]
+        return name if NAME_RE.match(name) and not name.endswith(".part") else None
+
     def do_GET(self):
-        if urlsplit(self.path).path == "/health":
+        url = urlsplit(self.path)
+        if url.path == "/health":
             return self._reply(200, "ok\n")
-        self._reply(404, "not found\n")
+        if not self._authorised():
+            return self._reply(401, "token\n")
+        if url.path == "/files":
+            held = self._held()
+            return self._reply(200, "".join(f"{n} {s}\n" for n, s in sorted(held.items())))
+        name = self._name(url.path)
+        if name is None:
+            return self._reply(404, "not found\n")
+        path = os.path.join(self.root, name)
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            return self._reply(404, "not found\n")
+        first, last, code = 0, size - 1, 200
+        m = RANGE_RE.match(self.headers.get("Range", ""))
+        if m:
+            first = int(m.group(1))
+            last = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+            if first >= size or last < first:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return None
+            code = 206
+        self.send_response(code)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(last - first + 1 if size else 0))
+        self.send_header("Accept-Ranges", "bytes")
+        if code == 206:
+            self.send_header("Content-Range", f"bytes {first}-{last}/{size}")
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(first)
+            left = last - first + 1 if size else 0
+            while left > 0 and (chunk := f.read(min(CHUNK, left))):
+                self.wfile.write(chunk)
+                left -= len(chunk)
+        return None
+
+    def do_DELETE(self):
+        name = self._name(urlsplit(self.path).path)
+        if name is None:
+            return self._reply(404, "not found\n")
+        if not self._authorised():
+            return self._reply(401, "token\n")
+        with self.bury_lock:
+            if name not in self._buried():
+                with open(os.path.join(self.root, TOMBSTONES), "a") as f:
+                    f.write(name + "\n")
+            try:
+                os.remove(os.path.join(self.root, name))
+            except FileNotFoundError:
+                pass
+        self.log_message("DELETE %s", name)
+        self._reply(200, "deleted\n")
 
     def do_POST(self):
         if urlsplit(self.path).path != "/plan":
@@ -108,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         if n is None or n > MAX_PLAN:
             return self._reply(413, "plan too long\n")
         offered = self.rfile.read(n).decode("utf-8", "replace")
-        self._reply(200, plan(self._held(), offered))
+        self._reply(200, plan(self._held(), offered, self._buried()))
 
     def do_PUT(self):
         url = urlsplit(self.path)
@@ -116,9 +206,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(404, "not found\n")
         if not self._authorised():
             return self._reply(401, "token\n")
-        name = url.path[3:]
-        if not NAME_RE.match(name) or name.endswith(".part"):
+        name = self._name(url.path)
+        if name is None:
             return self._reply(400, "bad name\n")
+        if name in self._buried():         # deleted in the app: not again
+            return self._reply(410, "deleted\n")
         try:
             offset = int(parse_qs(url.query).get("offset", [""])[0])
         except ValueError:
