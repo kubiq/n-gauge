@@ -72,8 +72,12 @@ export function UploadCard() {
     setMsg(null);
     try {
       const body = changed.map((k) => `${k}=${encodeURIComponent(form[k].trim())}`).join('&');
-      setMsg(await saveSettings(body));
-      await load();
+      const said = await saveSettings(body);
+      setMsg(said);
+      // The gauge saves every value (cleaned up: http://, /32, host:port)
+      // and says what still looks wrong - so the form shows what it holds.
+      // Any other answer leaves the form as typed, nothing to type again.
+      if (said.startsWith('Saved')) await load();
     } catch (e) {
       setMsg(String(e));
     } finally {
@@ -137,6 +141,7 @@ export function UploadCard() {
         onPress={save}
       />
       {/* The gauge's own words, in English like its other answers. */}
+      {/* "Saved, but ...": saved all the same - the note says what to look at. */}
       {msg ? <Note tone={msg === 'Saved.' ? 'good' : 'bad'}>{msg}</Note> : null}
       <View style={styles.field}>
         <Text style={ui.rowLabel}>{t('Gauge’s public key')}</Text>

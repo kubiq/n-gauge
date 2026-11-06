@@ -600,12 +600,18 @@ static void saveOnLoop(void *a) {
   }
 
   // The log upload's settings (upload.h), from the app: each saved as it
-  // comes; an empty password or token is "unchanged", as the AP's.
+  // comes, whatever it is; an empty password or token is "unchanged", as
+  // the AP's. What looks wrong is said, after "Saved".
+  static char uploadMsg[96];
   for (const char *const *k = UPLOAD_KEYS; *k; k++) {
     if (!hasArg(*k)) continue;
     const bool secret = !strcmp(*k, "upPass") || !strcmp(*k, "upToken");
     if (secret && !*arg(*k)) continue;
-    if (!upload_setting(*k, arg(*k))) j->msg = "Settings saved, but an upload setting was rejected.";
+    const char *note = upload_setting(*k, arg(*k));
+    if (note) {
+      snprintf(uploadMsg, sizeof(uploadMsg), "Saved, but %s.", note);
+      j->msg = uploadMsg;
+    }
   }
 
   // WiFi identity last: changing either restarts the AP and drops this

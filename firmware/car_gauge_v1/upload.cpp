@@ -112,39 +112,66 @@ static bool configured() {
   return cfg.ssid[0] && cfg.url[0] && cfg.wgAddr[0] && cfg.wgPeer[0] && cfg.wgHost[0];
 }
 
-// A value for a char[] field: within its size, printable, no spaces at the
-// ends (a pasted key often has a newline).
-static bool setText(char *field, size_t n, const char *v, size_t minLen) {
+// Saved whatever it is (2026-11-06: refusing a value made it typed again
+// and again) - cleaned up where the usual forms differ, and a word on what
+// still looks wrong. Spaces and newlines at the ends go (a pasted key often
+// has one); too long is cut; a character outside printable ASCII is dropped.
+static void put(char *field, size_t n, const char *v) {
   while (*v == ' ' || *v == '\t') v++;
   size_t len = strlen(v);
   while (len && (v[len - 1] == ' ' || v[len - 1] == '\n' || v[len - 1] == '\r' || v[len - 1] == '\t')) len--;
-  if (len >= n || (len && len < minLen)) return false;
-  for (size_t i = 0; i < len; i++) if ((uint8_t)v[i] < 32 || (uint8_t)v[i] > 126) return false;
-  memcpy(field, v, len);
-  field[len] = '\0';
-  return true;
+  size_t o = 0;
+  for (size_t i = 0; i < len && o + 1 < n; i++)
+    if ((uint8_t)v[i] >= 32 && (uint8_t)v[i] <= 126) field[o++] = v[i];
+  field[o] = '\0';
 }
 
-bool upload_setting(const char *key, const char *v) {
-  bool ok;
-  if      (!strcmp(key, "upSsid"))  ok = setText(cfg.ssid, sizeof(cfg.ssid), v, 1);
-  else if (!strcmp(key, "upPass"))  ok = setText(cfg.pass, sizeof(cfg.pass), v, 8);   // WPA2's least
-  else if (!strcmp(key, "upUrl"))   ok = (!*v || !strncmp(v, "http://", 7)) && setText(cfg.url, sizeof(cfg.url), v, 8);
-  else if (!strcmp(key, "upToken")) ok = setText(cfg.token, sizeof(cfg.token), v, 0);
-  else if (!strcmp(key, "wgAddr"))  ok = (!*v || IPAddress().fromString(v)) && setText(cfg.wgAddr, sizeof(cfg.wgAddr), v, 7);
-  else if (!strcmp(key, "wgPeer"))  ok = setText(cfg.wgPeer, sizeof(cfg.wgPeer), v, 44);
-  else if (!strcmp(key, "wgHost"))  ok = setText(cfg.wgHost, sizeof(cfg.wgHost), v, 1);
-  else if (!strcmp(key, "wgPort")) {
+const char *upload_setting(const char *key, const char *v) {
+  const char *note = nullptr;
+  if (!strcmp(key, "upSsid")) {
+    put(cfg.ssid, sizeof(cfg.ssid), v);
+  } else if (!strcmp(key, "upPass")) {
+    put(cfg.pass, sizeof(cfg.pass), v);
+    if (strlen(cfg.pass) < 8) note = "the hotspot password is under 8 characters";
+  } else if (!strcmp(key, "upUrl")) {
+    // "192.168.1.10:8650" is taken as http://; a trailing / goes.
+    char u[sizeof(cfg.url)];
+    put(u, sizeof(u), v);
+    if (u[0] && !strstr(u, "://")) snprintf(cfg.url, sizeof(cfg.url), "http://%s", u);
+    else strlcpy(cfg.url, u, sizeof(cfg.url));
+    size_t l = strlen(cfg.url);
+    while (l && cfg.url[l - 1] == '/') cfg.url[--l] = '\0';
+    if (cfg.url[0] && strncmp(cfg.url, "http://", 7)) note = "the server must be http:// (the tunnel encrypts)";
+  } else if (!strcmp(key, "upToken")) {
+    put(cfg.token, sizeof(cfg.token), v);
+  } else if (!strcmp(key, "wgAddr")) {
+    put(cfg.wgAddr, sizeof(cfg.wgAddr), v);
+    char *slash = strchr(cfg.wgAddr, '/');      // "10.0.0.7/32", as the router shows it
+    if (slash) *slash = '\0';
+    IPAddress ip;
+    if (cfg.wgAddr[0] && !ip.fromString(cfg.wgAddr)) note = "the tunnel address is not an IP address";
+  } else if (!strcmp(key, "wgPeer")) {
+    put(cfg.wgPeer, sizeof(cfg.wgPeer), v);
+    if (cfg.wgPeer[0] && strlen(cfg.wgPeer) != 44) note = "the router's public key is not 44 characters";
+  } else if (!strcmp(key, "wgHost")) {
+    put(cfg.wgHost, sizeof(cfg.wgHost), v);
+    char *colon = strrchr(cfg.wgHost, ':');     // "vpn.example.org:51820": the port goes to wgPort
+    if (colon && atol(colon + 1) > 0) {
+      cfg.wgPort = (uint16_t)atol(colon + 1);
+      *colon = '\0';
+    }
+  } else if (!strcmp(key, "wgPort")) {
     const long port = atol(v);
-    ok = port > 0 && port < 65536;
-    if (ok) cfg.wgPort = (uint16_t)port;
+    if (port > 0 && port < 65536) cfg.wgPort = (uint16_t)port;
+    else note = "the router port is not 1-65535";
   } else if (!strcmp(key, "wgNewKey")) {
     newKey();
     derivePub();
-    ok = true;
-  } else return false;
-  if (ok) save();
-  return ok;
+  } else {
+    return nullptr;
+  }
+  save();
+  return note;
 }
 
 // ---- the result, for /api/upload and the boot log --------------------------
