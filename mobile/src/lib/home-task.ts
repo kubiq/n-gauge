@@ -1,5 +1,5 @@
 // The home server sync in the background (asked 2026-11-06): with the app
-// closed, about every hour, Android's WorkManager runs it (expo-background-
+// closed, about every hour but not at night, Android's WorkManager runs it (expo-background-
 // task; 15 minutes is the shortest it allows, and it waits for a network).
 // The same sync as the app's (home-sync.ts), into the same inbox - so a
 // drive the gauge uploaded as the car started is on the phone by the time
@@ -23,8 +23,15 @@ import { loadAutoSave } from './store';
 
 const TASK = 'home-server-sync';
 const EVERY_MIN = 60;
+// Not at night, phone time (asked 2026-11-06: no drives then, so nothing
+// new to pull). WorkManager has no time windows: it still wakes the task
+// each hour, and the task goes back to sleep at once - no network, no work.
+const NIGHT_FROM_H = 23;
+const NIGHT_TO_H = 6;
 
 TaskManager.defineTask(TASK, async () => {
+  const h = new Date().getHours();
+  if (h >= NIGHT_FROM_H || h < NIGHT_TO_H) return BackgroundTask.BackgroundTaskResult.Success;
   // Open in front, the app syncs by itself (use-sync.tsx) and shows it.
   if (AppState.currentState === 'active') return BackgroundTask.BackgroundTaskResult.Success;
   try {
