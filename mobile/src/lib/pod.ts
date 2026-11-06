@@ -88,6 +88,26 @@ export async function getSettings(): Promise<PodSettings> {
   return (await call('/api/settings')).json();
 }
 
+/**
+ * Which part holds the internal RAM (ramlog.h on the gauge, firmware from
+ * 2026-11-06 on): `static` and `preSetup` in bytes, the parts in KB.
+ */
+export type PodRam = {
+  static: number;
+  preSetup: number;
+  parts: { part: string; kb: number; psKb: number }[];
+  otherKb: number;
+};
+
+/** Older firmware has no /api/ram: null. */
+export async function getRam(): Promise<PodRam | null> {
+  try {
+    return (await (await call('/api/ram')).json()) as PodRam;
+  } catch {
+    return null;
+  }
+}
+
 /** `body` from saveForm(). Returns the pod's message ("Saved." etc). */
 export async function saveSettings(body: string): Promise<string> {
   return (await postForm('/save', body)).text();

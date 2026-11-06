@@ -31,6 +31,7 @@
 #include "bootlog.h"      // one line per boot on the card
 #include "prof.h"         // FRAME_STATS timing; nothing in the car's build
 #include "wifitest.h"     // the WiFi/GPS test build; nothing otherwise
+#include "ramlog.h"       // which part holds the internal RAM
 
 
 // Raw accelerometer reading -> horizontal g on the screen's axes plus a
@@ -87,6 +88,7 @@ static void bootTimingsPrint() {
 }
 
 void setup() {
+  ram_begin();         // the baseline for what each part below takes (ramlog.h)
   Serial.begin(115200);
   // Why we rebooted. Distinguishes our own faults (PANIC / TASK_WDT / BROWNOUT)
   // from an external power event (POWERON), which is what a PMU power-key long
@@ -98,7 +100,9 @@ void setup() {
   // the first thing in the log after plugging USB in, which is the only way to
   // read it: the board does this on buck power, with no card and no host.
   settings_dump_sleep_log();
+  RamAt r = ram_now();
   bsp_init();          // PMU, display panel, touch, backlight
+  ram_took("panel", r);
   // After bsp_init (it brings up I2C) and well before logger_init, because log
   // filenames and the GPX header are stamped at creation - a clock seeded even
   // a second too late leaves the file called 1980 regardless.
@@ -106,8 +110,12 @@ void setup() {
   // Night or day, decided now that the clock is seeded and before the splash
   // paints - at night it must not flash the day brightness first.
   brightness_update(true);
+  r = ram_now();
   bsp_lvgl_init();     // LVGL display + input registration
+  ram_took("drawing", r);
+  r = ram_now();
   ui_init();           // build gauge screens
+  ram_took("screens", r);
   // Come back up on whatever screen was last in use. ui_set_view validates the
   // value, so a stored view that no longer exists (g-meter compiled out, say)
   // is ignored and we stay on the default.
@@ -133,9 +141,13 @@ void setup() {
   ui_boot_anim_start();
 #endif
   bootMark("toSplash");
+  r = ram_now();
   obd_init();          // start CAN @ 500k (runs on its own task, core 0)
+  ram_took("CAN", r);
   bootMark("obd");
+  r = ram_now();
   gps_init();          // read-only NMEA on GPS_RX_GPIO
+  ram_took("GPS", r);
   bootMark("gps");
 
   // No "clock retained" flag after a deep sleep. Anything that stamps a file
@@ -145,6 +157,7 @@ void setup() {
   // the system clock - drifted on the RC oscillator through the sleep - into
   // the crystal RTC. rtc_init() now prefers the crystal on a wake instead.
 
+  r = ram_now();
   logger_init();       // mount the card; the log file opens on the first row
   // /firmware.bin on the card is installed now (and the pod restarts into
   // it) - before the watchdog and before anything opens a log file.
@@ -152,7 +165,10 @@ void setup() {
   // After the SD firmware check, which uses the card alone: from here the
   // logger's own task on core 0 does all the writing (see logger.h).
   logger_start();
+  ram_took("card + logger", r);
+  r = ram_now();
   usbdisk_init();      // the card as a USB drive - empty until "Share" is tapped
+  ram_took("USB drive", r);
   bootMark("sd");
 
   // Watchdog last, so a slow init can't trip it. The ESP32 core may already
@@ -215,7 +231,11 @@ static void passTiming(uint32_t now) {
     // catches it. The first loop() pass is when the splash starts moving.
     static uint32_t firstLoopMs = 0, lastPrintMs = 0;
     if (firstLoopMs == 0) { firstLoopMs = now ? now : 1; bootMark("toLoop"); }
-    if (now < 60000 && now - lastPrintMs >= 10000) { lastPrintMs = now; bootTimingsPrint(); }
+    if (now < 60000 && now - lastPrintMs >= 10000) {
+      lastPrintMs = now;
+      bootTimingsPrint();
+      ram_print();
+    }
   }
 }
 
@@ -498,8 +518,10 @@ static void apTask(uint32_t now) {
     static bool firstTry = true;
     if (firstTry) { firstTry = false; bootMark("ap"); }
     lastTryMs = now ? now : 1;
+    const RamAt r = ram_now();
     web_start();
     if (web_is_up()) {
+      ram_took("WiFi AP", r);
       lastTryMs = 0;
       Serial.println(F("[..] WiFi AP up"));
     }
@@ -507,6 +529,7 @@ static void apTask(uint32_t now) {
     lastTryMs = 0;
     Serial.println(F("[..] driving - WiFi AP down until stopped"));
     web_stop();
+    ram_freed("WiFi AP");
   }
 #endif
   web_task();

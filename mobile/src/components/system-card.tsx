@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, Row, useUi } from '@/components/ui';
 import { t } from '@/i18n';
-import type { PodLive } from '@/lib/pod';
+import { getRam, type PodLive, type PodRam } from '@/lib/pod';
 import { S, themed, useColors } from '@/theme';
 
 type Sys = NonNullable<PodLive['sys']>;
@@ -19,6 +20,14 @@ const of = (used: string, total: string) => t('{used} of {total}', { used, total
 // Red under 20 KB at its lowest: tight enough that an allocation may fail.
 export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso']; uptimeMs: number }) {
   const ramLow = sys.heapMin < 20 * 1024;
+  const [ram, setRam] = useState<PodRam | null>(null);
+  useEffect(() => {
+    let live = true;
+    getRam().then((r) => live && setRam(r));
+    return () => {
+      live = false;
+    };
+  }, []);
   return (
     <Card title={t('System')}>
       <Bar
@@ -27,6 +36,7 @@ export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso
         used={1 - sys.heap / sys.heapTotal}
         bad={ramLow}
       />
+      {ram ? <RamParts ram={ram} /> : null}
       <Bar label={t('PSRAM free')} value={of(mb(sys.psram), mb(sys.psramTotal))} used={1 - sys.psram / sys.psramTotal} />
       {sys.sdTotalKb > 0 ? (
         <Bar
@@ -46,6 +56,26 @@ export function SystemCard({ sys, iso, uptimeMs }: { sys: Sys; iso: PodLive['iso
       <Row label={t('Started by')} value={sys.reset} tone={/crash|watchdog|dip/.test(sys.reset) ? 'bad' : 'dim'} />
       <Row label={t('Up')} value={`${Math.round(uptimeMs / 60000)} min`} tone="dim" />
     </Card>
+  );
+}
+
+// What holds the internal RAM, largest first (ramlog.h on the gauge): its
+// own variables, what the core took before setup(), each part as measured
+// when it started, and the rest. The parts' names are the gauge's own
+// words, left in English like the reset reason.
+function RamParts({ ram }: { ram: PodRam }) {
+  const rows = [
+    { label: t('Firmware variables'), kb: ram.static / 1024 },
+    { label: t('System, before start'), kb: ram.preSetup / 1024 },
+    ...ram.parts.filter((p) => Math.abs(p.kb) >= 0.5).map((p) => ({ label: p.part, kb: p.kb })),
+  ].sort((a, b) => b.kb - a.kb);
+  rows.push({ label: t('Other'), kb: ram.otherKb });
+  return (
+    <View style={{ paddingLeft: S.md }}>
+      {rows.map((r) => (
+        <Row key={r.label} label={r.label} value={`${r.kb.toFixed(1)} KB`} tone="dim" />
+      ))}
+    </View>
   );
 }
 

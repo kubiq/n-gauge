@@ -23,6 +23,7 @@
 #include "esp_heap_caps.h"
 #include "esp_ota_ops.h"    // the running partition's size, for /api/live
 #include "esp_system.h"     // esp_reset_reason()
+#include "ramlog.h"         // /api/ram
 #include "esp_task_wdt.h"
 #include <math.h>
 #include "FS.h"
@@ -400,6 +401,15 @@ static esp_err_t handleLiveJson(httpd_req_t *r) {
            (unsigned)uxTaskGetStackHighWaterMark(NULL),
            (unsigned long)millis());
   if (len < 0 || len >= (int)sizeof(b)) return replyText(r, 500, "live JSON too long");
+  return reply(r, 200, "application/json", b, (size_t)len);
+}
+
+// Which part holds the internal RAM (ramlog.h), for the app's System card.
+// Its own route: /api/live's buffer is nearly full.
+static esp_err_t handleRamJson(httpd_req_t *r) {
+  char b[900];
+  const int len = ram_json(b, sizeof(b));
+  if (!len) return replyText(r, 500, "ram JSON too long");
   return reply(r, 200, "application/json", b, (size_t)len);
 }
 
@@ -1339,6 +1349,7 @@ static bool startServer() {
     {"/api/clock",    HTTP_POST, handleClockSet,     nullptr},
     {"/api/settings", HTTP_GET,  handleSettingsJson, nullptr},
     {"/api/live",     HTTP_GET,  handleLiveJson,     nullptr},
+    {"/api/ram",      HTTP_GET,  handleRamJson,      nullptr},
     {"/files",        HTTP_GET,  handleFiles,        nullptr},
     {"/api/files",    HTTP_GET,  handleFilesJson,    nullptr},
     {"/dl",           HTTP_GET,  handleDownload,     nullptr},

@@ -19,6 +19,7 @@
 #include "obd.h"
 #include "ota.h"
 #include "power.h"
+#include "ramlog.h"
 #include "rtc.h"
 #include "usbdisk.h"
 #include "webapi.h"
@@ -142,6 +143,14 @@ bool clock_valid() { return true; }
 
 void brightness_update(bool) {}
 bool brightness_is_night() { return false; }
+
+// ---- The RAM ledger: no ESP heap to measure ---------------------------------
+void ram_begin() {}
+RamAt ram_now() { return {0, 0}; }
+void ram_took(const char *, const RamAt &) {}
+void ram_freed(const char *) {}
+int ram_json(char *, size_t) { return 0; }
+void ram_print() {}
 
 // ---- The WiFi AP: shown as up, with nobody on it ------------------------------
 static bool webUp = false;

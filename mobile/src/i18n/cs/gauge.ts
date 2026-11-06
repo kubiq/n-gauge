@@ -99,6 +99,9 @@ export const gauge: Record<string, string> = {
   // system-card.tsx
   System: 'Systém',
   'RAM free': 'Volná RAM',
+  'Firmware variables': 'Proměnné firmwaru',
+  'System, before start': 'Systém, před startem',
+  Other: 'Ostatní',
   '{free} of {total}, lowest {min}': '{free} z {total}, nejméně {min}',
   'PSRAM free': 'Volná PSRAM',
   '{used} of {total}': '{used} z {total}',
