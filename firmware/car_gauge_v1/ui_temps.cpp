@@ -44,21 +44,22 @@ lv_obj_t *ui_build_temps() {
   // One column (2026-10-09): each row is centred on its own, and the coolant
   // number is the smaller font, so its row was narrower and the two symbols
   // sat at different x. The same slot width for both makes the rows equal,
-  // so the symbols line up and the numbers start at the same x.
+  // so the symbols line up and the numbers are centred on the same axis.
   lv_obj_set_width(coolVal, lv_obj_get_style_width(oilVal, 0));
-  lv_obj_set_style_text_align(coolVal, LV_TEXT_ALIGN_LEFT, 0);
+  lv_obj_set_style_text_align(coolVal, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(coolVal, LV_LABEL_LONG_CLIP);
   // A degree up slides in from above, a degree down from below (slide_text).
   make_sliding(oilVal);
   make_sliding(coolVal);
   // And the same size: the two symbols are different artwork, 58x46 (oil)
-  // and 43x40 (coolant). Each goes in a 66x52 box, both scaled to 52 high
-  // (beside the bigger numbers since 2026-11-06; it was 50x40), centred.
-  lv_image_set_scale(oilIcon, 256 * 52 / 46);       // -> ~66x52
-  lv_image_set_scale(coolIcon, 256 * 52 / 40);      // -> ~56x52
+  // and 43x40 (coolant). Each goes in a 56x44 box, both scaled to 44 high
+  // (beside the bigger numbers since 2026-11-06 - 52 was a touch much; it
+  // was 50x40), centred.
+  lv_image_set_scale(oilIcon, 256 * 44 / 46);       // -> ~56x44
+  lv_image_set_scale(coolIcon, 256 * 44 / 40);      // -> ~47x44
   lv_obj_t *const tempIcons[] = { oilIcon, coolIcon };
   for (lv_obj_t *ic : tempIcons) {
-    lv_obj_set_size(ic, 66, 52);
+    lv_obj_set_size(ic, 56, 44);
     lv_image_set_inner_align(ic, LV_IMAGE_ALIGN_CENTER);
   }
   // One state line for both: coolant has none of its own - an over-temp

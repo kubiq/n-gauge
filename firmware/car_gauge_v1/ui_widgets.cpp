@@ -124,7 +124,9 @@ lv_obj_t* make_icon_row(lv_obj_t *parent, int dy,
 }
 
 // Pin a row's value label to the width of the widest thing it can show, text
-// left-aligned. Without this the row re-centred on every value - "0.95" is
+// centred in it. (Left-aligned until 2026-11-06: with the 96 px digits a
+// two-digit "88°" left most of a three-digit slot empty on its right, and the
+// whole row sat ~30 px left of centre.) Without this the row re-centred on every value - "0.95" is
 // narrower than "1.23", "--" narrower still - and the symbol beside it jumped
 // sideways with each sample. Call after the label's font is set.
 //
@@ -149,7 +151,7 @@ void fix_value_width(lv_obj_t *label, const char *pattern) {
   }
   lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
   lv_obj_set_width(label, widest);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 }
 
 // "No value" in a fixed-width slot: "--" CENTRED and dim. Left-aligned like a
@@ -162,11 +164,11 @@ void show_no_value(lv_obj_t *label) {
   if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_CENTER)
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 }
-// Back to a reading: left-aligned (see fix_value_width), in its colour.
+// Back to a reading: centred (see fix_value_width), in its colour.
 void show_value_style(lv_obj_t *label, lv_color_t c) {
   set_text_color(label, c);
-  if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_LEFT)
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+  if (lv_obj_get_style_text_align(label, 0) != LV_TEXT_ALIGN_CENTER)
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 }
 
 // ---- a number that slides in ---------------------------------------------------
