@@ -24,6 +24,7 @@
 #include "esp_ota_ops.h"    // the running partition's size, for /api/live
 #include "esp_system.h"     // esp_reset_reason()
 #include "ramlog.h"         // /api/ram
+#include "upload.h"         // /api/upload, its /save keys
 #include "esp_task_wdt.h"
 #include <math.h>
 #include "FS.h"
@@ -404,6 +405,15 @@ static esp_err_t handleLiveJson(httpd_req_t *r) {
   return reply(r, 200, "application/json", b, (size_t)len);
 }
 
+// The log upload (upload.h): its settings, minus the secrets, the gauge's
+// WireGuard public key, the last upload - for the app's Upload card.
+static esp_err_t handleUploadJson(httpd_req_t *r) {
+  char b[900];
+  const int len = upload_json(b, sizeof(b));
+  if (!len) return replyText(r, 500, "upload JSON too long");
+  return reply(r, 200, "application/json", b, (size_t)len);
+}
+
 // Which part holds the internal RAM (ramlog.h), for the app's System card.
 // Its own route: /api/live's buffer is nearly full.
 static esp_err_t handleRamJson(httpd_req_t *r) {
@@ -587,6 +597,15 @@ static void saveOnLoop(void *a) {
     else if (!settings_set_log_key(arg("logPub")))
       j->msg = "Settings saved, but the log key was rejected (64 hex digits, or off).";
     web_beacon_update();                 // keyed by it
+  }
+
+  // The log upload's settings (upload.h), from the app: each saved as it
+  // comes; an empty password or token is "unchanged", as the AP's.
+  for (const char *const *k = UPLOAD_KEYS; *k; k++) {
+    if (!hasArg(*k)) continue;
+    const bool secret = !strcmp(*k, "upPass") || !strcmp(*k, "upToken");
+    if (secret && !*arg(*k)) continue;
+    if (!upload_setting(*k, arg(*k))) j->msg = "Settings saved, but an upload setting was rejected.";
   }
 
   // WiFi identity last: changing either restarts the AP and drops this
@@ -1350,6 +1369,7 @@ static bool startServer() {
     {"/api/settings", HTTP_GET,  handleSettingsJson, nullptr},
     {"/api/live",     HTTP_GET,  handleLiveJson,     nullptr},
     {"/api/ram",      HTTP_GET,  handleRamJson,      nullptr},
+    {"/api/upload",   HTTP_GET,  handleUploadJson,   nullptr},
     {"/files",        HTTP_GET,  handleFiles,        nullptr},
     {"/api/files",    HTTP_GET,  handleFilesJson,    nullptr},
     {"/dl",           HTTP_GET,  handleDownload,     nullptr},

@@ -5,10 +5,10 @@
 //
 // Settings: copy secrets.example.h to secrets.h (git ignores it) and fill in.
 // Build and flash with the gauge's board settings (scripts/build.sh's FQBN):
-//   arduino-cli compile --fqbn "<FQBN>" --library firmware/wgtest/lib/WireGuard-ESP32 firmware/wgtest
+//   arduino-cli compile --fqbn "<FQBN>" --library firmware/lib/WireGuard-ESP32 firmware/wgtest
 //   arduino-cli upload  --fqbn "<FQBN>" -p <port> firmware/wgtest
 //
-// lib/WireGuard-ESP32: Kenta Ida's library, 0.1.5 (BSD-3-Clause, its
+// firmware/lib/WireGuard-ESP32 (shared with the gauge since 2026-11-06): Kenta Ida's library, 0.1.5 (BSD-3-Clause, its
 // LICENSE), unmaintained since 2022 and written for Arduino core 2.x. Three
 // patches for core 3.3 / ESP-IDF 5, each marked in the source:
 //   wireguardif.c  the station's netif through esp_netif (tcpip_adapter is gone)

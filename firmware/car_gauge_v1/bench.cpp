@@ -16,6 +16,7 @@
 #include "settings.h"
 #include "webapi.h"
 #include "logger.h"
+#include "upload.h"         // 'U'
 #include "ui.h"
 
 #if BENCH_CONSOLE
@@ -141,6 +142,8 @@ static void benchCommands(uint32_t now) {
     benchDriveT0 = now ? now : 1;
     benchDrivePhase = -1;
   }
+  // 'U' uploads the logs now, as the car starting would (upload.h).
+  if (cmd == 'U') upload_now();
   benchDrive(now);
   if (cmd == 'r') benchNoRim = !benchNoRim;
   if (cmd == 's') benchSynth = !benchSynth;

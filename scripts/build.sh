@@ -70,7 +70,11 @@ echo "==> Compiling $SKETCH ($STAMP)"
 #
 # --wrap=get_fattime: FAT file times in UTC - see __wrap_get_fattime() in
 # logger.cpp. Without it the card's files show 2 h late on Linux in CEST.
+#
+# --library: WireGuard-ESP32, patched for core 3.3 (firmware/lib, see
+# firmware/wgtest/wgtest.ino) - the log upload's tunnel home (upload.h).
 arduino-cli compile --warnings default --fqbn "$FQBN" --output-dir "$OUT" "${BUILD_PATH[@]}" \
+  --library "$REPO/firmware/lib/WireGuard-ESP32" \
   --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=get_fattime" \
   --build-property "compiler.c.extra_flags=$EXTRA_FLAGS" \
   --build-property "compiler.cpp.extra_flags=$EXTRA_FLAGS" \

@@ -32,6 +32,7 @@
 #include "prof.h"         // FRAME_STATS timing; nothing in the car's build
 #include "wifitest.h"     // the WiFi/GPS test build; nothing otherwise
 #include "ramlog.h"       // which part holds the internal RAM
+#include "upload.h"       // the logs home over the phone's hotspot
 
 
 // Raw accelerometer reading -> horizontal g on the screen's axes plus a
@@ -96,6 +97,7 @@ void setup() {
   Serial.printf("[BOOT] reset reason %d\n", (int)esp_reset_reason());
   Serial.printf("[BOOT] firmware %s (%s)\n", ota_build(), ota_hash());   // which build is this?
   settings_load();     // before bsp_init: brightness comes from here
+  upload_init();       // its settings and the gauge's WireGuard key (upload.h)
   // What happened during the sleeps we could not watch. Printed early so it is
   // the first thing in the log after plugging USB in, which is the only way to
   // read it: the board does this on buck power, with no card and no host.
@@ -504,9 +506,10 @@ static void apTask(uint32_t now) {
   // speed - the GPS's only when the car is silent. By the GPS alone it
   // stayed up 2-5 minutes into a drive, until the first fix (2026-10-23).
   // A connected phone keeps it up; not while a wake is still checking.
-  const bool want = podstate().wifiWanted && !bench_ap_held(now);
+  // And not while the log upload has the radio (upload.h).
+  const bool want = podstate().wifiWanted && !bench_ap_held(now) && !upload_holds_radio();
 #else
-  const bool want = !power_wake_pending() && !bench_ap_held(now);
+  const bool want = !power_wake_pending() && !bench_ap_held(now) && !upload_holds_radio();
 #endif
 #if WIFI_GPS_TEST
   // The WiFi/GPS test (wifitest.h) has the radio while the AP is down for a
@@ -598,6 +601,7 @@ void loop() {
     brightness_update(false);   // day/night, every NIGHT_CHECK_MS
     ota_task();                 // confirms a freshly updated firmware once healthy
     usbTask();
+    upload_task(now);           // the logs home as the car starts (upload.h)
     apTask(now);
     power_task();               // sleep if the bus has gone quiet
     lvIdle = lvglTask();

@@ -20,6 +20,7 @@
 #include "ota.h"
 #include "power.h"
 #include "ramlog.h"
+#include "upload.h"
 #include "rtc.h"
 #include "usbdisk.h"
 #include "webapi.h"
@@ -143,6 +144,12 @@ bool clock_valid() { return true; }
 
 void brightness_update(bool) {}
 bool brightness_is_night() { return false; }
+
+// ---- The log upload: no hotspot, no tunnel ----------------------------------
+void upload_init() {}
+void upload_task(uint32_t) {}
+bool upload_holds_radio() { return false; }
+bool upload_busy() { return false; }
 
 // ---- The RAM ledger: no ESP heap to measure ---------------------------------
 void ram_begin() {}

@@ -36,6 +36,7 @@
 #include "settings.h"     // settings_log_sleep(): the sleep reason, in NVS
 #include "ota.h"          // ota_confirm(): a wake is a reboot
 #include "calc.h"         // calc_elapsed(): every idle window
+#include "upload.h"       // upload_busy(): no sleep mid-upload
 
 // Survives deep sleep (RTC memory), unlike everything else: each wake is a
 // fresh boot, so this is the only way to notice that we keep waking up for
@@ -475,6 +476,8 @@ void power_task() {
   // out at the top of this pass. These decided here, one by one, until then;
   // the state was checked against them first, on real drives - it would have
   // slept at the same second.
-  if (podstate().sleepOk) goToSleep();
+  // Not in the middle of a log upload (upload.h): it ends by itself, within
+  // UP_MAX_MS.
+  if (podstate().sleepOk && !upload_busy()) goToSleep();
 #endif
 }
