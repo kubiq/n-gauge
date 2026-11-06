@@ -12,6 +12,9 @@ Arduino (ESP32 core 3.x) firmware for the Waveshare ESP32-S3 Touch AMOLED
 | `laps.cpp` | lap timer against a start line |
 | `power.cpp` | deep sleep when the bus goes quiet; wake on CAN, button or motion |
 | `webapi.cpp` | the WiFi AP: settings pages, JSON API, card files, firmware upload |
+| `upload.cpp` | the logs home as the car starts: the phone's hotspot, a WireGuard tunnel (`../lib/WireGuard-ESP32`, patched for core 3.3), resumed by size against `../../server` |
+| `ramlog.cpp`, `taskwdt.cpp` | which part holds the internal RAM (`/api/ram`); the task watchdog, and which task tripped it, kept across the reset for the boot log |
+| `wifitest.cpp` | a test build only (`FW_TEST_DEFINE=WIFI_GPS_TEST`): WiFi traffic on and off during a drive, against the GNSS C/N0 |
 | `ota.cpp`, `rtc.cpp`, `settings.cpp`, `brightness.cpp`, `usbdisk.cpp` | updates with rollback, the clock, NVS settings, day/night dimming, the SD card as a USB drive |
 | `bsp.cpp` | board glue: display, touch, IMU, PMU, I/O expander |
 | `bench.cpp`, `prof.h` | the desk tools - the serial console, timing (`BENCH=1` builds only) |
@@ -63,6 +66,9 @@ safe way.
 In the car and in daily use: CAN/ISO-TP, oil, coolant, boost, tyres, GPS at
 25 Hz with GPX tracks, the g-meter, laps, drive logs, deep sleep at ~11 mA
 parked with wake on motion, the phone settings pages and app, OTA updates.
+The log upload over the phone's hotspot works on the bench (2026-11-06:
+~2.9 Mbit/s through the tunnel); its first car test is next.
 
-There is no separate CAN sniffer sketch: the gauge does the ISO-TP
-reassembly and logs the raw payloads itself (the Full log level).
+There is no separate CAN sniffer sketch: the gauge did the ISO-TP
+reassembly and logged the raw payloads itself while the oil byte and the
+tyre layout were being found; that level is gone since (2026-10-30).

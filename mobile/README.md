@@ -40,7 +40,9 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
   keyed by the form names - see `src/lib/settings-schema.ts`), `/api/clock`,
   `/update`, `/api/files` (the card, paged JSON), `/dl` (with `Range`, for
   a log that grew since the last sync), `/api/delete` (a drive's logs, from
-  the app's Delete).
+  the app's Delete), `/api/ram` (which part holds the gauge's internal RAM,
+  for the System card), `/api/upload` (the log upload's settings - never the
+  password, token or private key - and its last result; set through `/save`).
 - **Deleting:** a drive deleted on the phone goes on a delete-on-gauge list;
   every sync deletes those on the gauge first and never pulls them back
   meanwhile - so deleting while not connected just waits for the next
@@ -64,6 +66,8 @@ gauge "the pod" (`usePod`, `pod.ts`, `PodChip`); the app says gauge.
 | `src/app/settings.tsx` | The phone's: language, theme, log encryption, logs folder, your places |
 | `src/app/scan.tsx` | QR scan for the WiFi credentials |
 | `src/components/pod-chip.tsx` | The gauge in the header: connection and sync at a glance; a tap syncs |
+| `src/components/upload-card.tsx` | The gauge's upload home: phone hotspot, WireGuard VPN (English everywhere - the router's words; the gauge's public key to copy), upload server, time limit |
+| `src/components/system-card.tsx` | The gauge's RAM (and which part holds it), PSRAM, card, firmware, car requests |
 | `src/components/drive-chart.tsx` | Speed, boost, temperatures, voltage over a drive (react-native-svg) |
 | `src/hooks/use-sync.tsx` | The sync, run by itself on every connect; leaving the gauge's WiFi after |
 | `src/lib/pod.ts` | HTTP client for the gauge |

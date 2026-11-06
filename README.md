@@ -6,7 +6,9 @@ A round AMOLED gauge that lives in the driver-side air vent of a **Hyundai
 i30 N**, reading the car live over the OBD-II port: **oil temperature** - the
 number the car's own dashboard hides behind a menu - plus coolant, boost, tyre
 pressures, a g-meter, GPS speed and a lap timer. It logs every drive to an SD
-card, and a phone app pulls the logs off it and shows each drive on a map.
+card, uploads the logs home by itself as the car starts - over the phone's
+hotspot and a WireGuard VPN - and a phone app pulls them off it and shows
+each drive on a map.
 
 Everything here was built for one car and is in daily use in it. It is a
 hobby project, published in case the findings, the code or the approach help
@@ -60,11 +62,23 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
   in the pit, then drive), with how far the line is and the live delta to the
   best lap.
 - **Logging:** a CSV of every drive (2 Hz, decoded values - battery voltage,
-  fuel rate, lambda, catalyst and fuel rail among them - plus the raw
-  payloads), a GPX track at 25 Hz, a sleep log, and for each track session a
-  Racelogic `.vbo` with every channel, which lap analysers open (HackTheTrack,
-  Circuit Tools). Logs can be encrypted to a key only the phone holds, so a
-  card taken out of the gauge gives nothing away.
+  fuel rate, lambda, catalyst and fuel rail among them), a GPX track at
+  25 Hz, a sleep log, and for each track session a Racelogic `.vbo` with
+  every channel, which lap analysers open (HackTheTrack, Circuit Tools).
+  Logs can be encrypted to a key only the phone holds, so a card taken out of
+  the gauge gives nothing away. GPS points are kept only while the car talks
+  or really moves, so a parked car's GPS drift is not a drive.
+- **Upload home:** as the car starts - in the garage or setting off, where
+  the GPS matters least - the gauge joins the phone's hotspot (a phone
+  routine turns it on when it connects to the car's Bluetooth), opens a
+  WireGuard tunnel into the home network and sends a small service on the
+  home server ([server/](server)) whatever it lacks, resuming where the last
+  upload stopped. The logs go as encrypted as they are on the card. Set up
+  once in the app: the hotspot, the VPN (the gauge makes its own key; the app
+  shows its public half for the router) and the server, with a time limit
+  for how long the hotspot is the gauge's. Measured first, with a test build:
+  transmitting costs ~6 dB of GNSS signal at any WiFi power, so it happens
+  in the seconds an upload takes, not the whole drive.
 - **Waking up:** the N badge until the car answers, so the gauges never
   show a row of dashes; with a PC on USB, a status page for the desk.
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
@@ -77,7 +91,13 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
   named after where it started and ended (offline, from GeoNames - your own
   places like "Home" win), grouped by week, with its track on a map and its
   speed, boost, temperatures and voltage as charts. Delete a drive and it
-  goes from the gauge too. English or Czech; dark themes or light.
+  goes from the gauge too. A notification says when the gauge has a new
+  drive (it puts a mark in its WiFi beacon), the synced drives can be saved
+  to a folder by themselves, and the gauge's System card shows which part of
+  it holds the internal RAM. English or Czech; dark themes or light.
+- **Diagnostics:** a line per boot on the card (GPS rate, clock, CAN, RAM,
+  why it last reset - and after a watchdog reset, which task it was), and
+  the gauge's own WiFi repairs a join that got no address.
 
 ## Hardware
 
@@ -120,6 +140,7 @@ the wrong turns, are in [DECISIONS.md](DECISIONS.md).
 |---|---|
 | [firmware/car_gauge_v1](firmware/car_gauge_v1) | the gauge firmware (Arduino, ESP32 core 3.x, LVGL 9) |
 | [mobile](mobile) | the Android app (Expo / React Native) |
+| [server](server) | the upload service the gauge sends its logs to (Python, Docker) |
 | [sim](sim) | the gauge firmware on a PC: its screens in a window, fed a recorded drive |
 | [tests](tests) | host tests of the firmware's pure logic |
 | [hardware](hardware), [mechanical](mechanical) | carrier PCB, 3D-printed parts |
@@ -134,7 +155,14 @@ Firmware ([details](firmware/car_gauge_v1/README.md)):
 ./scripts/setup-libs.sh          # Arduino core, pinned libraries, lv_conf
 ./scripts/build.sh gauge flash   # compile and flash over USB
 ./scripts/test.sh                # host tests
-./scripts/check.sh               # before a commit: tests, both firmware builds, the sim
+./scripts/check.sh               # before a commit: tests, both firmware builds, the sim, the server
+```
+
+The upload server ([details](server/README.md)), on the home server:
+
+```sh
+cd server && echo "UPLOAD_TOKEN=$(openssl rand -hex 16)" > .env
+docker compose up -d --build
 ```
 
 The gauge on a PC ([details](sim/README.md)) - needs SDL2 and CMake:
