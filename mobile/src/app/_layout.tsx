@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { HeaderActions } from '@/components/pod-chip';
 import { LanguageProvider } from '@/hooks/use-language';
@@ -8,9 +8,17 @@ import { PodProvider } from '@/hooks/use-pod';
 import { SyncProvider } from '@/hooks/use-sync';
 import { ThemeChoiceProvider } from '@/hooks/use-theme';
 import { t } from '@/i18n';
+// Defines the background home server sync at module scope (home-task.ts):
+// here, so it exists however the JS started - the app, or the task itself.
+import { scheduleHomeTask } from '@/lib/home-task';
 import { useColors } from '@/theme';
 
 export default function RootLayout() {
+  // Hourly in the background once a home server is set up; the Upload card
+  // schedules it too, when the server is first saved.
+  useEffect(() => {
+    scheduleHomeTask().catch((e) => console.warn('home task', e));
+  }, []);
   return (
     <ThemeChoiceProvider>
       <Themed />

@@ -77,14 +77,12 @@ export const app: Record<string, string> = {
   'What a sync brings is saved into the folder by itself, decrypted - nothing to do on the phone.':
     'Co synchronizace přinese, se samo uloží do složky, dešifrované - v telefonu není co dělat.',
 
-  // The home server sync (home.ts, use-sync.tsx)
-  'Set up the home server first, in the gauge’s settings.': 'Nejdřív nastavte domácí server, v nastavení budíku.',
-  'the home server is not reachable from here': 'domácí server odsud není dostupný',
+  // The home server sync (home.ts, use-sync.tsx, home-task.ts)
+  'New drives on the phone': 'Nové jízdy v telefonu',
   'the home server refused the token': 'domácí server odmítl token',
   'the home server did not answer': 'domácí server neodpověděl',
   '1 new file from the home server.|{n} new files from the home server.':
     '1 nový soubor z domácího serveru.|{n} nové soubory z domácího serveru.|{n} nových souborů z domácího serveru.',
-  'Nothing new on the home server.': 'Na domácím serveru nic nového.',
 
   // Log encryption screen (log-key.tsx)
   'Save the key in KeePass now': 'Uložte klíč hned do KeePassu',

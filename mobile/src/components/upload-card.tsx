@@ -6,6 +6,7 @@ import { Button, Card, Note, Row, useUi } from '@/components/ui';
 import { N_, t } from '@/i18n';
 import { shortWhen } from '@/lib/format';
 import { loadHome, saveHome } from '@/lib/home';
+import { scheduleHomeTask } from '@/lib/home-task';
 import { getUpload, type PodUpload, saveSettings } from '@/lib/pod';
 import { S, themed, useColors } from '@/theme';
 
@@ -84,7 +85,10 @@ export function UploadCard() {
   const toPhone = async (u: PodUpload, token: string) => {
     const h = await loadHome();
     const next = { url: u.url, token: token || h?.token || '' };
-    if (u.url && (next.url !== h?.url || next.token !== h?.token)) await saveHome(next);
+    if (u.url && (next.url !== h?.url || next.token !== h?.token)) {
+      await saveHome(next);
+      await scheduleHomeTask();               // hourly in the background from now on
+    }
     setPhoneToken(!!next.token);
   };
   const apply = (u: PodUpload | null) => {

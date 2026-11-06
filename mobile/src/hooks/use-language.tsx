@@ -1,4 +1,4 @@
-import { useLocales } from 'expo-localization';
+import { getLocales, useLocales } from 'expo-localization';
 import { File, Paths } from 'expo-file-system';
 import { createContext, Fragment, type ReactNode, useContext, useState } from 'react';
 
@@ -16,6 +16,12 @@ function loadChoice(): LangChoice {
   } catch {
     return 'system';
   }
+}
+
+/** The language as the app would pick it, outside React - for the background task (home-task.ts). */
+export function storedLang(): Lang {
+  const c = loadChoice();
+  return c === 'system' ? (getLocales()[0]?.languageCode === 'cs' ? 'cs' : 'en') : c;
 }
 
 type Ctx = { choice: LangChoice; lang: Lang; setChoice: (c: LangChoice) => void };

@@ -194,6 +194,11 @@ class PodWifiModule : Module() {
       PodBeacon.watch(ctx, on, title, text)
     }
 
+    // The background home server sync (home-task.ts) says what came.
+    Function("notifySynced") { title: String, text: String ->
+      PodBeacon.note(ctx, title, text, PodBeacon.SYNCED_NOTE_ID)
+    }
+
     OnDestroy {
       wifiReceiver?.let { r -> runCatching { ctx.applicationContext.unregisterReceiver(r) } }
       wifiReceiver = null

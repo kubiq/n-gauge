@@ -36,6 +36,9 @@ object PodBeacon {
   private const val CHECK_MINUTES = 15L
   private const val CHANNEL = "newDrives"
   private const val NOTE_ID = 1
+  // The background home server sync's (home-task.ts): its own, so neither
+  // replaces the other.
+  const val SYNCED_NOTE_ID = 2
 
   private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -145,7 +148,7 @@ object PodBeacon {
     p.edit().putString("notified", fp).apply()
   }
 
-  private fun note(ctx: Context, title: String, text: String) {
+  fun note(ctx: Context, title: String, text: String, id: Int = NOTE_ID) {
     val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       nm.createNotificationChannel(NotificationChannel(CHANNEL, title, NotificationManager.IMPORTANCE_DEFAULT))
@@ -162,7 +165,7 @@ object PodBeacon {
       b.setContentIntent(PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE))
     }
     // Without the notification permission this is dropped, quietly.
-    runCatching { nm.notify(NOTE_ID, b.build()) }
+    runCatching { nm.notify(id, b.build()) }
   }
 
   private fun cancelNote(ctx: Context) {

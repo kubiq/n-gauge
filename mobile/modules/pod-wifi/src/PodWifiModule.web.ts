@@ -16,6 +16,7 @@ class PodWifiModule extends NativeModule<PodWifiEvents> {
   }
   setKnownBeacons(_fps: string[]): void {}
   watchBeacon(_on: boolean, _title: string, _text: string): void {}
+  notifySynced(_title: string, _text: string): void {}
 }
 
 export default registerWebModule(PodWifiModule, 'PodWifiModule');
