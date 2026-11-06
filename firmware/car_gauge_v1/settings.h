@@ -10,6 +10,10 @@
 struct Settings {
   uint8_t brightness;     // 0-255, AMOLED - by day
   bool    nightOn;        // dim to nightBright once the sun is down
+  // Speed in mph and distance in miles (2026-11-06): the GPS screen here,
+  // and the app's drives (it takes the setting from here). The track
+  // screen's distance to the line stays in metres; the logs stay metric.
+  bool    mph;
   uint8_t nightBright;    // 10-255
   uint8_t motionWakeMg;   // wake-on-motion threshold, mg; 0 = off
   uint8_t sleepAfterMin;  // sleep this long after the car goes quiet, 1-60

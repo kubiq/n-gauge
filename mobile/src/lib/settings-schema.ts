@@ -39,6 +39,11 @@ export const SETTINGS: SettingDef[] = [
   { key: 'nightOn', json: 'nightOn', type: 'bool', lo: 0, hi: 1, label: N_('Dim at night'), group: 'Display' },
   { key: 'nightBr', json: 'nightBright', type: 'u8', lo: 10, hi: 255, label: N_('Night brightness'), group: 'Display' },
   {
+    key: 'mph', json: 'mph', type: 'bool', lo: 0, hi: 1, label: N_('Speed in mph'),
+    hint: N_('Speed in mph and distances in miles, on the gauge and in this app. Temperatures, pressures and the logs stay metric.'),
+    group: 'Display',
+  },
+  {
     key: 'womMg', json: 'motionWakeMg', type: 'u8', lo: 0, hi: 255, label: N_('Wake on motion'), unit: 'mg',
     hint: N_('0 = off. Below 30 is taken as 30.'), group: 'Power',
   },

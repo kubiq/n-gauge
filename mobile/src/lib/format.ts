@@ -2,9 +2,7 @@
 
 import { locale, t } from '../i18n/index.ts';
 
-export function km(m: number): string {
-  return m >= 10000 ? `${Math.round(m / 1000)} km` : `${(m / 1000).toFixed(1)} km`;
-}
+// (Distances and speeds: units.ts - km or miles, as the gauge is set.)
 
 /** A file's size: "4.2 MB" under 10 MB, "17 MB" above. */
 export function mb(bytes: number): string {

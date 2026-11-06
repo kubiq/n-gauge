@@ -7,6 +7,7 @@ import { usePod } from '@/hooks/use-pod';
 import { t } from '@/i18n';
 import { speedStops } from '@/lib/speed-scale';
 import type { TrackPoint } from '@/lib/trips';
+import { speed, speedIn } from '@/lib/units';
 import { type Colors, S, themed, useColors } from '@/theme';
 
 // MapLibre GL JS in a WebView, on OpenFreeMap's vector tiles: no API key, no
@@ -221,7 +222,7 @@ export function TrackMap({
         {stopsOf(track).map((kmh, i, all) => (
           <View key={kmh} style={styles.legendItem}>
             <View style={[styles.swatch, { backgroundColor: SPEED_COLOURS[i] }]} />
-            <Note>{i === all.length - 1 ? `${kmh} km/h` : String(kmh)}</Note>
+            <Note>{i === all.length - 1 ? speed(kmh) : String(Math.round(speedIn(kmh)))}</Note>
           </View>
         ))}
       </View>

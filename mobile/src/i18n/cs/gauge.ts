@@ -56,6 +56,9 @@ export const gauge: Record<string, string> = {
   Brightness: 'Jas',
   'Dim at night': 'V noci ztlumit',
   'Night brightness': 'Noční jas',
+  'Speed in mph': 'Rychlost v mph',
+  'Speed in mph and distances in miles, on the gauge and in this app. Temperatures, pressures and the logs stay metric.':
+    'Rychlost v mph a vzdálenosti v mílích, na budíku i v této aplikaci. Teploty, tlaky a záznamy zůstávají metrické.',
   'Wake on motion': 'Probudit pohybem',
   '0 = off. Below 30 is taken as 30.': '0 = vypnuto. Méně než 30 se bere jako 30.',
   'Sleep after': 'Uspat po',

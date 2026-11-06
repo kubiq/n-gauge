@@ -53,6 +53,7 @@ const SettingDef settings_table[] = {
   { "bright",   "brightness",    SET_U8,   &settings.brightness,     LCD_BRIGHTNESS_DEFAULT,     10,    255 },
   { "nightOn",  "nightOn",       SET_BOOL, &settings.nightOn,        NIGHT_ON_DEFAULT,           0,     1 },
   { "nightBr",  "nightBright",   SET_U8,   &settings.nightBright,    NIGHT_BRIGHTNESS_DEFAULT,   10,    255 },
+  { "mph",      "mph",           SET_BOOL, &settings.mph,            0,                          0,     1 },
   // 0 = off; 1-29 becomes 30 in settings_fixup().
   { "womMg",    "motionWakeMg",  SET_U8,   &settings.motionWakeMg,   MOTION_WAKE_MG_DEFAULT,     0,     255 },
   { "sleepMin", "sleepAfterMin", SET_U8,   &settings.sleepAfterMin,  BUS_IDLE_SLEEP_MS / 60000,  1,     60 },

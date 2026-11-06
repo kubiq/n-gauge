@@ -9,7 +9,8 @@ import { Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { t } from '@/i18n';
-import { duration, km, when } from '@/lib/format';
+import { duration, when } from '@/lib/format';
+import { distance, speed } from '@/lib/units';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, seriesOf, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
@@ -182,11 +183,11 @@ export default function TripScreen() {
         <Card title={t('Drive')}>
           {/* The header carries the name; the date goes here then. */}
           {name && start ? <Row label={t('Started')} value={when(start)} /> : null}
-          <Row label={t('Distance')} value={km(g.distanceM)} />
+          <Row label={t('Distance')} value={distance(g.distanceM)} />
           {secs !== null ? <Row label={t('Time')} value={duration(secs)} /> : null}
           <Row label={t('Moving')} value={duration(g.movingS)} />
-          <Row label={t('Top speed (GPS)')} value={`${Math.round(g.maxKmh)} km/h`} />
-          {g.movingS > 0 ? <Row label={t('Average moving')} value={`${Math.round((g.distanceM / g.movingS) * 3.6)} km/h`} /> : null}
+          <Row label={t('Top speed (GPS)')} value={speed(g.maxKmh)} />
+          {g.movingS > 0 ? <Row label={t('Average moving')} value={speed((g.distanceM / g.movingS) * 3.6)} /> : null}
         </Card>
       ) : null}
 
@@ -199,7 +200,7 @@ export default function TripScreen() {
           {c.maxCoolantC != null ? <Row label={t('Peak coolant')} value={`${Math.round(c.maxCoolantC)} °C`} /> : null}
           {c.maxRpm != null ? <Row label={t('Peak rpm')} value={String(Math.round(c.maxRpm))} /> : null}
           {/* The car's own figure reads a little different from GPS - both are shown, each named. */}
-          {c.maxObdKmh != null ? <Row label={t('Top speed (speedometer)')} value={`${Math.round(c.maxObdKmh)} km/h`} /> : null}
+          {c.maxObdKmh != null ? <Row label={t('Top speed (speedometer)')} value={speed(c.maxObdKmh)} /> : null}
           {/* From the car's fuel rate over time, not the sloshing tank level. */}
           {c.fuelL != null && c.fuelL > 0 ? <Row label={t('Fuel used')} value={`${c.fuelL.toFixed(2)} l`} /> : null}
           {per100 !== null ? <Row label={t('Consumption')} value={`${per100.toFixed(1)} l/100 km`} /> : null}

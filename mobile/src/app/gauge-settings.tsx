@@ -14,6 +14,7 @@ import { getLive, getSettings, type PodLive, saveSettings, setClock, uploadFirmw
 import { scanPodQr } from '@/lib/scan-qr';
 import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
 import { saveGaugeFw } from '@/lib/store';
+import { setMph } from '@/lib/units';
 import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
@@ -80,6 +81,9 @@ export default function GaugeSettingsScreen() {
         setOrig(s);
         setEdit({});
         setErr(null);
+        // The app reads speeds and distances as the gauge is set (units.ts);
+        // older firmware has no mph setting.
+        if (typeof s.mph === 'boolean') setMph(s.mph);
       },
       (e: Error) => setErr(e.message),
     );

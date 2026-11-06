@@ -1,8 +1,9 @@
 import { getLocales, useLocales } from 'expo-localization';
 import { File, Paths } from 'expo-file-system';
-import { createContext, Fragment, type ReactNode, useContext, useState } from 'react';
+import { createContext, Fragment, type ReactNode, useContext, useState, useSyncExternalStore } from 'react';
 
 import { type Lang, type LangChoice, setLang } from '@/i18n';
+import { isMph, onUnitsChange } from '@/lib/units';
 
 // The language picked in Settings, kept on the phone: English, Czech, or
 // the phone's own (Czech if the phone is in Czech, else English). Read
@@ -33,6 +34,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const lang: Lang = choice === 'system' ? phone : choice;
   // Before anything below renders: t() reads it from the i18n module.
   setLang(lang);
+  // km or miles (units.ts), redrawn the same way as a language change.
+  const mph = useSyncExternalStore(onUnitsChange, isMph);
   const setChoice = (c: LangChoice) => {
     file.write(c);
     setChoiceState(c);
@@ -41,7 +44,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     <LanguageContext.Provider value={{ choice, lang, setChoice }}>
       {/* Keyed on the language: a change redraws everything in it - the
           screens remember nothing in t()'s words, so nothing goes stale. */}
-      <Fragment key={lang}>{children}</Fragment>
+      <Fragment key={`${lang}-${mph ? 'mph' : 'kmh'}`}>{children}</Fragment>
     </LanguageContext.Provider>
   );
 }

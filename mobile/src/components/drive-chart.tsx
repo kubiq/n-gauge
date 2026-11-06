@@ -5,6 +5,7 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { Card } from '@/components/ui';
 import { t } from '@/i18n';
 import { duration } from '@/lib/format';
+import { speedIn, speedUnit } from '@/lib/units';
 import type { Series } from '@/lib/series';
 import { type Colors, S, themed, useColors } from '@/theme';
 
@@ -52,7 +53,14 @@ const peak = (digits: number, unit: string) => (lines: Line_[]) =>
 const PANELS = (s: Series, C: Colors): Panel[] => {
   const BLUE = C.series1, ORANGE = C.series2;
   return [
-    { title: t('Speed'), unit: ' km/h', digits: 0, lines: [{ name: t('Speed'), data: s.kmh, color: BLUE }], idle: peak(0, ' km/h') },
+    // In km/h or mph (units.ts), the series converted once here.
+    {
+      title: t('Speed'),
+      unit: ` ${speedUnit()}`,
+      digits: 0,
+      lines: [{ name: t('Speed'), data: s.kmh.map((v) => (v === null ? null : speedIn(v))), color: BLUE }],
+      idle: peak(0, ` ${speedUnit()}`),
+    },
     // The true value, vacuum included, with the zero drawn.
     { title: t('Boost'), unit: ' bar', digits: 2, zero: true, lines: [{ name: t('Boost'), data: s.boostBar, color: BLUE }], idle: peak(2, ' bar') },
     {

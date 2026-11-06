@@ -4,12 +4,17 @@
 // ============================================================================
 #include "ui_priv.h"
 #include "calc.h"       // calc_elapsed: the speed's update rate
+#include "settings.h"   // settings.mph: the units shown
 #include <stdio.h>      // snprintf: the speed, for slide_text
 
 extern "C" const lv_image_dsc_t icon_sat;        // GPS screen
 
+// km -> miles, for the mph setting (settings.h): the speed and the trip
+// shown here only - the logs stay metric.
+#define KM_PER_MILE 1.609344f
+
 // gps widgets
-static lv_obj_t *gpsSpeed, *gpsState, *gpsTrip, *gpsIcon;
+static lv_obj_t *gpsSpeed, *gpsState, *gpsTrip, *gpsIcon, *gpsUnit;
 
 lv_obj_t *ui_build_gps() {
   lv_obj_t *s = make_screen();
@@ -19,7 +24,7 @@ lv_obj_t *ui_build_gps() {
   gpsSpeed = make_big_label(gpsRow, COL_GOOD, 0);
   fix_value_width(gpsSpeed, "888");
   make_sliding(gpsSpeed);                // faster: in from below; slower: from above
-  make_name(s, "km/h", 40);
+  gpsUnit = make_name(s, "km/h", 40);
   gpsState = make_name(s, "", 80);
   // Below the fix state rather than beside the speed: at 466 px the speed is
   // already the full chord width, and crowding a second number next to it
@@ -41,20 +46,34 @@ void ui_update_gps(bool linkUp, bool haveFix, int sats, float speedKmh,
   //
   // Always shown, even with no fix: it is the distance already travelled, and
   // losing signal does not un-travel it.
+  //
+  // In miles and mph with the mph setting (2026-11-06): a change of it
+  // redraws both, the unit's name too.
+  static int lastMph = -1;
   static int lastTrip = INT32_MIN;
-  const int trip = (int)(tripKm * 10.0f + 0.5f);
+  static int lastKmh = INT32_MIN;      // the shown speed, in the shown unit
+  const bool mph = settings.mph;
+  if ((int)mph != lastMph) {
+    lastMph = mph;
+    lv_label_set_text(gpsUnit, mph ? "mph" : "km/h");
+    lastTrip = lastTrip == INT32_MIN ? INT32_MIN : INT32_MIN + 1;   // redraw it
+    lastKmh = INT32_MIN;
+  }
+  const int trip = (int)((mph ? tripKm / KM_PER_MILE : tripKm) * 10.0f + 0.5f);
   if (trip != lastTrip) {
     if (lastTrip == INT32_MIN) lv_obj_set_style_text_color(gpsTrip, COL_INK, 0);
     lastTrip = trip;
-    lv_label_set_text_fmt(gpsTrip, "%d.%d km", trip / 10, trip % 10);
+    lv_label_set_text_fmt(gpsTrip, "%d.%d %s", trip / 10, trip % 10, mph ? "mi" : "km");
   }
 
   static bool lastLink = false, lastFix = false;
-  static int  lastSats = INT32_MIN, lastKmh = INT32_MIN;
+  static int  lastSats = INT32_MIN;
   static uint32_t speedAt = 0;
   const uint32_t now = lv_tick_get();
   // What actually gets shown: 0 standing still, not the fix's wander.
-  int kmh = speedKmh < GPS_SPEED_STILL_KMH ? 0 : (int)(speedKmh + 0.5f);
+  // ("kmh" is the shown unit's number: mph with the setting.)
+  int kmh = speedKmh < GPS_SPEED_STILL_KMH ? 0
+            : (int)((mph ? speedKmh / KM_PER_MILE : speedKmh) + 0.5f);
   // A new speed at most every GPS_SPEED_SHOW_MS, so each slide (as long)
   // finishes before the next number comes: at 25 fixes a second a rising
   // speed changed the number faster than any slide could run. The latest

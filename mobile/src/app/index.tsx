@@ -7,7 +7,8 @@ import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Pill, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
-import { duration, km, mb, when } from '@/lib/format';
+import { duration, mb, when } from '@/lib/format';
+import { distance, speed } from '@/lib/units';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
@@ -277,7 +278,7 @@ export default function TripsScreen() {
                   {`  ·  ${tn(w.drives, '1 drive', '{n} drives')}`}
                   {/* Totals only of a whole week: with drives unread they
                       would be a part passed off as the sum. */}
-                  {!waiting && w.distanceM > 0 ? `  ·  ${km(w.distanceM)}` : ''}
+                  {!waiting && w.distanceM > 0 ? `  ·  ${distance(w.distanceM)}` : ''}
                   {!waiting && w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
                 </Text>
               </Text>
@@ -368,11 +369,11 @@ function TripRow({
           </View>
           {name && start ? <Text style={ui.note}>{when(start)}</Text> : null}
         </View>
-        {g ? <Text style={styles.big}>{km(g.distanceM)}</Text> : null}
+        {g ? <Text style={styles.big}>{distance(g.distanceM)}</Text> : null}
       </View>
       <View style={styles.facts}>
         {secs !== null ? <Fact label={t('time')} value={duration(secs)} /> : null}
-        {g ? <Fact label={t('top')} value={`${Math.round(g.maxKmh)} km/h`} /> : null}
+        {g ? <Fact label={t('top')} value={speed(g.maxKmh)} /> : null}
         {facts.boost && c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
         {facts.oil && c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
         {facts.fuelL && c?.fuelL != null && c.fuelL > 0 ? <Fact label={t('fuel')} value={`${c.fuelL.toFixed(1)} l`} /> : null}
