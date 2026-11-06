@@ -14,6 +14,9 @@ struct Settings {
   // and the app's drives (it takes the setting from here). The track
   // screen's distance to the line stays in metres; the logs stay metric.
   bool    mph;
+  // The big numbers slide in and out when they change (slide_text); off,
+  // they just change (asked 2026-11-06: switchable, off for now).
+  bool    slideNums;
   uint8_t nightBright;    // 10-255
   uint8_t motionWakeMg;   // wake-on-motion threshold, mg; 0 = off
   uint8_t sleepAfterMin;  // sleep this long after the car goes quiet, 1-60

@@ -3,6 +3,7 @@
 // moves between screens. See ui_priv.h.
 // ============================================================================
 #include "ui_priv.h"
+#include "settings.h"   // slideNums: slide_text on or off
 #include <string.h>     // strcmp: slide_text, only on a change
 
 // Swipe to change screens: left for the next one, right for the previous one.
@@ -212,7 +213,8 @@ void slide_text(lv_obj_t *label, const char *text, int dir, uint32_t ms) {
     lv_obj_set_y(label, 0);
     lv_obj_add_flag(ghost, LV_OBJ_FLAG_HIDDEN);
   }
-  if (!ghost || dir == 0) { lv_label_set_text(label, text); return; }
+  // Not with the setting off (settings.slideNums): the number just changes.
+  if (!ghost || dir == 0 || !settings.slideNums) { lv_label_set_text(label, text); return; }
   const int32_t h = lv_obj_get_height(lv_obj_get_parent(label));
   const int32_t s = dir > 0 ? -1 : 1;
   // The ghost takes the old number as it looked.
