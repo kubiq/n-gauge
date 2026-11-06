@@ -110,6 +110,7 @@ export const gauge: Record<string, string> = {
   'Upload server': 'Server pro nahrávání',
   Address: 'Adresa',
   Token: 'Token',
+  'Time limit, minutes': 'Časový limit, minuty',
   'The server at home, as seen through the VPN (server/README.md).':
     'Server doma, jak je vidět přes VPN (server/README.md).',
   'set - type to change': 'nastaveno - pro změnu přepište',

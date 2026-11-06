@@ -42,7 +42,8 @@ bool upload_busy();
 void upload_now();
 
 // /save's keys (upSsid, upPass, upUrl, upToken, wgAddr, wgPeer, wgHost,
-// wgPort, wgNewKey): saved at once, whatever the value - a refused one had
+// wgPort, upMaxMin - the time limit, minutes - and wgNewKey): saved at
+// once, whatever the value - a refused one had
 // to be typed again (2026-11-06). The usual forms are cleaned up (no
 // http://, a /32, host:port); what still looks wrong comes back as a few
 // words, nullptr when nothing does.

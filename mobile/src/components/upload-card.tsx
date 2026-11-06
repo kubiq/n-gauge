@@ -19,7 +19,7 @@ import { S, themed, useColors } from '@/theme';
 // VPN through the router, the upload server at home. The VPN's words stay
 // English in every language - they are the words the router's own page
 // and WireGuard use, to be matched against them.
-type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr';
+type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'upMaxMin' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr';
 type FieldDef = {
   key: Field;
   label: string;
@@ -45,6 +45,8 @@ const VPN: FieldDef[] = [
 const SERVER: FieldDef[] = [
   { key: 'upUrl', label: N_('Address'), hint: 'http://192.168.1.10:8650' },
   { key: 'upToken', label: N_('Token'), secret: true },
+  // How long the hotspot is the gauge's at most; the rest goes next time.
+  { key: 'upMaxMin', label: N_('Time limit, minutes'), numeric: true },
 ];
 
 function fromPod(u: PodUpload): Record<Field, string> {
@@ -53,6 +55,7 @@ function fromPod(u: PodUpload): Record<Field, string> {
     upPass: '',
     upUrl: u.url,
     upToken: '',
+    upMaxMin: String(u.maxMin ?? 10),
     wgHost: u.wgHost,
     wgPort: String(u.wgPort),
     wgPeer: u.wgPeer,

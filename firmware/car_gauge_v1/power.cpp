@@ -477,7 +477,7 @@ void power_task() {
   // the state was checked against them first, on real drives - it would have
   // slept at the same second.
   // Not in the middle of a log upload (upload.h): it ends by itself, within
-  // UP_MAX_MS.
+  // its time limit (the app's Upload card).
   if (podstate().sleepOk && !upload_busy()) goToSleep();
 #endif
 }

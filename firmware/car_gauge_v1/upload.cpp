@@ -23,11 +23,11 @@
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
 #define UP_NTP_MS        15000   // the clock, when the gauge has none
-#if UP_SHORT_TEST                // FW_TEST_DEFINE=UP_SHORT_TEST: the end, quickly
-#define UP_MAX_MS        60000
-#else
-#define UP_MAX_MS       600000   // the whole upload, at most
-#endif
+// The whole upload, at most: a setting (upMaxMin, the app's Upload card),
+// so the phone's hotspot is not held longer than its owner wants. What is
+// left goes the next time, from where this one stopped.
+#define UP_MAX_MIN_DEFAULT  10
+#define UP_MAX_MIN_TOP      60
 #define UP_HTTP_MS       10000
 #define UP_CHUNK          4096   // a card read, under the lock (internal: SD DMA)
 #define UP_PLAN_MAX    (48 * 1024)
@@ -42,6 +42,7 @@ struct UpConfig {
   char     wgPeer[45];                // the router's public key, base64
   char     wgHost[64];                // the router, from outside
   uint16_t wgPort;
+  uint8_t  maxMin;                    // the time limit, minutes
   uint8_t  wgPriv[32];                // made here, never leaves
 };
 static UpConfig cfg;
@@ -49,7 +50,7 @@ static char wgPub[45];                // its public half, base64
 
 static const char *NS = "upload";
 const char *const UPLOAD_KEYS[] = {"upSsid", "upPass", "upUrl", "upToken", "wgAddr",
-                                   "wgPeer", "wgHost", "wgPort", "wgNewKey", nullptr};
+                                   "wgPeer", "wgHost", "wgPort", "upMaxMin", "wgNewKey", nullptr};
 
 static void b64(char *out, size_t n, const uint8_t *in, size_t len) {
   size_t olen = 0;
@@ -80,6 +81,7 @@ static void save() {
   p.putString("wgPeer", cfg.wgPeer);
   p.putString("wgHost", cfg.wgHost);
   p.putUShort("wgPort", cfg.wgPort);
+  p.putUChar("maxMin", cfg.maxMin);
   p.putBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv));
   p.end();
 }
@@ -98,6 +100,7 @@ void upload_init() {
   wg_end_step = 0;
   memset(&cfg, 0, sizeof(cfg));
   cfg.wgPort = 51820;
+  cfg.maxMin = UP_MAX_MIN_DEFAULT;
   bool haveKey = false;
   Preferences p;
   if (p.begin(NS, true)) {
@@ -109,6 +112,7 @@ void upload_init() {
     getStr(p, "wgPeer", cfg.wgPeer, sizeof(cfg.wgPeer));
     getStr(p, "wgHost", cfg.wgHost, sizeof(cfg.wgHost));
     cfg.wgPort = p.getUShort("wgPort", 51820);
+    cfg.maxMin = p.getUChar("maxMin", UP_MAX_MIN_DEFAULT);
     haveKey = p.getBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv)) == sizeof(cfg.wgPriv);
     p.end();
   }
@@ -176,6 +180,10 @@ const char *upload_setting(const char *key, const char *v) {
     const long port = atol(v);
     if (port > 0 && port < 65536) cfg.wgPort = (uint16_t)port;
     else note = "the router port is not 1-65535";
+  } else if (!strcmp(key, "upMaxMin")) {
+    const long m = atol(v);
+    cfg.maxMin = (uint8_t)(m < 1 ? 1 : m > UP_MAX_MIN_TOP ? UP_MAX_MIN_TOP : m);
+    if (m < 1 || m > UP_MAX_MIN_TOP) note = "the time limit is 1-60 minutes";
   } else if (!strcmp(key, "wgNewKey")) {
     newKey();
     derivePub();
@@ -210,13 +218,13 @@ int upload_json(char *out, size_t n) {
   char ssid[70], url[200], host[130], msg[150], addr[34], peer[92];
   const int len = snprintf(out, n,
       "{\"configured\":%s,\"ssid\":\"%s\",\"passSet\":%s,\"url\":\"%s\",\"tokenSet\":%s,"
-      "\"wgAddr\":\"%s\",\"wgPeer\":\"%s\",\"wgHost\":\"%s\",\"wgPort\":%u,\"wgPub\":\"%s\","
+      "\"wgAddr\":\"%s\",\"wgPeer\":\"%s\",\"wgHost\":\"%s\",\"wgPort\":%u,\"maxMin\":%u,\"wgPub\":\"%s\","
       "\"last\":{\"at\":%lu,\"ok\":%s,\"files\":%u,\"bytes\":%lu,\"ms\":%lu,\"msg\":\"%s\"}}",
       configured() ? "true" : "false", jsonSafe(cfg.ssid, ssid, sizeof(ssid)),
       cfg.pass[0] ? "true" : "false", jsonSafe(cfg.url, url, sizeof(url)),
       cfg.token[0] ? "true" : "false", jsonSafe(cfg.wgAddr, addr, sizeof(addr)),
       jsonSafe(cfg.wgPeer, peer, sizeof(peer)),
-      jsonSafe(cfg.wgHost, host, sizeof(host)), cfg.wgPort, wgPub,
+      jsonSafe(cfg.wgHost, host, sizeof(host)), cfg.wgPort, cfg.maxMin, wgPub,
       (unsigned long)last.at, last.ok ? "true" : "false", last.files,
       (unsigned long)last.bytes, (unsigned long)last.ms, jsonSafe(last.msg, msg, sizeof(msg)));
   return (len > 0 && (size_t)len < n) ? len : 0;
@@ -448,8 +456,9 @@ static void uploadTask(void *arg) {
   // "name offset" per line: each file's missing part.
   {
     const char *err = nullptr;
+    const uint32_t maxMs = c.maxMin * 60000UL;
     int from = 0;
-    while (from < (int)todo.length() && millis() - t0 < UP_MAX_MS) {
+    while (from < (int)todo.length() && millis() - t0 < maxMs) {
       int nl = todo.indexOf('\n', from);
       if (nl < 0) nl = todo.length();
       const String l = todo.substring(from, nl);
@@ -465,8 +474,9 @@ static void uploadTask(void *arg) {
       }
       r.files++;
     }
+    // Out of time only with files still to go - the next upload sends them.
     if (err) finish(r, t0, false, line);
-    else if (millis() - t0 >= UP_MAX_MS) finish(r, t0, false, "out of time");
+    else if (from < (int)todo.length()) finish(r, t0, false, "time limit - the rest goes next time");
     else finish(r, t0, true, "");
   }
 
