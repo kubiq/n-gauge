@@ -1,0 +1,13 @@
+# docker compose up -d --build. The token in .env (UPLOAD_TOKEN=...), not here:
+# this file is public. The folder ./data holds the uploads, as the gauge
+# wrote them (encrypted to the phone's key).
+services:
+  n-gauge-upload:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8650:8650"
+    environment:
+      UPLOAD_TOKEN: ${UPLOAD_TOKEN:?set UPLOAD_TOKEN in .env}
+    volumes:
+      - ./data:/data

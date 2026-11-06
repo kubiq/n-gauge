@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Everything that should pass before a firmware commit: the host tests, the
 # firmware as the car runs it AND as the bench runs it (BENCH=1 - code only
-# that build compiles rots unseen otherwise: it did, 2026-10-19), and the
-# simulator.
+# that build compiles rots unseen otherwise: it did, 2026-10-19), the
+# simulator, and the upload server the gauge sends its logs to.
 #
 # Usage: ./scripts/check.sh
 set -euo pipefail
@@ -37,5 +37,6 @@ step "host tests"            ./scripts/test.sh
 step "firmware (car)"        ./scripts/build.sh gauge
 step "firmware (bench)"      env BENCH=1 ./scripts/build.sh gauge
 step "simulator"             bash -c 'cmake -S sim -B sim/build >/dev/null && cmake --build sim/build -j"$(nproc)"'
+step "upload server"         bash -c 'cd server && python3 -m unittest -q test_upload_server.py'
 
 [ "$fail" = 0 ] && echo "all checks passed" || { echo "CHECKS FAILED"; exit 1; }
