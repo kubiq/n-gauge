@@ -209,12 +209,18 @@ void bsp_lvgl_init() {
   lv_init();
   lv_tick_set_cb(lvglTick);
 
-  // Partial-render strip. A full 466x466 frame would be 434 KB, which won't
-  // fit in DMA-capable internal RAM, so render 40 lines at a time. Keep the
-  // line count EVEN so each split strip stays 2-pixel aligned (see
-  // lvglAlignArea) - an odd strip height would re-introduce the shear.
+  // Partial-render strip, 40 lines at a time. Keep the line count EVEN so
+  // each split strip stays 2-pixel aligned (see lvglAlignArea) - an odd strip
+  // height would re-introduce the shear.
+  //
+  // In PSRAM since 2026-11-06 - it was 36 KB of internal RAM, the biggest
+  // single block of it, and the upload over the hotspot needs that. It need
+  // not be DMA-capable: the flush never hands it to the SPI DMA. The QSPI bus
+  // (Arduino_ESP32QSPI::writePixels) byte-swaps each piece into its own 2 KB
+  // internal DMA buffer and sends that, so this one is only read by the CPU.
+  // Internal is the fallback, should PSRAM be missing.
   const uint32_t bufPx = LCD_W * 40;
-  void *buf = heap_caps_malloc(bufPx * 2, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+  void *buf = heap_caps_malloc(bufPx * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!buf) buf = heap_caps_malloc(bufPx * 2, MALLOC_CAP_8BIT);
   if (!buf) {
     Serial.println(F("[ERR] LVGL draw buffer alloc failed - no UI"));

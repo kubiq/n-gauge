@@ -420,7 +420,16 @@ void gps_init() {
   //
   // Priority 4, below CAN's 5: a dropped ISO-TP consecutive frame aborts a
   // whole transfer, whereas a late NMEA sentence costs one fix out of 25.
-  xTaskCreatePinnedToCore(gpsTask, "gps", TASK_GPS_STACK, NULL, TASK_GPS_PRIO, NULL, TASK_CORE);
+  //
+  // Its stack in PSRAM (2026-11-06): 6 KB of internal RAM back for the
+  // upload. Allowed because this task never writes flash - a task whose
+  // stack is in PSRAM must not, the cache is off while flash is written.
+  // (On another task's flash write it is simply paused, as every task is.)
+  // Internal if PSRAM is short. The park's vTaskDelete() frees nothing of a
+  // stack it was not given - right before a deep sleep, that does not matter.
+  if (xTaskCreatePinnedToCoreWithCaps(gpsTask, "gps", TASK_GPS_STACK, NULL, TASK_GPS_PRIO,
+                                      NULL, TASK_CORE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS)
+    xTaskCreatePinnedToCore(gpsTask, "gps", TASK_GPS_STACK, NULL, TASK_GPS_PRIO, NULL, TASK_CORE);
 }
 
 #if GPS_SLEEP_ON_PARK
