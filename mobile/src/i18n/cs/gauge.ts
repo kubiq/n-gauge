@@ -96,6 +96,29 @@ export const gauge: Record<string, string> = {
 
   Save: 'Uložit',
 
+  // upload-card.tsx
+  'Upload to the home server': 'Nahrávání na domácí server',
+  'As the car starts, the gauge joins this hotspot, opens a WireGuard tunnel home and uploads the logs the server lacks.':
+    'Při startu auta se budík připojí k tomuto hotspotu, otevře tunel WireGuard domů a nahraje záznamy, které server ještě nemá.',
+  'Last upload': 'Poslední nahrání',
+  '{files} files, {kb} KB, {when}': '{files} souborů, {kb} KB, {when}',
+  'none since it woke': 'od probuzení žádné',
+  'not set up': 'nenastaveno',
+  'Hotspot name': 'Název hotspotu',
+  'Hotspot password': 'Heslo hotspotu',
+  Server: 'Server',
+  'Server token': 'Token serveru',
+  'Router address': 'Adresa routeru',
+  'Router port': 'Port routeru',
+  'Router public key': 'Veřejný klíč routeru',
+  'Gauge’s tunnel address': 'Adresa budíku v tunelu',
+  'set - type to change': 'nastaveno - pro změnu přepište',
+  'not set': 'nenastaveno',
+  'Gauge’s public key': 'Veřejný klíč budíku',
+  'Add it on the router as a WireGuard peer, allowed the gauge’s tunnel address only.':
+    'Přidejte ho na routeru jako protějšek WireGuard, povolený jen pro adresu budíku v tunelu.',
+  'Copy the public key': 'Zkopírovat veřejný klíč',
+
   // system-card.tsx
   System: 'Systém',
   'RAM free': 'Volná RAM',

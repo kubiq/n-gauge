@@ -108,6 +108,35 @@ export async function getRam(): Promise<PodRam | null> {
   }
 }
 
+/**
+ * The log upload over the phone's hotspot (upload.h on the gauge, firmware
+ * from 2026-11-06 on): its settings - the password and token only as "set" -
+ * the gauge's WireGuard public key, and the last upload this wake.
+ */
+export type PodUpload = {
+  configured: boolean;
+  ssid: string;
+  passSet: boolean;
+  url: string;
+  tokenSet: boolean;
+  wgAddr: string;
+  wgPeer: string;
+  wgHost: string;
+  wgPort: number;
+  wgPub: string;
+  /** at: epoch s, 0 = none since the gauge woke. */
+  last: { at: number; ok: boolean; files: number; bytes: number; ms: number; msg: string };
+};
+
+/** Older firmware has no /api/upload: null. */
+export async function getUpload(): Promise<PodUpload | null> {
+  try {
+    return (await (await call('/api/upload')).json()) as PodUpload;
+  } catch {
+    return null;
+  }
+}
+
 /** `body` from saveForm(). Returns the pod's message ("Saved." etc). */
 export async function saveSettings(body: string): Promise<string> {
   return (await postForm('/save', body)).text();

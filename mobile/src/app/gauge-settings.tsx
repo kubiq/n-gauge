@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'rea
 
 import { ScreenOrderCard } from '@/components/screen-order-card';
 import { SystemCard } from '@/components/system-card';
+import { UploadCard } from '@/components/upload-card';
 import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
@@ -277,6 +278,7 @@ export default function GaugeSettingsScreen() {
         <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
+      <UploadCard />
       {live?.sys ? <SystemCard sys={live.sys} iso={live.iso} uptimeMs={live.uptimeMs} /> : null}
       {another}
     </Screen>
