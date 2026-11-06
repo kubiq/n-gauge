@@ -9,7 +9,16 @@ import { legacyRenames } from './legacy-names';
 import { readLogText } from './logtext';
 import { atlasNames } from './place-atlas';
 import { csvSeries, type Series } from './series';
-import { deleteFromInbox, inboxFile, loadDeleted, loadInbox, renameInbox, saveDeleted } from './store';
+import {
+  deleteFromInbox,
+  inboxFile,
+  loadDeleted,
+  loadHomeDeleted,
+  loadInbox,
+  renameInbox,
+  saveDeleted,
+  saveHomeDeleted,
+} from './store';
 import {
   type CsvSummary,
   type GpxSummary,
@@ -85,11 +94,14 @@ export function renameLegacyLogs(): void {
 /**
  * A drive gone for good: its logs and cached summaries off the phone, and
  * its names on the "delete on the gauge" list - the next sync deletes them
- * from the card (now, if connected) and never pulls them back meanwhile.
+ * from the card (now, if connected) and never pulls them back meanwhile -
+ * and on the home server's: its next sync deletes them there, and the
+ * server keeps the names, so the gauge's next upload does not bring them back.
  */
 export function deleteDrive(t: TripFiles): void {
   const names = [t.gpx, t.csv].filter((n): n is string => !!n);
   saveDeleted([...loadDeleted(), ...names]);
+  saveHomeDeleted([...loadHomeDeleted(), ...names]);
   deleteFromInbox(names);
   for (const n of names)
     for (const ext of CACHE_EXTS) {

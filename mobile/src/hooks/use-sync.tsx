@@ -18,19 +18,25 @@ import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
 import { loadBeaconAutoSync, newDriveBeacon, updateKnownBeacons } from '@/lib/beacon';
 import { saveNewLogs } from '@/lib/share';
-import { deletePodFile, getLive, listFiles } from '@/lib/pod';
+import { deleteOnHome, homeDownloader, listHome, loadHome, reachable } from '@/lib/home';
+import { deletePodFile, type Downloader, downloadRange, getLive, listFiles } from '@/lib/pod';
 import {
   dropNonLogs,
+  type HomeSyncResult,
   type Inbox,
   knownBytes,
   loadDeleted,
   loadAutoSave,
   loadDisconnectAfterSync,
+  loadHomeDeleted,
   loadInbox,
+  loadLastHomeSync,
   loadLastSync,
   pull,
   saveDeleted,
   saveGaugeFw,
+  saveHomeDeleted,
+  saveLastHomeSync,
   saveLastSync,
 } from '@/lib/store';
 import { dropStaleCopies, renameLegacyLogs } from '@/lib/trip-cache';
@@ -64,7 +70,14 @@ type Sync = {
   check: () => Promise<void>;
   /** Stops a running pull; resolves once it has stopped. */
   cancel: () => Promise<void>;
+  /** Pulls what the home server has (home.ts); `asked`: say what came of it, nothing or not. */
+  syncHome: (asked: boolean) => Promise<void>;
+  /** The last home-server sync that finished. */
+  lastHome: HomeSyncResult | null;
 };
+
+// The home server is looked at by itself at most this often.
+const HOME_EVERY_MS = 5 * 60 * 1000;
 
 const SyncContext = createContext<Sync | null>(null);
 
@@ -133,8 +146,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return { files, plan: p };
   };
 
-  // True when every file landed.
-  const pullPlan = async (files: PodFile[], todo: Pull[]): Promise<boolean> => {
+  // True when every file landed. From the gauge, or with `download` and
+  // `skip` from the home server - into the same inbox.
+  const pullPlan = async (
+    files: PodFile[],
+    todo: Pull[],
+    download: Downloader = downloadRange,
+    skip: () => Set<string> = () => new Set(loadDeleted()),
+  ): Promise<boolean> => {
     const ctl = new AbortController();
     abort.current = ctl;
     setPhase('pulling');
@@ -156,6 +175,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             setProgress({ at: i + 1, of: todo.length, got: before + b, total });
           },
           ctl.signal,
+          download,
         );
         before += p.size - p.from;
         done++;
@@ -164,7 +184,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         // Trips list move as each one lands.
         const now = loadInbox();
         setInbox(now);
-        setPlan(planPull(files, knownBytes(now), new Set(loadDeleted())));
+        setPlan(planPull(files, knownBytes(now), skip()));
         setLanded((n) => n + 1);
       }
       setStatus(tn(done, 'Pulled 1 file.', 'Pulled {n} files.'));
@@ -264,17 +284,95 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     await running.current;
   }, []);
 
+  // ---- From the home server (home.ts) -------------------------------------
+  // What the gauge uploaded as the car started, pulled while the phone is
+  // anywhere the server is (home WiFi, its own VPN): the drives arrive
+  // without a visit to the gauge. Never while on the gauge's WiFi - the app
+  // is bound to it, no internet - and a gauge connect cancels one first.
+  const [lastHome, setLastHome] = useState(loadLastHomeSync);
+  const homeRunning = useRef(false);
+  const homeTriedAt = useRef(0);
+  const syncHome = useCallback(
+    async (asked: boolean) => {
+      const h = await loadHome();
+      if (!h) {
+        if (asked) ToastAndroid.show(t('Set up the home server first (Settings).'), ToastAndroid.LONG);
+        return;
+      }
+      if (running.current) return;
+      homeRunning.current = true;
+      let got = 0;
+      const job = run(async () => {
+        setPhase('checking');
+        if (!(await reachable(h))) {
+          // Away from home: nothing to say, unless asked.
+          if (asked) throw new Error(t('the home server is not reachable from here'));
+          return;
+        }
+        // Deleted drives go from the server first, and are never pulled.
+        const pending = loadHomeDeleted();
+        const left: string[] = [];
+        for (const n of pending) if (!(await deleteOnHome(h, n))) left.push(n);
+        if (left.length !== pending.length) saveHomeDeleted(left);
+        const skip = () => new Set([...loadDeleted(), ...loadHomeDeleted()]);
+        const files = await listHome(h);
+        const todo = planPull(files, knownBytes(loadInbox()), skip());
+        const before = pulledThisSession.current;
+        const complete = !todo.length || (!stopped.current && (await pullPlan(files, todo, homeDownloader(h), skip)));
+        got = pulledThisSession.current - before;
+        if (todo.length && dropStaleCopies().length) {
+          setInbox(loadInbox());
+          setLanded((n) => n + 1);
+        }
+        if (complete) {
+          const r = { at: Date.now(), files: got };
+          saveLastHomeSync(r);
+          setLastHome(r);
+        }
+      });
+      try {
+        await job;
+      } finally {
+        homeRunning.current = false;
+      }
+      if (got) {
+        ToastAndroid.show(tn(got, '1 new file from the home server.', '{n} new files from the home server.'), ToastAndroid.SHORT);
+        if (loadAutoSave()) await saveAfter();
+      } else if (asked) ToastAndroid.show(t('Nothing new on the home server.'), ToastAndroid.SHORT);
+    },
+    [run, saveAfter],
+  );
+
   // On every connect. Leaving the pod's network stops a pull - it could not
   // finish anyway. The old listing stays, but screens show it only while
-  // connected, and the next connect's check replaces it at once.
+  // connected, and the next connect's check replaces it at once. A pull from
+  // the home server gives way: the gauge's own come first.
   useEffect(() => {
     if (connected) {
-      sync();
+      (async () => {
+        if (homeRunning.current) await cancel();
+        sync();
+      })();
       return;
     }
     stopped.current = true;
     abort.current?.abort();
-  }, [connected, sync]);
+  }, [connected, sync, cancel]);
+
+  // From the home server by itself: when the app opens or comes back, and
+  // when the phone has left the gauge's WiFi - at most every few minutes,
+  // so returning to the app now and then does not ask each time.
+  useEffect(() => {
+    if (pod.state !== 'idle') return;
+    const look = () => {
+      if (Date.now() - homeTriedAt.current < HOME_EVERY_MS) return;
+      homeTriedAt.current = Date.now();
+      syncHome(false).catch((e) => console.warn('home sync', e));
+    };
+    look();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && look());
+    return () => sub.remove();
+  }, [pod.state, syncHome]);
 
   // Synced, nothing left on the gauge: off its WiFi, so the phone is back on
   // the internet - maps, place names - without a trip to Android's settings.
@@ -332,7 +430,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   return (
     <SyncContext.Provider
-      value={{ phase, podFiles, plan, status, err, inbox, landed, progress, lastSync, sync, check, cancel }}>
+      value={{ phase, podFiles, plan, status, err, inbox, landed, progress, lastSync, sync, check, cancel, syncHome, lastHome }}>
       {children}
     </SyncContext.Provider>
   );

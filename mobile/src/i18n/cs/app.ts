@@ -77,6 +77,24 @@ export const app: Record<string, string> = {
   'What a sync brings is saved into the folder by itself, decrypted - nothing to do on the phone.':
     'Co synchronizace přinese, se samo uloží do složky, dešifrované - v telefonu není co dělat.',
 
+  // Home server (home-server-card.tsx, home.ts, use-sync.tsx); Address, Token,
+  // "set - type to change" and "not set" are the gauge's (cs/gauge.ts)
+  'Home server': 'Domácí server',
+  'Where the gauge uploads its logs as the car starts. The phone pulls them from there too, whenever it can reach it - at home, or with its VPN on.':
+    'Sem budík nahrává záznamy při startu auta. Telefon si je odtud stahuje také, kdykoli se k serveru dostane - doma, nebo se zapnutou VPN.',
+  'Last sync from it': 'Poslední synchronizace z něj',
+  'not yet': 'zatím ne',
+  '{when}, 1 new file|{when}, {n} new files': '{when}, 1 nový soubor|{when}, {n} nové soubory|{when}, {n} nových souborů',
+  '{when}, nothing new': '{when}, nic nového',
+  'Sync from the home server': 'Synchronizovat z domácího serveru',
+  'Set up the home server first (Settings).': 'Nejdřív nastavte domácí server (Nastavení).',
+  'the home server is not reachable from here': 'domácí server odsud není dostupný',
+  'the home server refused the token': 'domácí server odmítl token',
+  'the home server did not answer': 'domácí server neodpověděl',
+  '1 new file from the home server.|{n} new files from the home server.':
+    '1 nový soubor z domácího serveru.|{n} nové soubory z domácího serveru.|{n} nových souborů z domácího serveru.',
+  'Nothing new on the home server.': 'Na domácím serveru nic nového.',
+
   // Log encryption screen (log-key.tsx)
   'Save the key in KeePass now': 'Uložte klíč hned do KeePassu',
   'Logs encrypted to this key can only ever be read with it. If the phone is lost and the key is not saved elsewhere, they are lost too.':

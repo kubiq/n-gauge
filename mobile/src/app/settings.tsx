@@ -1,5 +1,6 @@
 import { AboutCard } from '@/components/about-card';
 import { ConnectionCard } from '@/components/connection-card';
+import { HomeServerCard } from '@/components/home-server-card';
 import { LanguageCard } from '@/components/language-card';
 import { LogKeyCard } from '@/components/log-key-card';
 import { LogsFolderCard } from '@/components/logs-folder-card';
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
       <ConnectionCard />
       <LogKeyCard />
       <LogsFolderCard />
+      <HomeServerCard />
       <PlacesCard />
       <AboutCard />
     </Screen>

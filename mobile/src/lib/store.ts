@@ -11,7 +11,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { t } from '../i18n/index.ts';
 import { GPX_TAIL } from './gpx-share';
-import { downloadRange } from './pod';
+import { type Downloader, downloadRange } from './pod';
 import { isPodLog, type Known, type Pull } from './sync-plan';
 import type { WifiCreds } from './wifi-qr';
 
@@ -163,8 +163,16 @@ export function inboxFile(name: string): File {
   return new File(inboxDir, name);
 }
 
-/** Pulls one planned file from the pod into the inbox. */
-export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal?: AbortSignal): Promise<void> {
+/**
+ * Pulls one planned file into the inbox - from the pod, or with `download`
+ * from the home server (home.ts): the same files, by the same names.
+ */
+export async function pull(
+  p: Pull,
+  onProgress?: (bytes: number) => void,
+  signal?: AbortSignal,
+  download: Downloader = downloadRange,
+): Promise<void> {
   ensureDir();
   const state = loadInbox();
   const dest = inboxFile(p.name);
@@ -187,7 +195,7 @@ export async function pull(p: Pull, onProgress?: (bytes: number) => void, signal
   const tmp = new File(partsDir, `${Date.now()}.part`);
   // A cancelled or failed download rejects here, before the inbox is
   // touched: the file stays as it was and the next sync plans it again.
-  const { whole } = await downloadRange(p.name, from, p.size, tmp, onProgress, signal);
+  const { whole } = await download(p.name, from, p.size, tmp, onProgress, signal);
   const skip = whole ? from : 0;
   const got = tmp.size - skip;
 
@@ -228,6 +236,39 @@ export function loadDeleted(): string[] {
 
 export function saveDeleted(names: string[]): void {
   deletedFile.write(JSON.stringify([...new Set(names)]));
+}
+
+// The same, still to be deleted on the home server (home.ts) - kept apart:
+// the gauge and the server each take their names off when they have.
+const homeDeletedFile = new File(Paths.document, 'delete-on-home.json');
+
+export function loadHomeDeleted(): string[] {
+  try {
+    return homeDeletedFile.exists ? JSON.parse(homeDeletedFile.textSync()) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveHomeDeleted(names: string[]): void {
+  homeDeletedFile.write(JSON.stringify([...new Set(names)]));
+}
+
+// The last home-server sync that finished (ms), and what it said - for the
+// phone's Settings.
+const lastHomeFile = new File(Paths.document, 'last-home-sync.json');
+export type HomeSyncResult = { at: number; files: number; error?: string };
+
+export function loadLastHomeSync(): HomeSyncResult | null {
+  try {
+    return lastHomeFile.exists ? JSON.parse(lastHomeFile.textSync()) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastHomeSync(r: HomeSyncResult): void {
+  lastHomeFile.write(JSON.stringify(r));
 }
 
 /** Deletes inbox files and their records - the phone's copy only. */

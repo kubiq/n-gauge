@@ -201,8 +201,28 @@ export async function listFiles(): Promise<PodFile[]> {
  * the whole file (a firmware without Range support) and the caller must skip
  * the first `from` bytes. Returns which it was.
  */
-export async function downloadRange(
+export function downloadRange(
   name: string,
+  from: number,
+  to: number,
+  dest: File,
+  onProgress?: (bytes: number) => void,
+  signal?: AbortSignal,
+): Promise<{ whole: boolean }> {
+  return downloadUrlRange(`${POD_BASE}/dl?f=${encodeURIComponent(name)}`, {}, from, to, dest, onProgress, signal);
+}
+
+/** A file's download, from wherever: the gauge's /dl, or the home server (home.ts). */
+export type Downloader = typeof downloadRange;
+
+/**
+ * downloadRange() for any URL, with `headers` (the home server's token). An
+ * answer that is not 2xx rejects - the native task throws "HTTP <code>" -
+ * so an error page never lands as a log.
+ */
+export async function downloadUrlRange(
+  url: string,
+  headers: Record<string, string>,
   from: number,
   to: number,
   dest: File,
@@ -212,8 +232,8 @@ export async function downloadRange(
   if (dest.exists) dest.delete();
   // A task rather than downloadFileAsync: only the task takes an AbortSignal,
   // and Cancel has to stop a 17 MB GPX mid-file, not after it.
-  const task = File.createDownloadTask(`${POD_BASE}/dl?f=${encodeURIComponent(name)}`, dest, {
-    headers: from > 0 ? { Range: `bytes=${from}-${to - 1}` } : {},
+  const task = File.createDownloadTask(url, dest, {
+    headers: from > 0 ? { ...headers, Range: `bytes=${from}-${to - 1}` } : headers,
     onProgress: onProgress ? (p) => onProgress(p.bytesWritten) : undefined,
     signal,
   });
