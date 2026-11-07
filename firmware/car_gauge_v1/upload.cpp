@@ -24,7 +24,6 @@
 // ---- timings ---------------------------------------------------------------
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
-#define UP_DIRECT_MS      3000   // the server tried without the tunnel, at home
 #define UP_NTP_MS        15000   // the clock, when the gauge has none
 // The whole upload, at most: a setting (upMaxMin, the app's Upload card),
 // so the phone's hotspot is not held longer than its owner wants. What is
@@ -649,7 +648,6 @@ static void uploadTask(void *arg) {
   char *plan = (char *)heap_caps_malloc(UP_PLAN_MAX, MALLOC_CAP_SPIRAM);
   WireGuard wg;
   bool wgUp = false;
-  bool direct = false;                 // the server reached without the tunnel
   size_t planLen = 0;
   uint16_t onCard = 0;
   String todo;
@@ -684,21 +682,13 @@ static void uploadTask(void *arg) {
   planLen = listCard(plan, UP_PLAN_MAX, &onCard);
   if (!planLen) { finish(r, t0, false, "card not readable"); goto out; }
 
-  // Straight to the server first, no tunnel: a hotspot sharing the home WiFi
-  // (the car starting in the garage, the phone on the home WiFi) puts the
-  // gauge inside the home network, where the hotspot's DNS gives the
-  // server's LAN address - and where the router's public address, the
-  // tunnel's endpoint, does not answer from inside (2026-11-07: "no
-  // handshake from the router", every time). A few seconds' try, then the
-  // tunnel.
-  if (resolveServer("") && isLan(server.ip)) {
-    const int code = askPlan(c, plan, planLen, todo, UP_DIRECT_MS);
-    Serial.printf("[..] upload: %u logs on the card, the server directly -> %d\n", onCard, code);
-    if (code == 401) { finish(r, t0, false, "server refused the token"); goto out; }
-    if (code == 200) direct = true;
-  }
-
-  if (!direct) {
+  // Always through the tunnel (decided 2026-11-07): the hotspot is the
+  // phone's mobile data - the garage has no WiFi. A first try straight at
+  // the server, for a hotspot sharing the home WiFi, only ever helped on
+  // the bench, and cost each real upload a lookup and up to 3 s. (From
+  // inside the home network the router's public address, the tunnel's
+  // endpoint, does not answer: "no handshake from the router".)
+  {
     {
       IPAddress addr;
       addr.fromString(c.wgAddr);
@@ -732,8 +722,8 @@ static void uploadTask(void *arg) {
     // Through the tunnel the first request may wait for the handshake:
     // tried until it answers.
     const uint32_t tw = millis();
-    int code = direct ? 200 : -1;
-    while (!direct && millis() - tw < UP_HANDSHAKE_MS) {
+    int code = -1;
+    while (millis() - tw < UP_HANDSHAKE_MS) {
       code = askPlan(c, plan, planLen, todo, 5000);
       Serial.printf("[..] upload: %u logs on the card, the server through the tunnel -> %d after %lu ms\n",
                     onCard, code, (unsigned long)(millis() - tw));
