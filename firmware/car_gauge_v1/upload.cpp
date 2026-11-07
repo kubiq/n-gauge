@@ -512,6 +512,10 @@ static const char *putFile(const UpConfig &c, const char *name, uint32_t from, u
 // UP_WORKERS files go at once, each its own connection: that many times
 // as much in flight. Each worker takes the next "name offset" line of the
 // plan, under a lock, until there are none, the time is up, or one failed.
+// Three, not more: five (2026-11-07) took free internal RAM down to 8 KB -
+// each connection's own buffers in lwIP - and one PUT failed. The workers'
+// stacks are in PSRAM (they read the card and talk to the network, and
+// never write flash, the one thing a PSRAM stack must not).
 #define UP_WORKERS        3
 #define UP_WORKER_STACK   6144
 
@@ -581,7 +585,9 @@ static void workerTask(void *) {
   }
   work.running = (uint8_t)(work.running - 1);   // under the lock: workers run on either core
   xSemaphoreGive(work.lock);
-  vTaskDelete(nullptr);
+  // Not deleting itself: its stack is in PSRAM, and vTaskDeleteWithCaps()
+  // is to be called from another task - sendAll() does, once it is here.
+  vTaskSuspend(nullptr);
 }
 
 // The plan's files, UP_WORKERS at a time, until done; into r.
@@ -592,18 +598,26 @@ static void sendAll(const UpConfig &c, const String &todo, uint32_t t0, UpResult
   work.deadline = t0 + c.maxMin * 60000UL;
   work.lock = xSemaphoreCreateMutex();
   if (!work.lock) { finish(r, t0, false, "no memory"); return; }
+  TaskHandle_t worker[UP_WORKERS] = {};
   for (int i = 0; i < UP_WORKERS; i++) {
     xSemaphoreTake(work.lock, portMAX_DELAY);
     work.running = (uint8_t)(work.running + 1);
     xSemaphoreGive(work.lock);
-    if (xTaskCreatePinnedToCore(workerTask, "upwork", UP_WORKER_STACK, nullptr, 1, nullptr,
-                                tskNO_AFFINITY) != pdPASS) {
+    if (xTaskCreatePinnedToCoreWithCaps(workerTask, "upwork", UP_WORKER_STACK, nullptr, 1, &worker[i],
+                                        tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+      worker[i] = nullptr;
       xSemaphoreTake(work.lock, portMAX_DELAY);
       work.running = (uint8_t)(work.running - 1);
       xSemaphoreGive(work.lock);
     }
   }
   while (workersRunning()) delay(100);
+  // Each has suspended itself (workerTask); deleted from here, stacks freed.
+  for (TaskHandle_t h : worker) {
+    if (!h) continue;
+    while (eTaskGetState(h) != eSuspended) delay(10);
+    vTaskDeleteWithCaps(h);
+  }
   vSemaphoreDelete(work.lock);
   r.files = work.files;
   r.bytes = work.bytes;
