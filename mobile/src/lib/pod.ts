@@ -126,7 +126,7 @@ export type PodUpload = {
   /** The upload's time limit, minutes (1-60); the rest goes next time. Firmware from 2026-11-06 12:30 on. */
   maxMin?: number;
   wgPub: string;
-  /** at: epoch s, 0 = none since the gauge woke. */
+  /** The last try, kept by the gauge across sleeps (2026-11-07). at: epoch s, 0 = none yet. */
   last: { at: number; ok: boolean; files: number; bytes: number; ms: number; msg: string };
 };
 

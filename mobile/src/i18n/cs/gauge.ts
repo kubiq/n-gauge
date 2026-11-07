@@ -104,7 +104,7 @@ export const gauge: Record<string, string> = {
     'Při startu auta se budík připojí k hotspotu telefonu, otevře VPN domů a nahraje nové záznamy na server. Telefon si je pak ze serveru sám synchronizuje, kdykoli se k němu dostane - doma na Wi-Fi, nebo se svou VPN - takže jízdy se do telefonu dostanou bez připojení k budíku.',
   'Last upload': 'Poslední nahrání',
   '{files} files, {kb} KB, {when}': '{files} souborů, {kb} KB, {when}',
-  'none since it woke': 'od probuzení žádné',
+  'none yet': 'zatím žádné',
   'not set up': 'nenastaveno',
   // (The WireGuard VPN section stays English: the router's own words.)
   'Phone hotspot': 'Hotspot telefonu',

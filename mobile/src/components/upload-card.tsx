@@ -213,7 +213,7 @@ export function UploadCard() {
           tone={last.ok ? 'good' : 'bad'}
         />
       ) : (
-        <Row label={t('Last upload')} value={up.configured ? t('none since it woke') : t('not set up')} tone="dim" />
+        <Row label={t('Last upload')} value={up.configured ? t('none yet') : t('not set up')} tone="dim" />
       )}
       <Text style={styles.section}>{t('Phone hotspot')}</Text>
       {HOTSPOT.map((f) => input(f, t(f.label)))}
