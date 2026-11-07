@@ -84,9 +84,16 @@ static void ephSecret(uint8_t out[32]) {
 // encryption (2026-10-12) on it never did, on any drive, until a reboot.
 //
 // Encrypted, each ioBuf's worth is one record (LOGCRYPT_OVERHEAD extra per
-// 4 KB; a reader takes any record length). All writers run on the logger
-// task or under the SD lock, so one buffer serves them all.
-static constexpr size_t IO_CHUNK = 4096;
+// chunk; a reader takes any record length up to LOGCRYPT_MAX_RECORD). All
+// writers run on the logger task or under the SD lock, so one buffer serves
+// them all.
+//
+// 16 KB since 2026-11-07 (was 4): the draw buffer and the GNSS stack went to
+// PSRAM (~44 KB back), so a batch now goes to the card in a quarter of the
+// commands - bigger writes, kinder to the card's flash, whose own stalls
+// (0.6-1.35 s, 2026-10-26) were the logger's longest waits. 12 KB more of
+// internal RAM: ~105 KB left with the AP up, against its 80.
+static constexpr size_t IO_CHUNK = 16384;
 alignas(4) static uint8_t ioBuf[IO_CHUNK + LOGCRYPT_OVERHEAD];
 
 // No fallback to internal RAM: that would quietly take back what the WiFi AP
