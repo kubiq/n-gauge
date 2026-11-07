@@ -22,7 +22,7 @@ import { S, themed, useColors } from '@/theme';
 // VPN through the router, the upload server at home. The VPN's words stay
 // English in every language - they are the words the router's own page
 // and WireGuard use, to be matched against them.
-type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'upMaxMin' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr';
+type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'upMaxMin' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr' | 'wgDns';
 // Saved this long after the last keystroke - longer than the switches'
 // second on the rest of the screen: these are typed, keys pasted, a pause
 // mid-password should not send half of it (it would, harmlessly, and the
@@ -49,6 +49,9 @@ const VPN: FieldDef[] = [
   { key: 'wgPort', label: 'Endpoint port', numeric: true },
   { key: 'wgPeer', label: 'Router public key' },
   { key: 'wgAddr', label: 'Gauge address in the tunnel', hint: '10.0.0.7' },
+  // Looks the server's name up through the tunnel: a mobile carrier's DNS
+  // gave a public address for it (2026-11-07). Empty: the hotspot's DNS.
+  { key: 'wgDns', label: 'DNS in the tunnel (optional)', hint: '192.168.1.1' },
 ];
 const SERVER: FieldDef[] = [
   { key: 'upUrl', label: N_('Address'), hint: 'http://192.168.1.10:8650' },
@@ -68,6 +71,7 @@ function fromPod(u: PodUpload): Record<Field, string> {
     wgPort: String(u.wgPort),
     wgPeer: u.wgPeer,
     wgAddr: u.wgAddr,
+    wgDns: u.wgDns ?? '',
   };
 }
 

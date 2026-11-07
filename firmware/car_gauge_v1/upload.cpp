@@ -10,6 +10,8 @@
 #include <esp_heap_caps.h>
 #include <esp_random.h>
 #include <esp_sntp.h>    // the clock from NTP, when the gauge has none
+#include <lwip/dns.h>    // dns_setserver: the server's name by public resolvers
+#include <lwip/tcpip.h>  // LOCK_TCPIP_CORE around it
 #include <mbedtls/base64.h>
 #include <time.h>
 #include "upload.h"
@@ -22,6 +24,7 @@
 // ---- timings ---------------------------------------------------------------
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
+#define UP_DIRECT_MS      3000   // the server tried without the tunnel, at home
 #define UP_NTP_MS        15000   // the clock, when the gauge has none
 // The whole upload, at most: a setting (upMaxMin, the app's Upload card),
 // so the phone's hotspot is not held longer than its owner wants. What is
@@ -45,6 +48,7 @@ struct UpConfig {
   char     wgAddr[16];                // the gauge's address in the tunnel
   char     wgPeer[45];                // the router's public key, base64
   char     wgHost[64];                // the router, from outside
+  char     wgDns[16];                 // a DNS inside the tunnel, for the server's name; "" = the hotspot's
   uint16_t wgPort;
   uint8_t  maxMin;                    // the time limit, minutes
   uint8_t  wgPriv[32];                // made here, never leaves
@@ -54,7 +58,7 @@ static char wgPub[45];                // its public half, base64
 
 static const char *NS = "upload";
 const char *const UPLOAD_KEYS[] = {"upSsid", "upPass", "upUrl", "upToken", "wgAddr",
-                                   "wgPeer", "wgHost", "wgPort", "upMaxMin", "wgNewKey", nullptr};
+                                   "wgPeer", "wgHost", "wgPort", "wgDns", "upMaxMin", "wgNewKey", nullptr};
 
 static void b64(char *out, size_t n, const uint8_t *in, size_t len) {
   size_t olen = 0;
@@ -84,6 +88,7 @@ static void save() {
   p.putString("wgAddr", cfg.wgAddr);
   p.putString("wgPeer", cfg.wgPeer);
   p.putString("wgHost", cfg.wgHost);
+  p.putString("wgDns", cfg.wgDns);
   p.putUShort("wgPort", cfg.wgPort);
   p.putUChar("maxMin", cfg.maxMin);
   p.putBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv));
@@ -135,6 +140,7 @@ void upload_init() {
     getStr(p, "wgAddr", cfg.wgAddr, sizeof(cfg.wgAddr));
     getStr(p, "wgPeer", cfg.wgPeer, sizeof(cfg.wgPeer));
     getStr(p, "wgHost", cfg.wgHost, sizeof(cfg.wgHost));
+    getStr(p, "wgDns", cfg.wgDns, sizeof(cfg.wgDns));
     cfg.wgPort = p.getUShort("wgPort", 51820);
     cfg.maxMin = p.getUChar("maxMin", UP_MAX_MIN_DEFAULT);
     haveKey = p.getBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv)) == sizeof(cfg.wgPriv);
@@ -195,6 +201,10 @@ const char *upload_setting(const char *key, const char *v) {
   } else if (!strcmp(key, "wgPeer")) {
     put(cfg.wgPeer, sizeof(cfg.wgPeer), v);
     if (cfg.wgPeer[0] && strlen(cfg.wgPeer) != 44) note = "the router's public key is not 44 characters";
+  } else if (!strcmp(key, "wgDns")) {
+    put(cfg.wgDns, sizeof(cfg.wgDns), v);
+    IPAddress ip;
+    if (cfg.wgDns[0] && !ip.fromString(cfg.wgDns)) note = "the DNS in the tunnel is not an IP address";
   } else if (!strcmp(key, "wgHost")) {
     put(cfg.wgHost, sizeof(cfg.wgHost), v);
     char *colon = strrchr(cfg.wgHost, ':');     // "vpn.example.org:51820": the port goes to wgPort
@@ -232,16 +242,18 @@ static const char *jsonSafe(const char *s, char *out, size_t n) {
 }
 
 int upload_json(char *out, size_t n) {
-  char ssid[70], url[200], host[130], msg[150], addr[34], peer[92];
+  char ssid[70], url[200], host[130], msg[150], addr[34], peer[92], dns[34];
   const int len = snprintf(out, n,
       "{\"configured\":%s,\"ssid\":\"%s\",\"passSet\":%s,\"url\":\"%s\",\"tokenSet\":%s,"
-      "\"wgAddr\":\"%s\",\"wgPeer\":\"%s\",\"wgHost\":\"%s\",\"wgPort\":%u,\"maxMin\":%u,\"wgPub\":\"%s\","
+      "\"wgAddr\":\"%s\",\"wgPeer\":\"%s\",\"wgHost\":\"%s\",\"wgPort\":%u,\"wgDns\":\"%s\","
+      "\"maxMin\":%u,\"wgPub\":\"%s\","
       "\"last\":{\"at\":%lu,\"ok\":%s,\"files\":%u,\"bytes\":%lu,\"ms\":%lu,\"msg\":\"%s\"}}",
       configured() ? "true" : "false", jsonSafe(cfg.ssid, ssid, sizeof(ssid)),
       cfg.pass[0] ? "true" : "false", jsonSafe(cfg.url, url, sizeof(url)),
       cfg.token[0] ? "true" : "false", jsonSafe(cfg.wgAddr, addr, sizeof(addr)),
       jsonSafe(cfg.wgPeer, peer, sizeof(peer)),
-      jsonSafe(cfg.wgHost, host, sizeof(host)), cfg.wgPort, cfg.maxMin, wgPub,
+      jsonSafe(cfg.wgHost, host, sizeof(host)), cfg.wgPort, jsonSafe(cfg.wgDns, dns, sizeof(dns)),
+      cfg.maxMin, wgPub,
       (unsigned long)last.at, last.ok ? "true" : "false", last.files,
       (unsigned long)last.bytes, (unsigned long)last.ms, jsonSafe(last.msg, msg, sizeof(msg)));
   return (len > 0 && (size_t)len < n) ? len : 0;
@@ -315,16 +327,27 @@ static size_t listCard(char *plan, size_t cap, uint16_t *count) {
     root = SD_MMC.open("/");
   }
   if (!root) return 0;
+  // A tick between entries, with the lock let go: the logger waits for it
+  // at the same priority on the same core, and a lock given back and taken
+  // again at once never let it in - ~230 files of openNextFile() starved it
+  // past the watchdog (2026-11-07: "wdt: logger", the upload's resets).
   for (;;) {
-    LoggerSdLock lock(SD_LOCK_WEB_MS);
-    if (!lock) break;
-    File e = root.openNextFile();
-    if (!e) break;
-    if (!e.isDirectory() && isLog(e.name()) && n + 120 < cap) {
-      n += snprintf(plan + n, cap - n, "%s %lu\n", e.name(), (unsigned long)e.size());
-      (*count)++;
+    bool more = false;
+    {
+      LoggerSdLock lock(SD_LOCK_WEB_MS);
+      if (!lock) break;
+      File e = root.openNextFile();
+      if (e) {
+        more = true;
+        if (!e.isDirectory() && isLog(e.name()) && n + 120 < cap) {
+          n += snprintf(plan + n, cap - n, "%s %lu\n", e.name(), (unsigned long)e.size());
+          (*count)++;
+        }
+        e.close();
+      }
     }
-    e.close();
+    if (!more) break;
+    vTaskDelay(1);
   }
   LoggerSdLock lock(SD_LOCK_WEB_MS);
   root.close();
@@ -361,6 +384,81 @@ static void authorise(HTTPClient &http, const UpConfig &c) {
   http.addHeader("Authorization", h);
 }
 
+// ---- the server's address ---------------------------------------------------
+// Looked up once per upload, before the tunnel, by public resolvers - not
+// the hotspot's. On mobile data (2026-11-07) the carrier's DNS answered the
+// server's name with a public address, 1.1.1.1 and 8.8.8.8 with the LAN one
+// the home DNS gives: through the tunnel only the LAN one leads to the
+// server, so four uploads ended "tunnel up, server not reached". At home,
+// on a hotspot sharing the home WiFi, the router answered - and it worked.
+// Then each request connects to that address itself and hands HTTPClient
+// the open connection with the name: the name still goes as Host (a proxy
+// in front of the server routes by it), and no lookup happens inside the
+// tunnel. HTTPClient will not take a Host header otherwise.
+struct UpServer {
+  char host[64];
+  char base[48];                      // a path the URL has after the host, or ""
+  IPAddress ip;
+  uint16_t port;
+};
+static UpServer server;
+
+// "http://host[:port][/base]" -> server, false if there is no host.
+static bool parseServer(const char *url) {
+  memset(&server, 0, sizeof(server));
+  const char *p = strstr(url, "://");
+  p = p ? p + 3 : url;
+  size_t n = strcspn(p, ":/");
+  if (!n || n >= sizeof(server.host)) return false;
+  memcpy(server.host, p, n);
+  p += n;
+  server.port = 80;
+  if (*p == ':') {
+    server.port = (uint16_t)atoi(p + 1);
+    p += 1 + strcspn(p + 1, "/");
+  }
+  strlcpy(server.base, p, sizeof(server.base));
+  size_t b = strlen(server.base);
+  while (b && server.base[b - 1] == '/') server.base[--b] = '\0';
+  return server.port != 0;
+}
+
+// Through the tunnel, by `dns` - a DNS on the VPN's side (the Upload card's
+// "DNS in the tunnel"), which knows the server's LAN address - or by the
+// hotspot's DNS where none is set. Not by public resolvers before the
+// tunnel (tried 2026-11-07): the router's own name then came out its public
+// address, which from inside the home network (a hotspot sharing the home
+// WiFi) does not answer - "no handshake from the router".
+static bool resolveServer(const char *dns) {
+  if (dns[0]) {
+    ip_addr_t d;
+    if (!ipaddr_aton(dns, &d)) return false;
+    LOCK_TCPIP_CORE();
+    dns_setserver(0, &d);
+    dns_setserver(1, nullptr);
+    UNLOCK_TCPIP_CORE();
+  }
+  return WiFi.hostByName(server.host, server.ip) == 1;
+}
+
+static bool isLan(const IPAddress &ip) {
+  return ip[0] == 10 || (ip[0] == 192 && ip[1] == 168) || (ip[0] == 172 && (ip[1] & 0xF0) == 16);
+}
+
+// A request to the server: the connection to its address, the name as Host.
+static bool openRequest(HTTPClient &http, NetworkClient &tcp, const char *path,
+                        int32_t connectMs = UP_HTTP_MS) {
+  if (!tcp.connect(server.ip, server.port, connectMs)) return false;
+  char uri[180];
+  snprintf(uri, sizeof(uri), "%s%s", server.base, path);
+  http.setReuse(true);
+  return http.begin(tcp, server.host, server.port, uri);
+}
+
+// POST /plan once: the HTTP code (200: `todo` is the answer), -1 without
+// a connection.
+static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo, int32_t connectMs);
+
 // One file's missing bytes [from, size now). 0 on success, else a reason.
 static const char *putFile(const UpConfig &c, const char *name, uint32_t from, uint8_t *buf,
                            uint32_t *sent) {
@@ -378,16 +476,19 @@ static const char *putFile(const UpConfig &c, const char *name, uint32_t from, u
   if (!f) return "file gone";
   const char *err = nullptr;
   if (size > from) {
-    char url[200];
-    snprintf(url, sizeof(url), "%s/f/%s?offset=%lu", c.url, name, (unsigned long)from);
+    char path[140];
+    snprintf(path, sizeof(path), "/f/%s?offset=%lu", name, (unsigned long)from);
+    NetworkClient tcp;
     HTTPClient http;
     http.setConnectTimeout(UP_HTTP_MS);
     http.setTimeout(UP_HTTP_MS);
-    http.begin(url);
-    authorise(http, c);
-    http.addHeader("Content-Type", "application/octet-stream");
     CardStream s(f, size - from, buf);
-    const int code = http.sendRequest("PUT", &s, size - from);
+    int code = -1;
+    if (openRequest(http, tcp, path)) {
+      authorise(http, c);
+      http.addHeader("Content-Type", "application/octet-stream");
+      code = http.sendRequest("PUT", &s, size - from);
+    }
     if (code == 200 && !s.failed()) *sent += size - from;
     else err = code == 409 ? "server holds another size" : s.failed() ? "card read failed" : "PUT failed";
     http.end();
@@ -395,6 +496,20 @@ static const char *putFile(const UpConfig &c, const char *name, uint32_t from, u
   LoggerSdLock lock(SD_LOCK_WEB_MS);
   f.close();
   return err;
+}
+
+static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo, int32_t connectMs) {
+  NetworkClient tcp;
+  HTTPClient http;
+  http.setConnectTimeout(connectMs);
+  http.setTimeout(UP_HTTP_MS);
+  if (!openRequest(http, tcp, "/plan", connectMs)) return -1;
+  authorise(http, c);
+  http.addHeader("Content-Type", "text/plain");
+  const int code = http.POST((uint8_t *)plan, len);
+  if (code == 200) todo = http.getString();
+  http.end();
+  return code;
 }
 
 static void uploadTask(void *arg) {
@@ -406,6 +521,8 @@ static void uploadTask(void *arg) {
   char *plan = (char *)heap_caps_malloc(UP_PLAN_MAX, MALLOC_CAP_SPIRAM);
   WireGuard wg;
   bool wgUp = false;
+  bool direct = false;                 // the server reached without the tunnel
+  size_t planLen = 0;
   uint16_t onCard = 0;
   String todo;
 
@@ -417,6 +534,9 @@ static void uploadTask(void *arg) {
   if (WiFi.status() != WL_CONNECTED) { finish(r, t0, false, "no hotspot"); goto out; }
   Serial.printf("[..] upload: joined the hotspot in %lu ms, RSSI %d\n",
                 (unsigned long)(millis() - t0), WiFi.RSSI());
+  // The server's name is looked up through the tunnel, once it is up
+  // (resolveServer); here only taken apart.
+  if (!parseServer(c.url)) { finish(r, t0, false, "the server address is not a URL"); goto out; }
 
   // The handshake carries a timestamp the router checks against the last
   // one it saw: with no clock (an RTC that lost power, no GNSS fix yet) it
@@ -433,39 +553,62 @@ static void uploadTask(void *arg) {
     Serial.printf("[..] upload: clock set from NTP in %lu ms\n", (unsigned long)(millis() - tn));
   }
 
-  {
-    IPAddress addr;
-    addr.fromString(c.wgAddr);
-    char priv[45];
-    b64(priv, sizeof(priv), c.wgPriv, sizeof(c.wgPriv));
-    Serial.println(F("[..] upload: starting the tunnel"));
-    wgUp = wg.begin(addr, priv, c.wgHost, c.wgPeer, c.wgPort);
-    memset(priv, 0, sizeof(priv));
+  planLen = listCard(plan, UP_PLAN_MAX, &onCard);
+  if (!planLen) { finish(r, t0, false, "card not readable"); goto out; }
+
+  // Straight to the server first, no tunnel: a hotspot sharing the home WiFi
+  // (the car starting in the garage, the phone on the home WiFi) puts the
+  // gauge inside the home network, where the hotspot's DNS gives the
+  // server's LAN address - and where the router's public address, the
+  // tunnel's endpoint, does not answer from inside (2026-11-07: "no
+  // handshake from the router", every time). A few seconds' try, then the
+  // tunnel.
+  if (resolveServer("") && isLan(server.ip)) {
+    const int code = askPlan(c, plan, planLen, todo, UP_DIRECT_MS);
+    Serial.printf("[..] upload: %u logs on the card, the server directly -> %d\n", onCard, code);
+    if (code == 401) { finish(r, t0, false, "server refused the token"); goto out; }
+    if (code == 200) direct = true;
   }
-  if (!wgUp) { finish(r, t0, false, "tunnel did not start"); goto out; }
-  Serial.printf("[..] upload: tunnel up, %u B internal free\n",
-                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+
+  if (!direct) {
+    {
+      IPAddress addr;
+      addr.fromString(c.wgAddr);
+      char priv[45];
+      b64(priv, sizeof(priv), c.wgPriv, sizeof(c.wgPriv));
+      Serial.println(F("[..] upload: starting the tunnel"));
+      wgUp = wg.begin(addr, priv, c.wgHost, c.wgPeer, c.wgPort);
+      memset(priv, 0, sizeof(priv));
+    }
+    if (!wgUp) { finish(r, t0, false, "tunnel did not start"); goto out; }
+    Serial.printf("[..] upload: tunnel up, %u B internal free\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+
+    // The server's address, through the tunnel: tried until the handshake
+    // has been done and the DNS answers. Which kind it is (not the
+    // address) on the console.
+    {
+      const uint32_t td = millis();
+      bool resolved = false;
+      while (!(resolved = resolveServer(c.wgDns)) && millis() - td < UP_HANDSHAKE_MS) delay(1000);
+      if (!resolved) {
+        finish(r, t0, false, wg.is_peer_up() ? "the server's name did not resolve" : "no handshake from the router");
+        goto out;
+      }
+      Serial.printf("[..] upload: the server's name resolved to a %s address in %lu ms\n",
+                    isLan(server.ip) ? "private" : "public", (unsigned long)(millis() - td));
+    }
+  }
 
   {
-    const size_t len = listCard(plan, UP_PLAN_MAX, &onCard);
-    if (!len) { finish(r, t0, false, "card not readable"); goto out; }
-    Serial.printf("[..] upload: %u logs on the card, asking the server\n", onCard);
-    // The first request waits for the handshake: tried until it answers.
+    // Through the tunnel the first request may wait for the handshake:
+    // tried until it answers.
     const uint32_t tw = millis();
-    int code = -1;
-    char url[120];
-    snprintf(url, sizeof(url), "%s/plan", c.url);
-    while (millis() - tw < UP_HANDSHAKE_MS) {
-      HTTPClient http;
-      http.setConnectTimeout(5000);
-      http.setTimeout(UP_HTTP_MS);
-      http.begin(url);
-      authorise(http, c);
-      http.addHeader("Content-Type", "text/plain");
-      code = http.POST((uint8_t *)plan, len);
-      if (code == 200) todo = http.getString();
-      http.end();
-      Serial.printf("[..] upload: plan -> %d after %lu ms\n", code, (unsigned long)(millis() - tw));
+    int code = direct ? 200 : -1;
+    while (!direct && millis() - tw < UP_HANDSHAKE_MS) {
+      code = askPlan(c, plan, planLen, todo, 5000);
+      Serial.printf("[..] upload: %u logs on the card, the server through the tunnel -> %d after %lu ms\n",
+                    onCard, code, (unsigned long)(millis() - tw));
       if (code > 0) break;
       delay(2000);
     }

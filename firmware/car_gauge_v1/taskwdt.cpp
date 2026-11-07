@@ -15,8 +15,11 @@
 
 #define WDT_WHO_MAGIC 0x57445457u          // "WDTW"
 RTC_NOINIT_ATTR static uint32_t whoMagic;
-RTC_NOINIT_ATTR static char who[96];
-static char lastWho[96];
+// Room for the watchdog's own header too ("Task watchdog got triggered. The
+// following tasks/users did not reset the watchdog in time:" - it filled
+// the first 96 bytes, 2026-11-07); only the names after it are kept.
+RTC_NOINIT_ATTR static char who[256];
+static char lastWho[128];
 
 static void IRAM_ATTR collect(void *, const char *msg) {
   // " loopTask (CPU 1)" and the like, one call each: appended, cut to fit.
@@ -35,7 +38,9 @@ extern "C" void IRAM_ATTR esp_task_wdt_isr_user_handler(void) {
 const char *taskwdt_last_culprit() {
   if (whoMagic == WDT_WHO_MAGIC) {         // once per reset: taken, then cleared
     who[sizeof(who) - 1] = '\0';
-    strlcpy(lastWho, who, sizeof(lastWho));
+    const char *names = strstr(who, " - ");  // " - loopTask (CPU 1)" after the header
+    strlcpy(lastWho, names ? names : who, sizeof(lastWho));
+    for (char *p = lastWho; *p; p++) if (*p == '\n') *p = ' ';
     whoMagic = 0;
   }
   return lastWho;

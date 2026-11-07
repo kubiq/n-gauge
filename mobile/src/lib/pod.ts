@@ -123,6 +123,8 @@ export type PodUpload = {
   wgPeer: string;
   wgHost: string;
   wgPort: number;
+  /** A DNS inside the tunnel for the server's name; "" = the hotspot's. Firmware from 2026-11-07 on. */
+  wgDns?: string;
   /** The upload's time limit, minutes (1-60); the rest goes next time. Firmware from 2026-11-06 12:30 on. */
   maxMin?: number;
   wgPub: string;
