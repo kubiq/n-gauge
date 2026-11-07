@@ -285,9 +285,15 @@ class CardStream : public Stream {
   bool fill() {
     if (pos_ < have_) return true;
     if (!left_ || failed_) return false;
-    LoggerSdLock lock(SD_LOCK_WEB_MS);
-    if (!lock || logger_card_shared()) { failed_ = true; return false; }
-    const size_t got = f_.read(buf_, left_ < UP_CHUNK ? left_ : UP_CHUNK);
+    size_t got;
+    {
+      LoggerSdLock lock(SD_LOCK_WEB_MS);
+      if (!lock || logger_card_shared()) { failed_ = true; return false; }
+      got = f_.read(buf_, left_ < UP_CHUNK ? left_ : UP_CHUNK);
+    }
+    // The lock let go, and the turn given away: the logger, and the other
+    // upload workers, wait for it at the same priority (listCard's lesson).
+    taskYIELD();
     if (!got) { failed_ = true; return false; }
     have_ = got;
     pos_ = 0;
@@ -498,6 +504,114 @@ static const char *putFile(const UpConfig &c, const char *name, uint32_t from, u
   return err;
 }
 
+// ---- several files at once ----------------------------------------------------
+// A TCP connection here keeps at most the stack's send buffer in flight
+// (~5.7 KB, fixed in the core's build of lwIP), so its speed is that over
+// the round trip: through the tunnel on mobile data ~90 ms, ~64 KB/s -
+// measured so, 2026-11-07, against several MB/s from the gauge's own WiFi.
+// UP_WORKERS files go at once, each its own connection: that many times
+// as much in flight. Each worker takes the next "name offset" line of the
+// plan, under a lock, until there are none, the time is up, or one failed.
+#define UP_WORKERS        3
+#define UP_WORKER_STACK   6144
+
+static struct {
+  const UpConfig *c;
+  const String *todo;
+  int from;                           // where the next plan line starts
+  uint32_t deadline;                  // millis()
+  bool stop;                          // a worker failed: no new files
+  uint16_t files;
+  uint32_t bytes;
+  char err[72];                       // the first failure, "name: why"
+  uint8_t running;                    // workers not done yet; all of it under lock
+  SemaphoreHandle_t lock;
+} work;
+
+static uint8_t workersRunning() {
+  xSemaphoreTake(work.lock, portMAX_DELAY);
+  const uint8_t n = work.running;
+  xSemaphoreGive(work.lock);
+  return n;
+}
+
+// The next file to send, false when there is none (or no more is wanted).
+static bool nextFile(char *name, size_t n, uint32_t *offset) {
+  xSemaphoreTake(work.lock, portMAX_DELAY);
+  bool got = false;
+  const String &todo = *work.todo;
+  while (!work.stop && !got && work.from < (int)todo.length() &&
+         (int32_t)(millis() - work.deadline) < 0) {
+    int nl = todo.indexOf('\n', work.from);
+    if (nl < 0) nl = todo.length();
+    const String l = todo.substring(work.from, nl);
+    work.from = nl + 1;
+    const int sp = l.indexOf(' ');
+    if (sp <= 0 || sp >= (int)n || !isLog(l.substring(0, sp).c_str())) continue;
+    strlcpy(name, l.substring(0, sp).c_str(), n);
+    *offset = (uint32_t)l.substring(sp + 1).toInt();
+    got = true;
+  }
+  xSemaphoreGive(work.lock);
+  return got;
+}
+
+static void workerTask(void *) {
+  uint8_t *buf = (uint8_t *)heap_caps_malloc(UP_CHUNK, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  char name[100];
+  uint32_t offset;
+  while (buf && nextFile(name, sizeof(name), &offset)) {
+    uint32_t sent = 0;
+    const char *err = putFile(*work.c, name, offset, buf, &sent);
+    xSemaphoreTake(work.lock, portMAX_DELAY);
+    if (err) {
+      if (!work.err[0]) snprintf(work.err, sizeof(work.err), "%s: %s", name, err);
+      work.stop = true;
+    } else {
+      work.files++;
+      work.bytes += sent;
+    }
+    xSemaphoreGive(work.lock);
+  }
+  free(buf);
+  xSemaphoreTake(work.lock, portMAX_DELAY);
+  if (!buf && !work.err[0]) {
+    strlcpy(work.err, "no memory for a worker", sizeof(work.err));
+    work.stop = true;
+  }
+  work.running = (uint8_t)(work.running - 1);   // under the lock: workers run on either core
+  xSemaphoreGive(work.lock);
+  vTaskDelete(nullptr);
+}
+
+// The plan's files, UP_WORKERS at a time, until done; into r.
+static void sendAll(const UpConfig &c, const String &todo, uint32_t t0, UpResult &r) {
+  memset(&work, 0, sizeof(work));
+  work.c = &c;
+  work.todo = &todo;
+  work.deadline = t0 + c.maxMin * 60000UL;
+  work.lock = xSemaphoreCreateMutex();
+  if (!work.lock) { finish(r, t0, false, "no memory"); return; }
+  for (int i = 0; i < UP_WORKERS; i++) {
+    xSemaphoreTake(work.lock, portMAX_DELAY);
+    work.running = (uint8_t)(work.running + 1);
+    xSemaphoreGive(work.lock);
+    if (xTaskCreatePinnedToCore(workerTask, "upwork", UP_WORKER_STACK, nullptr, 1, nullptr,
+                                tskNO_AFFINITY) != pdPASS) {
+      xSemaphoreTake(work.lock, portMAX_DELAY);
+      work.running = (uint8_t)(work.running - 1);
+      xSemaphoreGive(work.lock);
+    }
+  }
+  while (workersRunning()) delay(100);
+  vSemaphoreDelete(work.lock);
+  r.files = work.files;
+  r.bytes = work.bytes;
+  if (work.err[0]) finish(r, t0, false, work.err);
+  else if (work.from < (int)todo.length()) finish(r, t0, false, "time limit - the rest goes next time");
+  else finish(r, t0, true, "");
+}
+
 static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo, int32_t connectMs) {
   NetworkClient tcp;
   HTTPClient http;
@@ -625,32 +739,9 @@ static void uploadTask(void *arg) {
     }
   }
 
-  // "name offset" per line: each file's missing part.
-  {
-    const char *err = nullptr;
-    const uint32_t maxMs = c.maxMin * 60000UL;
-    int from = 0;
-    while (from < (int)todo.length() && millis() - t0 < maxMs) {
-      int nl = todo.indexOf('\n', from);
-      if (nl < 0) nl = todo.length();
-      const String l = todo.substring(from, nl);
-      from = nl + 1;
-      const int sp = l.indexOf(' ');
-      if (sp <= 0) continue;
-      const String name = l.substring(0, sp);
-      if (!isLog(name.c_str())) continue;
-      err = putFile(c, name.c_str(), (uint32_t)l.substring(sp + 1).toInt(), buf, &r.bytes);
-      if (err) {
-        snprintf(line, sizeof(line), "%s: %s", name.c_str(), err);
-        break;
-      }
-      r.files++;
-    }
-    // Out of time only with files still to go - the next upload sends them.
-    if (err) finish(r, t0, false, line);
-    else if (from < (int)todo.length()) finish(r, t0, false, "time limit - the rest goes next time");
-    else finish(r, t0, true, "");
-  }
+  // "name offset" per line: each file's missing part, several at once.
+  // Out of time only with files still to go - the next upload sends them.
+  sendAll(c, todo, t0, r);
 
 out:
   Serial.printf("[..] upload: closing (%s)\n", r.ok ? "done" : r.msg);
