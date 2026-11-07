@@ -29,6 +29,10 @@
 #define UP_MAX_MIN_DEFAULT  10
 #define UP_MAX_MIN_TOP      60
 #define UP_HTTP_MS       10000
+// A failed try (no hotspot yet, no answer) is tried again this much later,
+// up to UP_TRIES per wake.
+#define UP_RETRY_MS     300000
+#define UP_TRIES             3
 #define UP_CHUNK          4096   // a card read, under the lock (internal: SD DMA)
 #define UP_PLAN_MAX    (48 * 1024)
 #define UP_TASK_STACK     8192
@@ -95,6 +99,26 @@ static void getStr(Preferences &p, const char *k, char *out, size_t n) {
 extern volatile uint32_t wg_end_step;
 static uint8_t endStepSeen = 0;         // printed from upload_task, after USB is up
 
+// ---- the result, for /api/upload and the boot log --------------------------
+struct UpResult {
+  uint32_t at;                        // epoch s, 0 = none yet / no clock
+  bool     ok;
+  uint16_t files;
+  uint32_t bytes, ms;
+  char     msg[72];
+};
+// The last try's result, kept in NVS ("last") since 2026-11-07: in RAM only,
+// it was gone by the time the app could ask - the gauge sleeps after the
+// drive the upload was tried on.
+static UpResult last = {};
+
+static void saveLast() {
+  Preferences p;
+  if (!p.begin(NS, false)) return;
+  p.putBytes("last", &last, sizeof(last));
+  p.end();
+}
+
 void upload_init() {
   if ((wg_end_step & 0xFFFFFFF0u) == 0x57470000u) endStepSeen = wg_end_step & 0xF;
   wg_end_step = 0;
@@ -114,6 +138,8 @@ void upload_init() {
     cfg.wgPort = p.getUShort("wgPort", 51820);
     cfg.maxMin = p.getUChar("maxMin", UP_MAX_MIN_DEFAULT);
     haveKey = p.getBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv)) == sizeof(cfg.wgPriv);
+    if (p.getBytes("last", &last, sizeof(last)) != sizeof(last)) last = {};
+    last.msg[sizeof(last.msg) - 1] = '\0';
     p.end();
   }
   if (!haveKey) {                      // first boot with this: the gauge's own key
@@ -194,16 +220,7 @@ const char *upload_setting(const char *key, const char *v) {
   return note;
 }
 
-// ---- the result, for /api/upload and the boot log --------------------------
-struct UpResult {
-  uint32_t at;                        // epoch s, 0 = none this boot
-  bool     ok;
-  uint16_t files;
-  uint32_t bytes, ms;
-  char     msg[72];
-};
-static UpResult last = {};
-
+// ---- the result, for /api/upload (UpResult, above) -------------------------
 static const char *jsonSafe(const char *s, char *out, size_t n) {
   size_t o = 0;
   for (; *s && o + 2 < n; s++) {
@@ -321,7 +338,14 @@ static size_t listCard(char *plan, size_t cap, uint16_t *count) {
 enum UpState : uint8_t { UP_IDLE, UP_WAIT_AP, UP_RUNNING };
 static UpState state = UP_IDLE;
 static volatile bool taskDone = false;
-static bool requested = false, triedThisBoot = false;
+static bool requested = false;
+// Per wake: done (uploaded, or stopped by its time limit - the rest goes
+// next time), or how many tries failed and when the next may start. A
+// failure used to end it for the wake: on 2026-11-07 a try at the door,
+// before the phone's hotspot was up, left the drive with none.
+static bool doneThisWake = false;
+static uint8_t triesFailed = 0;
+static uint32_t retryAtMs = 0;
 
 static void finish(UpResult &r, uint32_t t0, bool ok, const char *msg) {
   r.ok = ok;
@@ -446,8 +470,13 @@ static void uploadTask(void *arg) {
       delay(2000);
     }
     if (code != 200) {
+      // No answer at all: did the router even do the handshake? Four
+      // "server not reached" in a row (2026-11-07, hotspot on mobile data)
+      // could not say which end it was.
       snprintf(line, sizeof(line), code == 401 ? "server refused the token"
-                                   : code > 0 ? "plan answered %d" : "server not reached", code);
+                                   : code > 0  ? "plan answered %d"
+                                   : wg.is_peer_up() ? "tunnel up, server not reached"
+                                                     : "no handshake from the router", code);
       finish(r, t0, false, line);
       goto out;
     }
@@ -503,7 +532,9 @@ out:
 // ---- when ------------------------------------------------------------------
 void upload_now() {
   requested = true;
-  triedThisBoot = false;
+  doneThisWake = false;
+  triesFailed = 0;
+  retryAtMs = 0;
 }
 
 bool upload_holds_radio() { return state != UP_IDLE; }
@@ -516,7 +547,18 @@ void upload_task(uint32_t now) {
     endStepSeen = 0;
   }
   if (state == UP_RUNNING) {
-    if (taskDone) state = UP_IDLE;    // the radio goes back to the AP
+    if (!taskDone) return;
+    state = UP_IDLE;                  // the radio goes back to the AP
+    saveLast();                       // for the app, after the gauge has slept
+    if (last.ok || !strncmp(last.msg, "time limit", 10)) {
+      doneThisWake = true;
+    } else if (++triesFailed >= UP_TRIES) {
+      doneThisWake = true;
+      Serial.printf("[..] upload: %u tries failed - not again this wake\n", triesFailed);
+    } else {
+      retryAtMs = now + UP_RETRY_MS;
+      Serial.printf("[..] upload: failed (%s) - again in %u s\n", last.msg, UP_RETRY_MS / 1000);
+    }
     return;
   }
   if (state == UP_WAIT_AP) {
@@ -530,12 +572,16 @@ void upload_task(uint32_t now) {
     }
     return;
   }
-  if (triedThisBoot) return;
-  // The car is on (talking), the card is in and the gauge's own, and nobody
-  // is on the AP. Or the bench says now - and is told what stops it, once.
+  if (doneThisWake) return;
+  if (triesFailed && (int32_t)(now - retryAtMs) < 0 && !requested) return;
+  // The engine running, the card in and the gauge's own, and nobody on the
+  // AP. Or the bench says now - and is told what stops it, once.
   // (No clock is no reason: the task sets it over the hotspot first.)
-  const bool carOn = podstate().car != PS_CAR_OFF;
-  if (!carOn && !requested) return;
+  // The engine, not just the car talking (2026-11-07): a door opened wakes
+  // the bus too, long before the phone joins the car's Bluetooth and turns
+  // its hotspot on - each such try held the AP down a minute for nothing.
+  const bool running = podstate().car == PS_CAR_RUNNING;
+  if (!running && !requested) return;
   const char *why = !configured()                          ? "not set up (the app's Upload card)"
                     : !logger_card_ok() || logger_card_shared() ? "no card, or it is lent to a PC"
                     : web_clients() > 0                     ? "a phone is on the gauge's WiFi"
@@ -546,7 +592,6 @@ void upload_task(uint32_t now) {
     return;
   }
   requested = false;
-  triedThisBoot = true;
   state = UP_WAIT_AP;
-  Serial.println(F("[..] upload: the car is on - the radio is the upload's"));
+  Serial.println(F("[..] upload: the engine runs - the radio is the upload's"));
 }

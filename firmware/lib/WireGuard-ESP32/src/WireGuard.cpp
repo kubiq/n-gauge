@@ -133,6 +133,14 @@ bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const ch
 	return WireGuard::begin(localIP, subnet, gateway, privateKey, remotePeerAddress, remotePeerPublicKey, remotePeerPort);
 }
 
+bool WireGuard::is_peer_up() {
+	if( !this->_is_initialized ) return false;
+	LOCK_TCPIP_CORE();
+	const err_t r = wireguardif_peer_is_up(wg_netif, wireguard_peer_index, NULL, NULL);
+	UNLOCK_TCPIP_CORE();
+	return r == ERR_OK;
+}
+
 // Which step of end() was reached, kept across a reset (RTC memory): the
 // gauge's upload crashed in end() (2026-11-06) with no console to say where.
 RTC_NOINIT_ATTR volatile uint32_t wg_end_step;

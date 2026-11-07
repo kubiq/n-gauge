@@ -41,8 +41,12 @@
 #include "lwip/netif.h"
 #include "lwip/ip_addr.h"
 
-// Default MTU for WireGuard is 1420 bytes
-#define WIREGUARDIF_MTU (1420)
+// Default MTU for WireGuard is 1420 bytes. PATCHED (car-mod, 2026-11-07):
+// 1280, WireGuard's safe minimum. Over a phone's hotspot on mobile data the
+// gauge's handshakes got through but its data never did ("server not
+// reached", every time) - 1420 + 60 bytes of tunnel is more than a mobile
+// path often carries; on the same hotspot sharing home WiFi it worked.
+#define WIREGUARDIF_MTU (1280)
 
 #define WIREGUARDIF_DEFAULT_PORT		(51820)
 #define WIREGUARDIF_KEEPALIVE_DEFAULT	(0xFFFF)

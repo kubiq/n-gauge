@@ -14,4 +14,8 @@ public:
     bool begin(const IPAddress& localIP, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort);
     void end();
     bool is_initialized() const { return this->_is_initialized; }
+    // PATCHED (car-mod, 2026-11-07): has the handshake with the peer been
+    // done - so a failure can say "the router never answered" apart from
+    // "the tunnel is up, the far side is not".
+    bool is_peer_up();
 };
