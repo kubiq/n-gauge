@@ -86,7 +86,9 @@ void logger_note_sleep(const char *decision, int wakeCause, int canRx,
 // writes it): what came up and how - the GPS's configuration and real fix
 // rate, the clock, CAN, the card, RAM. The serial console says all of it at
 // boot, but the pod in the car has no console; this is the car's record.
-void logger_note_boot(const char *line);
+// False if the card was busy past the wait (or gone): the line did not go,
+// and the caller may try again.
+bool logger_note_boot(const char *line);
 
 // Distance for the current trip, in km.
 //

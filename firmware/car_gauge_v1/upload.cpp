@@ -9,7 +9,6 @@
 #include <WireGuard-ESP32.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
-#include <esp_sntp.h>    // the clock from NTP, when the gauge has none
 #include <lwip/dns.h>    // dns_setserver: the server's name by public resolvers
 #include <lwip/tcpip.h>  // LOCK_TCPIP_CORE around it
 #include <mbedtls/base64.h>
@@ -24,7 +23,6 @@
 // ---- timings ---------------------------------------------------------------
 #define UP_JOIN_MS       90000   // the hotspot comes up after the phone's BT does
 #define UP_HANDSHAKE_MS  30000   // the tunnel's first request waits for it
-#define UP_NTP_MS        15000   // the clock, when the gauge has none
 // The whole upload, at most: a setting (upMaxMin, the app's Upload card),
 // so the phone's hotspot is not held longer than its owner wants. What is
 // left goes the next time, from where this one stopped.
@@ -664,20 +662,8 @@ static void uploadTask(void *arg) {
   // (resolveServer); here only taken apart.
   if (!parseServer(c.url)) { finish(r, t0, false, "the server address is not a URL"); goto out; }
 
-  // The handshake carries a timestamp the router checks against the last
-  // one it saw: with no clock (an RTC that lost power, no GNSS fix yet) it
-  // is set from NTP first, over the hotspot. esp_sntp directly, not
-  // configTime(): that would also set TZ, the gauge's own (settings.tz).
-  if (!clock_valid()) {
-    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "pool.ntp.org");
-    esp_sntp_init();
-    const uint32_t tn = millis();
-    while (!clock_valid() && millis() - tn < UP_NTP_MS) delay(200);
-    esp_sntp_stop();
-    if (!clock_valid()) { finish(r, t0, false, "no clock (NTP)"); goto out; }
-    Serial.printf("[..] upload: clock set from NTP in %lu ms\n", (unsigned long)(millis() - tn));
-  }
+  // (The clock is valid: upload_task() starts none without - the handshake
+  // carries a timestamp the router checks.)
 
   planLen = listCard(plan, UP_PLAN_MAX, &onCard);
   if (!planLen) { finish(r, t0, false, "card not readable"); goto out; }
@@ -761,7 +747,8 @@ out:
            r.ok ? "done" : r.msg, r.files, (unsigned long)(r.bytes / 1024), (unsigned long)r.ms,
            onCard);
   Serial.println(line);
-  logger_note_boot(line);
+  // A few tries: the card may be busy a moment (logger_note_boot).
+  for (int i = 0; i < 5 && !logger_note_boot(line); i++) delay(2000);
   last = r;
   taskDone = true;
   vTaskDelete(nullptr);
@@ -812,15 +799,19 @@ void upload_task(uint32_t now) {
   }
   if (doneThisWake) return;
   if (triesFailed && (int32_t)(now - retryAtMs) < 0 && !requested) return;
-  // The engine running, the card in and the gauge's own, and nobody on the
-  // AP. Or the bench says now - and is told what stops it, once.
-  // (No clock is no reason: the task sets it over the hotspot first.)
+  // The engine running, a valid clock, the card in and the gauge's own, and
+  // nobody on the AP. Or the bench says now - and is told what stops it, once.
+  // The clock: the handshake carries a timestamp the router checks. Waited
+  // for (the GNSS's first fix, in the car), not fetched: NTP over the
+  // hotspot right after the car started failed, and the retry five minutes
+  // later reset the gauge mid-drive (2026-11-08). A wait for it is no try.
   // The engine, not just the car talking (2026-11-07): a door opened wakes
   // the bus too, long before the phone joins the car's Bluetooth and turns
   // its hotspot on - each such try held the AP down a minute for nothing.
   const bool running = podstate().car == PS_CAR_RUNNING;
   if (!running && !requested) return;
   const char *why = !configured()                          ? "not set up (the app's Upload card)"
+                    : !clock_valid()                        ? "no clock yet (the GNSS's first fix)"
                     : !logger_card_ok() || logger_card_shared() ? "no card, or it is lent to a PC"
                     : web_clients() > 0                     ? "a phone is on the gauge's WiFi"
                                                             : nullptr;

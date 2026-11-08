@@ -23,16 +23,25 @@ void bootlog_task(uint32_t now) {
   static bool written = false;
   static uint32_t fixesAt = 0;            // gps.fixes at BOOT_LOG_RATE_FROM_MS
   static bool haveFrom = false;
+  static char line[300] = "";             // made once; tried until it goes
+  static uint32_t triedAt = 0;
   if (written || now < BOOT_LOG_RATE_FROM_MS) return;
   if (!haveFrom) { haveFrom = true; fixesAt = gps.fixes; return; }
   if (now < BOOT_LOG_AFTER_MS || power_wake_pending()) return;
-  written = true;
+  // Not on the card yet (busy - an upload reading it): again a little
+  // later, the same line. It used to be dropped, and a reset's reason with
+  // it (2026-11-08: the one boot whose reason was wanted had no line).
+  if (line[0]) {
+    if (now - triedAt < 5000) return;
+    triedAt = now;
+    written = logger_note_boot(line);
+    return;
+  }
 
   // The fix rate the receiver actually delivers, over the last stretch: 25 Hz
   // when our configuration took, 1 Hz at its default.
   const float hz = (gps.fixes - fixesAt) * 1000.0f / (BOOT_LOG_AFTER_MS - BOOT_LOG_RATE_FROM_MS);
   static const char *const ack[] = { "not-tried", "ack", "NAK", "no-answer" };
-  char line[300];
   snprintf(line, sizeof(line),
            "fw=%s reset=%s | gps baud=%lu sentences=%lu config=%s rate=%.1fHz fix=%d sats=%u"
            " | clock %s rtc present=%d valid=%d drift=%lds | can driver=%d frames=%d"
@@ -53,5 +62,6 @@ void bootlog_task(uint32_t now) {
     snprintf(line + n, sizeof(line) - n, " | wdt:%s", wdt);
   }
   Serial.printf("[..] boot log: %s\n", line);
-  logger_note_boot(line);
+  triedAt = now;
+  written = logger_note_boot(line);
 }

@@ -264,7 +264,7 @@ static void cardRecover() {
   Serial.printf("[OK] SD card remounted (%u of %u)\n", remounts, SD_REMOUNT_MAX);
 }
 
-static void appendLine(const char *path, size_t maxBytes, const char *line);
+static bool appendLine(const char *path, size_t maxBytes, const char *line);
 
 // A "busy" line kept by logger_sd_lock_for, into /bootlog.txt - the car's
 // record, which the app pulls with every sync.
@@ -366,9 +366,13 @@ static bool rotateFull(const char *path) {
   return false;
 }
 
-static void appendLine(const char *path, size_t maxBytes, const char *line) {
+// False when the line could not go now - the card busy past the wait, or
+// gone - so the caller can try again: dropped as it was, a reset's boot line
+// (its reason) went missing behind an upload reading the card (2026-11-08).
+// True also when the log is full and stays so: no point retrying that.
+static bool appendLine(const char *path, size_t maxBytes, const char *line) {
   LoggerSdLock lock(SD_LOCK_WEB_MS);
-  if (!lock || !cardOk) return;      // a line lost, rather than the pod
+  if (!lock || !cardOk) return false;
   if (SD_MMC.exists(path)) {
     File probe = SD_MMC.open(path, FILE_READ);
     if (probe) {
@@ -376,11 +380,11 @@ static void appendLine(const char *path, size_t maxBytes, const char *line) {
       probe.close();
       // Can't move it aside: stop growing, as before, rather than fill the
       // card the drive logs need.
-      if (sz > maxBytes && !rotateFull(path)) return;
+      if (sz > maxBytes && !rotateFull(path)) return true;
     }
   }
   File f = SD_MMC.open(path, FILE_APPEND);
-  if (!f) return;
+  if (!f) return false;
   char utc[24] = "no-clock";
   if (clock_valid()) {
     const time_t t = time(nullptr);
@@ -391,6 +395,7 @@ static void appendLine(const char *path, size_t maxBytes, const char *line) {
   f.printf("%s %s\n", utc, line);
   f.flush();
   f.close();
+  return true;
 }
 
 void logger_note_sleep(const char *decision, int wakeCause, int canRx,
@@ -403,8 +408,8 @@ void logger_note_sleep(const char *decision, int wakeCause, int canRx,
   appendLine(SLEEP_LOG_PATH, SLEEP_LOG_MAX_BYTES, line);
 }
 
-void logger_note_boot(const char *line) {
-  appendLine(BOOT_LOG_PATH, BOOT_LOG_MAX_BYTES, line);
+bool logger_note_boot(const char *line) {
+  return appendLine(BOOT_LOG_PATH, BOOT_LOG_MAX_BYTES, line);
 }
 
 // Before sleep or a reboot: close everything and stop for good - the task
