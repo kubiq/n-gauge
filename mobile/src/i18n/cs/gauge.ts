@@ -99,7 +99,7 @@ export const gauge: Record<string, string> = {
   Save: 'Uložit',
 
   // upload-card.tsx
-  'Upload to the home server': 'Nahrávání na domácí server',
+  'Home server': 'Domácí server',
   'As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the new logs to the server. The phone then syncs them from the server by itself whenever it can reach it - at home on WiFi, or with its own VPN on - so the drives reach the phone without connecting to the gauge.':
     'Při startu auta se budík připojí k hotspotu telefonu, otevře VPN domů a nahraje nové záznamy na server. Telefon si je pak ze serveru sám synchronizuje, kdykoli se k němu dostane - doma na Wi-Fi, nebo se svou VPN - takže jízdy se do telefonu dostanou bez připojení k budíku.',
   'Last upload': 'Poslední nahrání',
@@ -113,6 +113,11 @@ export const gauge: Record<string, string> = {
   Address: 'Adresa',
   Token: 'Token',
   'Time limit, minutes': 'Časový limit, minuty',
+  'Automatic firmware updates': 'Automatické aktualizace firmwaru',
+  'Before the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.':
+    'Před logy si budík stáhne ze serveru nový firmware, pokud tam je, ověří jeho podpis a nainstaluje ho, až auto zaparkuje.',
+  'This firmware was built without a signing key, so it never updates itself.':
+    'Tento firmware byl sestaven bez podpisového klíče, takže se nikdy sám neaktualizuje.',
   'The server at home, as the gauge reaches it through the VPN. The phone syncs the drives from the same address with the same token - set here once, for both.':
     'Server doma, jak se k němu budík dostane přes VPN. Telefon si z něj jízdy synchronizuje ze stejné adresy se stejným tokenem - nastavuje se jednou, tady, pro oba.',
   'Type the token once more, for the phone: the gauge never gives it back.':

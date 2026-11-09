@@ -36,6 +36,19 @@ extern "C" bool verifyRollbackLater() { return true; }
 #endif
 const char *ota_build() { return FW_BUILD; }
 
+// The public half of the update signing key (scripts/build.sh), "" for a
+// build without one. Here, not in upload.cpp: build_info.h changes on every
+// build, and only its includer recompiles.
+#ifndef FW_SIGN_PUB
+#define FW_SIGN_PUB ""
+#endif
+const char *ota_sign_pub() { return FW_SIGN_PUB; }
+// When this firmware was built (Unix time, scripts/build.sh), 0 without it.
+#ifndef FW_BUILD_TIME
+#define FW_BUILD_TIME 0UL
+#endif
+uint32_t ota_build_time() { return FW_BUILD_TIME; }
+
 bool ota_rolled_back() {
   // The bootloader marks the image it gave up on; ESP-IDF reports it here.
   return esp_ota_get_last_invalid_partition() != NULL;

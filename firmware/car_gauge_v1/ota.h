@@ -43,6 +43,12 @@ void ota_reboot();                // closes logs, restarts into the new slot
 // For the settings page: build stamp, and whether a rollback happened.
 const char *ota_build();
 bool ota_rolled_back();
+// The public key updates from the upload server must be signed with, 64 hex
+// digits - "" when this build has none (then none is installed; upload.cpp).
+const char *ota_sign_pub();
+// When the running firmware was built, Unix time (0 = not by scripts/build.sh):
+// an update from the server must be newer - no downgrade to an old release.
+uint32_t ota_build_time();
 // A freshly updated firmware, not yet confirmed healthy (ota_task).
 bool ota_on_probation();
 // The running firmware's app hash, first 8 hex digits - matches the "(xxxxxxxx)"

@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, Note, Row, useUi } from '@/components/ui';
 import { useSync } from '@/hooks/use-sync';
@@ -22,7 +22,19 @@ import { S, themed, useColors } from '@/theme';
 // VPN through the router, the upload server at home. The VPN's words stay
 // English in every language - they are the words the router's own page
 // and WireGuard use, to be matched against them.
-type Field = 'upSsid' | 'upPass' | 'upUrl' | 'upToken' | 'upMaxMin' | 'wgHost' | 'wgPort' | 'wgPeer' | 'wgAddr' | 'wgDns';
+// upAuto, the one switch, rides along as "1"/"0" - saved the same way.
+type Field =
+  | 'upSsid'
+  | 'upPass'
+  | 'upUrl'
+  | 'upToken'
+  | 'upMaxMin'
+  | 'upAuto'
+  | 'wgHost'
+  | 'wgPort'
+  | 'wgPeer'
+  | 'wgAddr'
+  | 'wgDns';
 // Saved this long after the last keystroke - longer than the switches'
 // second on the rest of the screen: these are typed, keys pasted, a pause
 // mid-password should not send half of it (it would, harmlessly, and the
@@ -67,6 +79,7 @@ function fromPod(u: PodUpload): Record<Field, string> {
     upUrl: u.url,
     upToken: '',
     upMaxMin: String(u.maxMin ?? 10),
+    upAuto: u.autoUpdate === false ? '0' : '1',
     wgHost: u.wgHost,
     wgPort: String(u.wgPort),
     wgPeer: u.wgPeer,
@@ -196,7 +209,7 @@ export function UploadCard() {
 
   const last = up.last;
   return (
-    <Card title={t('Upload to the home server')}>
+    <Card title={t('Home server')}>
       <Note>
         {t(
           'As the car starts, the gauge joins the phone’s hotspot, opens the VPN home and uploads the new logs to the server. The phone then syncs them from the server by itself whenever it can reach it - at home on WiFi, or with its own VPN on - so the drives reach the phone without connecting to the gauge.',
@@ -243,6 +256,27 @@ export function UploadCard() {
       {up.tokenSet && !phoneToken ? (
         <Note tone="bad">{t('Type the token once more, for the phone: the gauge never gives it back.')}</Note>
       ) : null}
+      {/* Firmware updates from the same server (upload.cpp): older firmware
+          does not say, and has none. */}
+      {up.autoUpdate !== undefined ? (
+        <>
+          <View style={styles.row}>
+            <Text style={styles.label}>{t('Automatic firmware updates')}</Text>
+            <Switch
+              value={form.upAuto === '1'}
+              onValueChange={(on) => setForm({ ...form, upAuto: on ? '1' : '0' })}
+              trackColor={{ true: C.accent }}
+            />
+          </View>
+          <Note tone={up.fwKey ? undefined : 'bad'}>
+            {up.fwKey
+              ? t(
+                  'Before the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.',
+                )
+              : t('This firmware was built without a signing key, so it never updates itself.')}
+          </Note>
+        </>
+      ) : null}
 
       {/* Saved by themselves. The gauge's own words, in English like its
           other answers; "Saved, but ...": saved all the same - the note
@@ -275,5 +309,7 @@ const useStyles = themed((C) =>
       fontSize: 15,
     },
     key: { color: C.text, fontFamily: 'monospace', fontSize: 13 },
+    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.md },
+    label: { color: C.text, fontSize: 15, flexShrink: 1 },
   }),
 );

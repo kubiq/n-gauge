@@ -42,9 +42,35 @@ size, as the phone's sync does:
 | `GET /files` | | `name size` per line - for the phone, which pulls from here too |
 | `GET /f/<name>` | | the file; with `Range: bytes=a-b` those bytes (206) |
 | `DELETE /f/<name>` | | `deleted` - a drive deleted in the app: the file goes and its name is buried in `.deleted`, never asked of the gauge again (410 if sent) nor listed |
+| `GET /fw/latest` | | `<app hash> <size> <build time>` of the firmware held, 404 if none |
+| `GET /fw/bin`, `GET /fw/sig` | | the firmware image; its 64-byte signature |
 
 Every request but `/health` needs `Authorization: Bearer <token>`. An upload
 is written to a side file and renamed into place once complete, so a
 cut-off one leaves the previous file whole and the next plan asks again.
+
+## Firmware updates
+
+The same service can hand the gauge a new firmware: before each upload the
+gauge asks `/fw/latest`, and one newer than its own it downloads, checks and
+installs once the car is parked, with the usual rollback if it misbehaves.
+The files sit in `firmware/` in the data folder, put there by the release
+script on the PC that builds the firmware:
+
+```sh
+scripts/release-fw.py --init                             # once: the signing key
+scripts/release-fw.py --to server:/path/to/data/firmware # build, sign, copy (scp)
+```
+
+Only a firmware signed with that key is installed - so the service, or
+anyone who gets into it, cannot give the gauge anything else - and only one
+built later than the one running, so an old release cannot be served again.
+The signature is standard Ed25519 over the image's SHA-256 and its build
+time; the details are in `scripts/release-fw.py --help`. The key's public
+half goes into the firmware at build time (`scripts/build.sh` reads the
+`.pub` beside the key, or `FW_SIGN_PUB`): each builder has their own key,
+and a firmware built without one never updates itself. The first firmware
+with the key goes on as before, over USB or from the app; the app's Home
+server card turns the updates off.
 
 Tests: `python3 -m unittest server/test_upload_server.py`.

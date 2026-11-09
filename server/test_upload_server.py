@@ -93,6 +93,21 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.req("POST", "/plan", b"never.csv 5\n"), (200, ""))
         self.assertEqual(self.req("DELETE", "/f/x.csv", token="wrong")[0], 401)
 
+    def test_firmware_is_served_from_its_folder(self):
+        self.assertEqual(self.req("GET", "/fw/latest")[0], 404)   # none yet
+        fw = os.path.join(self.dir.name, "firmware")
+        os.makedirs(fw)
+        with open(os.path.join(fw, "latest"), "w") as f:
+            f.write("ab12 5\n")
+        with open(os.path.join(fw, "car_gauge_v1.bin"), "wb") as f:
+            f.write(b"image")
+        self.assertEqual(self.req("GET", "/fw/latest"), (200, "ab12 5\n"))
+        self.assertEqual(self.req("GET", "/fw/bin"), (200, "image"))
+        self.assertEqual(self.req("GET", "/fw/sig")[0], 404)
+        self.assertEqual(self.req("GET", "/fw/latest", token="wrong")[0], 401)
+        # A folder, not a log: never in the list.
+        self.assertEqual(self.req("GET", "/files"), (200, ""))
+
     def test_no_way_out_of_the_folder(self):
         self.assertEqual(self.req("PUT", "/f/..%2Fx?offset=0", b"x")[0], 400)
         self.assertEqual(self.req("PUT", "/f/../x?offset=0", b"x")[0], 400)

@@ -41,8 +41,13 @@ bool upload_busy();
 // Bench 'U': now, whatever the car says.
 void upload_now();
 
+// An upload this wake downloaded a new, signed firmware to the card
+// (OTA_SD_PATH): power.cpp installs it before sleeping (ota_check_sd).
+bool upload_fw_staged();
+
 // /save's keys (upSsid, upPass, upUrl, upToken, wgAddr, wgPeer, wgHost,
-// wgPort, upMaxMin - the time limit, minutes - and wgNewKey): saved at
+// wgPort, upMaxMin - the time limit, minutes - upAuto - firmware updates
+// from the server, "0" off - and wgNewKey): saved at
 // once, whatever the value - a refused one had
 // to be typed again (2026-11-06). The usual forms are cleaned up (no
 // http://, a /32, host:port); what still looks wrong comes back as a few

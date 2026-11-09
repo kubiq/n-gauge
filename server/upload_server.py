@@ -26,6 +26,10 @@ server sync) - so they reach it without a trip to the gauge's WiFi:
   GET  /files           one "name size" per line, what is held.
   GET  /f/<name>        the file; with "Range: bytes=a-b" just those bytes
                         (206), as the gauge's own /dl, for a log that grew.
+  GET  /fw/latest       the gauge's latest firmware: "<app hash> <size>"
+  GET  /fw/bin          that image (Range as /f/), and /fw/sig its Ed25519
+                        signature - scripts/release-fw.sh puts them in
+                        UPLOAD_DIR/firmware; 404 while there is none.
   DELETE /f/<name>      a drive deleted in the app: the file goes, and its
                         name is kept (TOMBSTONES) - never asked of the gauge
                         again nor listed, or the gauge's next upload and the
@@ -58,6 +62,16 @@ CHUNK = 64 * 1024
 # leading dot: no file name can be that (NAME_RE), so it is never listed.
 TOMBSTONES = ".deleted"
 RANGE_RE = re.compile(r"^bytes=(\d+)-(\d*)$")
+# The gauge's firmware updates, in UPLOAD_DIR/firmware (not a log: a folder,
+# so never listed), put there by scripts/release-fw.sh: the image, its
+# signature, and "latest" - the image's app hash and size, for the gauge to
+# tell whether it is new. Served as they are; the gauge checks the signature.
+FW_DIR = "firmware"
+FW_FILES = {
+    "/fw/latest": "latest",
+    "/fw/bin": "car_gauge_v1.bin",
+    "/fw/sig": "car_gauge_v1.bin.sig",
+}
 
 
 def plan(held: dict, offered: str, buried: frozenset = frozenset()) -> str:
@@ -137,10 +151,15 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/files":
             held = self._held()
             return self._reply(200, "".join(f"{n} {s}\n" for n, s in sorted(held.items())))
+        if url.path in FW_FILES:                   # the gauge's own updates
+            return self._send_file(os.path.join(self.root, FW_DIR, FW_FILES[url.path]))
         name = self._name(url.path)
         if name is None:
             return self._reply(404, "not found\n")
-        path = os.path.join(self.root, name)
+        return self._send_file(os.path.join(self.root, name))
+
+    def _send_file(self, path: str):
+        """The file, or "Range: bytes=a-b" of it (206); 404 if it is not there."""
         try:
             size = os.path.getsize(path)
         except OSError:

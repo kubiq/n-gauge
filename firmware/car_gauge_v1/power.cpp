@@ -478,6 +478,17 @@ void power_task() {
   // slept at the same second.
   // Not in the middle of a log upload (upload.h): it ends by itself, within
   // its time limit (the app's Upload card).
-  if (podstate().sleepOk && !upload_busy()) goToSleep();
+  // A firmware the upload brought (upload.h) installs now, the car parked:
+  // the logs closed first (the install reboots), the running one confirmed
+  // - it has run a whole drive - so a rollback lands on it. Back here only
+  // if the install failed; then to sleep as usual.
+  if (podstate().sleepOk && !upload_busy()) {
+    if (upload_fw_staged()) {
+      ota_confirm();
+      logger_close();
+      ota_check_sd();
+    }
+    goToSleep();
+  }
 #endif
 }

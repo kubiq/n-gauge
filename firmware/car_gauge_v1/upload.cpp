@@ -7,15 +7,21 @@
 #include <SD_MMC.h>
 #include <WiFi.h>
 #include <WireGuard-ESP32.h>
+#include <esp_app_desc.h>   // the running firmware's hash: is the server's newer?
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>    // the app slot's size: the most a firmware may be
 #include <esp_random.h>
 #include <lwip/dns.h>    // dns_setserver: the server's name by public resolvers
 #include <lwip/tcpip.h>  // LOCK_TCPIP_CORE around it
 #include <mbedtls/base64.h>
+#include <mbedtls/sha256.h>  // the downloaded firmware's, for its signature
 #include <time.h>
 #include "upload.h"
-#include "logger.h"     // LoggerSdLock, logger_card_ok, logger_note_boot
+#include "config.h"     // OTA_SD_PATH, OTA_SD_NEW: where a firmware from the server goes
+#include "logger.h"    // LoggerSdLock, logger_card_ok, logger_note_boot
 #include "monocypher.h" // crypto_x25519_public_key: the gauge's WireGuard key
+#include "monocypher-ed25519.h" // crypto_ed25519_check: a firmware's signature
+#include "ota.h"        // ota_sign_pub: who a firmware from the server must be signed by
 #include "podstate.h"   // the car is on: the time to go
 #include "rtc.h"        // clock_valid: the handshake carries a timestamp
 #include "webapi.h"     // web_is_up, web_clients
@@ -48,6 +54,7 @@ struct UpConfig {
   char     wgDns[16];                 // a DNS inside the tunnel, for the server's name; "" = the hotspot's
   uint16_t wgPort;
   uint8_t  maxMin;                    // the time limit, minutes
+  uint8_t  autoUpdate;                // firmware from the server before the logs (1 = yes)
   uint8_t  wgPriv[32];                // made here, never leaves
 };
 static UpConfig cfg;
@@ -55,7 +62,7 @@ static char wgPub[45];                // its public half, base64
 
 static const char *NS = "upload";
 const char *const UPLOAD_KEYS[] = {"upSsid", "upPass", "upUrl", "upToken", "wgAddr",
-                                   "wgPeer", "wgHost", "wgPort", "wgDns", "upMaxMin", "wgNewKey", nullptr};
+                                   "wgPeer", "wgHost", "wgPort", "wgDns", "upMaxMin", "upAuto", "wgNewKey", nullptr};
 
 static void b64(char *out, size_t n, const uint8_t *in, size_t len) {
   size_t olen = 0;
@@ -88,6 +95,7 @@ static void save() {
   p.putString("wgDns", cfg.wgDns);
   p.putUShort("wgPort", cfg.wgPort);
   p.putUChar("maxMin", cfg.maxMin);
+  p.putUChar("auto", cfg.autoUpdate);
   p.putBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv));
   p.end();
 }
@@ -127,6 +135,7 @@ void upload_init() {
   memset(&cfg, 0, sizeof(cfg));
   cfg.wgPort = 51820;
   cfg.maxMin = UP_MAX_MIN_DEFAULT;
+  cfg.autoUpdate = 1;                  // on, once a server is set up (asked 2026-11-09)
   bool haveKey = false;
   Preferences p;
   if (p.begin(NS, true)) {
@@ -140,6 +149,7 @@ void upload_init() {
     getStr(p, "wgDns", cfg.wgDns, sizeof(cfg.wgDns));
     cfg.wgPort = p.getUShort("wgPort", 51820);
     cfg.maxMin = p.getUChar("maxMin", UP_MAX_MIN_DEFAULT);
+    cfg.autoUpdate = p.getUChar("auto", 1);
     haveKey = p.getBytes("wgPriv", cfg.wgPriv, sizeof(cfg.wgPriv)) == sizeof(cfg.wgPriv);
     if (p.getBytes("last", &last, sizeof(last)) != sizeof(last)) last = {};
     last.msg[sizeof(last.msg) - 1] = '\0';
@@ -213,6 +223,8 @@ const char *upload_setting(const char *key, const char *v) {
     const long port = atol(v);
     if (port > 0 && port < 65536) cfg.wgPort = (uint16_t)port;
     else note = "the router port is not 1-65535";
+  } else if (!strcmp(key, "upAuto")) {
+    cfg.autoUpdate = (!strcmp(v, "0") || !strcmp(v, "false")) ? 0 : 1;
   } else if (!strcmp(key, "upMaxMin")) {
     const long m = atol(v);
     cfg.maxMin = (uint8_t)(m < 1 ? 1 : m > UP_MAX_MIN_TOP ? UP_MAX_MIN_TOP : m);
@@ -243,14 +255,14 @@ int upload_json(char *out, size_t n) {
   const int len = snprintf(out, n,
       "{\"configured\":%s,\"ssid\":\"%s\",\"passSet\":%s,\"url\":\"%s\",\"tokenSet\":%s,"
       "\"wgAddr\":\"%s\",\"wgPeer\":\"%s\",\"wgHost\":\"%s\",\"wgPort\":%u,\"wgDns\":\"%s\","
-      "\"maxMin\":%u,\"wgPub\":\"%s\","
+      "\"maxMin\":%u,\"autoUpdate\":%s,\"fwKey\":%s,\"wgPub\":\"%s\","
       "\"last\":{\"at\":%lu,\"ok\":%s,\"files\":%u,\"bytes\":%lu,\"ms\":%lu,\"msg\":\"%s\"}}",
       configured() ? "true" : "false", jsonSafe(cfg.ssid, ssid, sizeof(ssid)),
       cfg.pass[0] ? "true" : "false", jsonSafe(cfg.url, url, sizeof(url)),
       cfg.token[0] ? "true" : "false", jsonSafe(cfg.wgAddr, addr, sizeof(addr)),
       jsonSafe(cfg.wgPeer, peer, sizeof(peer)),
       jsonSafe(cfg.wgHost, host, sizeof(host)), cfg.wgPort, jsonSafe(cfg.wgDns, dns, sizeof(dns)),
-      cfg.maxMin, wgPub,
+      cfg.maxMin, cfg.autoUpdate ? "true" : "false", ota_sign_pub()[0] ? "true" : "false", wgPub,
       (unsigned long)last.at, last.ok ? "true" : "false", last.files,
       (unsigned long)last.bytes, (unsigned long)last.ms, jsonSafe(last.msg, msg, sizeof(msg)));
   return (len > 0 && (size_t)len < n) ? len : 0;
@@ -637,11 +649,207 @@ static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo
   return code;
 }
 
+// ---- a new firmware from the server (2026-11-09) ------------------------------
+// Before the logs, when the Upload card's "Automatic updates" is on (the
+// default) and the build has a signing key (ota_sign_pub): the server's
+// /fw/latest says which firmware it holds ("<app hash> <size> <build time>",
+// from scripts/release-fw.py). One built after this one (no downgrade to an
+// older signed release), not tried before, is downloaded to OTA_SD_NEW,
+// checked against its signature and only then renamed to OTA_SD_PATH -
+// where ota_check_sd() installs it, before the next sleep (power.cpp) or at
+// the next boot, with the usual probation and rollback. Nothing here ever
+// fails the upload: the logs go either way.
+// The signature (/fw/sig, 64 bytes): standard Ed25519 (RFC 8032 - what
+// minisign, signify, OpenSSL and Python make) over 40 bytes: the image's
+// SHA-256, then its build time as 8 bytes little-endian. The build time is
+// signed, so a server cannot pass an old release off as a new one.
+static bool fwStaged = false;           // OTA_SD_PATH holds a checked one, this wake
+static uint8_t fwStagedHash[32];
+
+bool upload_fw_staged() { return fwStaged; }
+
+static bool unhex(const char *s, uint8_t *out, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    unsigned v;
+    if (!isxdigit((unsigned char)s[2 * i]) || !isxdigit((unsigned char)s[2 * i + 1]) ||
+        sscanf(s + 2 * i, "%2x", &v) != 1) return false;
+    out[i] = (uint8_t)v;
+  }
+  return true;
+}
+
+// GET a small answer (at most n bytes) into out: the HTTP code, -1 without
+// a connection; *len what came - short of the whole answer, 0.
+static int getSmall(const UpConfig &c, const char *path, uint8_t *out, size_t n, size_t *len) {
+  NetworkClient tcp;
+  HTTPClient http;
+  http.setConnectTimeout(UP_HTTP_MS);
+  http.setTimeout(UP_HTTP_MS);
+  *len = 0;
+  if (!openRequest(http, tcp, path)) return -1;
+  authorise(http, c);
+  const int code = http.GET();
+  const int size = http.getSize();
+  if (code == 200 && size > 0 && (size_t)size <= n &&
+      http.getStreamPtr()->readBytes(out, size) == (size_t)size) *len = size;
+  http.end();
+  return code;
+}
+
+// /fw/bin into OTA_SD_NEW, `size` bytes, its SHA-256 into digest: "" or a reason.
+static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *buf, uint8_t digest[32]) {
+  File f;
+  {
+    LoggerSdLock lock(SD_LOCK_WEB_MS);
+    if (!lock || logger_card_shared()) return "card busy";
+    SD_MMC.remove(OTA_SD_NEW);
+    f = SD_MMC.open(OTA_SD_NEW, FILE_WRITE);
+  }
+  if (!f) return "card not writable";
+  NetworkClient tcp;
+  HTTPClient http;
+  http.setConnectTimeout(UP_HTTP_MS);
+  http.setTimeout(UP_HTTP_MS);
+  const char *err = "";
+  uint32_t got = 0;
+  if (!openRequest(http, tcp, "/fw/bin")) {
+    err = "server not reached";
+  } else {
+    authorise(http, c);
+    const int code = http.GET();
+    if (code != 200) err = "download refused";
+    else if (http.getSize() != (int)size) err = "the server's size differs";
+    else {
+      mbedtls_sha256_context sha;
+      mbedtls_sha256_init(&sha);
+      mbedtls_sha256_starts(&sha, 0);
+      NetworkClient *s = http.getStreamPtr();
+      uint32_t lastData = millis();
+      while (got < size && millis() - lastData < UP_HTTP_MS) {
+        const int avail = s->available();
+        if (avail <= 0) {
+          if (!s->connected()) break;
+          delay(5);
+          continue;
+        }
+        uint32_t want = size - got;
+        if (want > (uint32_t)avail) want = avail;
+        if (want > UP_CHUNK) want = UP_CHUNK;
+        const int n = s->read(buf, want);
+        if (n <= 0) continue;
+        mbedtls_sha256_update(&sha, buf, n);
+        {
+          LoggerSdLock lock(SD_LOCK_WEB_MS);
+          if (!lock || logger_card_shared() || f.write(buf, n) != (size_t)n) { err = "card write failed"; break; }
+        }
+        got += n;
+        lastData = millis();
+        taskYIELD();                    // the logger has the card next
+      }
+      mbedtls_sha256_finish(&sha, digest);
+      mbedtls_sha256_free(&sha);
+      if (!err[0] && got != size) err = "download cut short";
+    }
+    http.end();
+  }
+  LoggerSdLock lock(SD_LOCK_WEB_MS);
+  f.close();
+  if (err[0]) SD_MMC.remove(OTA_SD_NEW);
+  return err;
+}
+
+// The whole step: a few words for the result line in note, "" when there
+// was nothing new.
+static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n) {
+  note[0] = '\0';
+  const char *pubHex = ota_sign_pub();
+  uint8_t pub[32];
+  if (!c.autoUpdate || strlen(pubHex) != 64 || !unhex(pubHex, pub, 32)) return;
+
+  char latest[100];
+  size_t len = 0;
+  const int code = getSmall(c, "/fw/latest", (uint8_t *)latest, sizeof(latest) - 1, &len);
+  if (code == 404) return;              // the server holds none
+  latest[len] = '\0';
+  uint8_t hash[32];
+  char *rest = nullptr;
+  const unsigned long size = len > 65 ? strtoul(latest + 65, &rest, 10) : 0;
+  const unsigned long long built = rest ? strtoull(rest, nullptr, 10) : 0;
+  if (code != 200 || len < 66 || latest[64] != ' ' || !unhex(latest, hash, 32) || !size || !built) {
+    snprintf(note, n, "firmware check failed (%d)", code);
+    return;
+  }
+  char shortHash[9];
+  memcpy(shortHash, latest, 8);
+  shortHash[8] = '\0';
+
+  // Not the one running, nor one handled before: installed and rolled back
+  // (ota.cpp's "seen" - put there before each install), refused here
+  // (a bad signature, "fwBad"), or downloaded already this wake.
+  if (!memcmp(hash, esp_app_get_description()->app_elf_sha256, 32)) return;
+  if (built <= ota_build_time()) return;  // older: this one is newer (a USB build, say)
+  if (fwStaged && !memcmp(hash, fwStagedHash, 32)) return;
+  uint8_t seen[32];
+  Preferences p;
+  if (p.begin("ota", true)) {
+    const bool tried = p.getBytes("seen", seen, sizeof(seen)) == sizeof(seen) && !memcmp(seen, hash, 32);
+    p.end();
+    if (tried) return;
+  }
+  if (p.begin(NS, true)) {
+    const bool bad = p.getBytes("fwBad", seen, sizeof(seen)) == sizeof(seen) && !memcmp(seen, hash, 32);
+    p.end();
+    if (bad) return;
+  }
+  const esp_partition_t *slot = esp_ota_get_next_update_partition(nullptr);
+  if (!slot || size > slot->size) {
+    snprintf(note, n, "firmware %s too big", shortHash);
+    return;
+  }
+
+  const uint32_t t = millis();
+  uint8_t signedMsg[40], sig[64];       // the image's SHA-256, its build time
+  const char *err = downloadFirmware(c, size, buf, signedMsg);
+  for (int i = 0; i < 8; i++) signedMsg[32 + i] = (uint8_t)(built >> (8 * i));
+  if (!err[0]) {
+    if (getSmall(c, "/fw/sig", sig, sizeof(sig), &len) != 200 || len != sizeof(sig)) {
+      err = "no signature";
+    } else if (crypto_ed25519_check(sig, pub, signedMsg, sizeof(signedMsg)) != 0) {
+      err = "bad signature";
+      if (p.begin(NS, false)) {         // not downloaded again: only a new release
+        p.putBytes("fwBad", hash, sizeof(hash));
+        p.end();
+      }
+    }
+    if (err[0]) {
+      LoggerSdLock lock(SD_LOCK_WEB_MS);
+      SD_MMC.remove(OTA_SD_NEW);
+    }
+  }
+  if (!err[0]) {
+    LoggerSdLock lock(SD_LOCK_WEB_MS);
+    if (!lock || logger_card_shared()) err = "card busy";
+    else {
+      SD_MMC.remove(OTA_SD_PATH);
+      if (!SD_MMC.rename(OTA_SD_NEW, OTA_SD_PATH)) err = "card rename failed";
+    }
+  }
+  if (err[0]) {
+    snprintf(note, n, "firmware %s: %s", shortHash, err);
+  } else {
+    fwStaged = true;
+    memcpy(fwStagedHash, hash, sizeof(hash));
+    snprintf(note, n, "firmware %s ready (%lu KB in %lu s)", shortHash, size / 1024,
+             (unsigned long)(millis() - t) / 1000);
+  }
+  Serial.printf("[..] upload: %s\n", note);
+}
+
 static void uploadTask(void *arg) {
   UpConfig &c = *(UpConfig *)arg;
   UpResult r = {};
   const uint32_t t0 = millis();
-  char line[160];
+  char line[224];
   uint8_t *buf = (uint8_t *)heap_caps_malloc(UP_CHUNK, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
   char *plan = (char *)heap_caps_malloc(UP_PLAN_MAX, MALLOC_CAP_SPIRAM);
   WireGuard wg;
@@ -649,6 +857,7 @@ static void uploadTask(void *arg) {
   size_t planLen = 0;
   uint16_t onCard = 0;
   String todo;
+  char fwNote[64] = "";
 
   if (!buf || !plan) { finish(r, t0, false, "no memory"); goto out; }
 
@@ -704,6 +913,10 @@ static void uploadTask(void *arg) {
     }
   }
 
+  // A new firmware first, then the logs (asked so, 2026-11-09): a firmware
+  // is one file, and the logs' time limit would otherwise crowd it out.
+  fetchFirmware(c, buf, fwNote, sizeof(fwNote));
+
   {
     // Through the tunnel the first request may wait for the handshake:
     // tried until it answers.
@@ -743,9 +956,9 @@ out:
   Serial.println(F("[..] upload: radio off"));
   free(buf);
   free(plan);
-  snprintf(line, sizeof(line), "upload: %s - %u files, %lu KB in %lu ms (%u logs on the card)",
+  snprintf(line, sizeof(line), "upload: %s - %u files, %lu KB in %lu ms (%u logs on the card)%s%s",
            r.ok ? "done" : r.msg, r.files, (unsigned long)(r.bytes / 1024), (unsigned long)r.ms,
-           onCard);
+           onCard, fwNote[0] ? "; " : "", fwNote);
   Serial.println(line);
   // A few tries: the card may be busy a moment (logger_note_boot).
   for (int i = 0; i < 5 && !logger_note_boot(line); i++) delay(2000);

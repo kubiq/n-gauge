@@ -84,6 +84,9 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
   days on the battery); wakes on CAN activity, the button, or the door
   opening (the IMU's wake-on-motion).
+- **Firmware updates:** from the phone, the SD card or - by itself, before
+  each upload - the home server, signed (Ed25519) so it installs nothing
+  else; on probation, rolled back if the new one fails.
 - **Phone:** its own WiFi access point with settings pages, OTA firmware
   updates with rollback, and an Android app ([mobile/](mobile)) that joins it
   from a QR code on the gauge, syncs the logs by itself and then lets go of
@@ -163,6 +166,14 @@ The upload server ([details](server/README.md)), on the home server:
 ```sh
 cd server && echo "UPLOAD_TOKEN=$(openssl rand -hex 16)" > .env
 docker compose up -d --build
+```
+
+A firmware release to it, for the gauge to update itself
+([details](server/README.md#firmware-updates)):
+
+```sh
+scripts/release-fw.py --init                 # once: your signing key
+scripts/release-fw.py --to server:/path/to/data/firmware
 ```
 
 The gauge on a PC ([details](sim/README.md)) - needs SDL2 and CMake:

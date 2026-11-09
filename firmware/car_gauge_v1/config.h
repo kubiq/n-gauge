@@ -266,6 +266,14 @@
 // after this long (or just before sleep); a reset before that rolls back.
 #define OTA_HEALTHY_MS       30000
 #define OTA_SD_PATH          "/firmware.bin"            // put the .bin here
+// Updates from the upload server (upload.cpp, 2026-11-09): downloaded to
+// OTA_SD_NEW, and only once its signature checks out renamed to OTA_SD_PATH
+// for ota_check_sd() to install before the next sleep. The signature:
+// standard Ed25519 over the image's SHA-256 and build time, by the key that
+// scripts/release-fw.py uses on the PC. Its public half is not here but in
+// the generated build_info.h (FW_SIGN_PUB, from scripts/build.sh): each
+// builder their own key. Built without one, nothing is ever installed.
+#define OTA_SD_NEW           "/firmware.new"
 
 // 1 = bench test of the IMU's wake-on-motion, before it is trusted to wake
 // the pod: the QMI8658 is armed in WoM mode on INT2 (GPIO21) at boot and
