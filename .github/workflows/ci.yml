@@ -1,0 +1,118 @@
+# Checks on every push and pull request; a release for a version tag.
+#
+# - firmware: scripts/check.sh as before a commit - the host tests, the car
+#   and bench firmware, the simulator, the upload server. The Arduino core and
+#   libraries (~1 GB) are cached, keyed on what installs them.
+# - app: mobile/'s typecheck, lint and tests.
+# - release (a tag v*, e.g. v2026.11.09): the car firmware as the phone's OTA
+#   and /firmware.bin take it, and a full image for a first flash over USB,
+#   with the commits since the last tag. The APK is built locally (not here:
+#   it would need the app's signing key as a secret).
+#
+# The firmware carries the update signing key's public half from the
+# repository variable FW_SIGN_PUB (scripts/build.sh) - public, not a secret.
+# Unset, the builds simply never update themselves from a server.
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    env:
+      FW_SIGN_PUB: ${{ vars.FW_SIGN_PUB }}
+      ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: SDL2 for the simulator
+        run: sudo apt-get update -q && sudo apt-get install -yq libsdl2-dev
+      - name: Cache the Arduino core and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-${{ hashFiles('scripts/setup-libs.sh', 'firmware/car_gauge_v1/sketch.yaml') }}
+      - name: Arduino core and libraries
+        run: arduino-cli update && ./scripts/setup-libs.sh
+      - name: Checks
+        run: ./scripts/check.sh
+      # The car build check.sh made, as a release takes it: the app image,
+      # and everything at its flash offset in one file (as build.sh flashes).
+      - name: Firmware images
+        run: |
+          OUT=.build/car_gauge_v1
+          BOOTAPP="$(find ~/.arduino15/packages/esp32 -name boot_app0.bin | head -1)"
+          # The newest the core brought (5.x: merge-bin; 4.x spelled it merge_bin).
+          ESPTOOL="$(find ~/.arduino15/packages/esp32/tools/esptool_py -name 'esptool' -type f | sort -V | tail -1)"
+          mkdir -p dist
+          cp "$OUT/car_gauge_v1.ino.bin" dist/car_gauge_v1.bin
+          "$ESPTOOL" --chip esp32s3 merge-bin -o dist/car_gauge_v1-full.bin \
+            --flash-mode qio --flash-size 16MB \
+            0x0 "$OUT/car_gauge_v1.ino.bootloader.bin" \
+            0x8000 "$OUT/car_gauge_v1.ino.partitions.bin" \
+            0xe000 "$BOOTAPP" \
+            0x10000 "$OUT/car_gauge_v1.ino.bin"
+          grep FW_BUILD firmware/car_gauge_v1/build_info.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: dist/
+          if-no-files-found: error
+
+  app:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [firmware, app]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: dist
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          PREV="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
+          {
+            echo "Firmware for the gauge, built from $(git rev-parse --short "$TAG")."
+            echo
+            echo "- \`car_gauge_v1.bin\`: an update - from the app, the gauge's settings page, or as /firmware.bin on the card."
+            echo "- \`car_gauge_v1-full.bin\`: a first flash over USB: \`esptool --chip esp32s3 write-flash 0x0 car_gauge_v1-full.bin\`."
+            echo
+            echo "Since ${PREV:-the start}:"
+            git log --no-merges --format='- %s' ${PREV:+"$PREV.."}"$TAG"
+          } > notes.md
+          gh release create "$TAG" dist/* --title "$TAG" --notes-file notes.md

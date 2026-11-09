@@ -165,6 +165,13 @@ Firmware ([details](firmware/car_gauge_v1/README.md)):
 ./scripts/check.sh               # before a commit: tests, both firmware builds, the sim, the server
 ```
 
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the
+same checks and the app's on every push and pull request. A version tag
+(`git tag v2026.11.09 && git push --tags`) also makes a release: the firmware
+as an update, and a full image for a first flash over USB. Releases carry the
+public half of an update signing key if the repository variable `FW_SIGN_PUB`
+holds one.
+
 The upload server ([details](server/README.md)), on the home server:
 
 ```sh
