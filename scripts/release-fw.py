@@ -123,7 +123,11 @@ def release(dest: str) -> None:
     key = load_key()
     pub = pub_hex(key)
     # What the build embeds: a .pub from another key would make a firmware
-    # that refuses every update signed here.
+    # that refuses every update signed here. A missing one (the key moved
+    # to the keyring, the folder cleared with it) is made again from the key.
+    if "FW_SIGN_PUB" not in os.environ and not os.path.exists(PUB):
+        print(f"no {PUB} - made again from the key")
+        write_pub(key)
     on_file = open(PUB).read().strip() if os.path.exists(PUB) else ""
     if os.environ.get("FW_SIGN_PUB", on_file) != pub:
         sys.exit(f"the build's public key is not this key's ({pub}) - run --pub, or fix FW_SIGN_PUB")
