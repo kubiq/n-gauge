@@ -950,6 +950,18 @@ static volatile bool dlAbort = false;
 static volatile bool dlBusy = false;
 bool web_download_active() { return dlBusy; }
 
+// For the sync screen (web_sync_stats): written here, on the server's task,
+// read by loop() - counts, a pass old at worst.
+static volatile uint32_t syncAtMs = 0;
+static volatile uint16_t syncFiles = 0;
+static volatile uint32_t syncBytes = 0;
+static void noteSync() { syncAtMs = millis() ? millis() : 1; }
+void web_sync_stats(uint32_t *lastAtMs, uint16_t *files, uint32_t *bytes) {
+  *lastAtMs = syncAtMs;
+  *files = syncFiles;
+  *bytes = syncBytes;
+}
+
 static bool sendRaw(httpd_req_t *r, const char *p, size_t n) {
   while (n) {
     const int k = httpd_send(r, p, n);
@@ -1009,6 +1021,7 @@ static esp_err_t handleDownload(httpd_req_t *r) {
       statusLine(rr > 0 ? 206 : 200), mimeFor(n), (unsigned long)left, n, cr);
 
   dlBusy = true;
+  noteSync();
   const uint32_t t0 = millis(), deadline = t0 + DL_MAX_MS, total = left;
   // Internal RAM: the card reads into it by DMA.
   static uint8_t buf[2048];
@@ -1035,6 +1048,9 @@ static esp_err_t handleDownload(httpd_req_t *r) {
                 (unsigned long)(total - left), (unsigned long)total,
                 (unsigned long)(millis() - t0),
                 !left ? "" : dlAbort ? " - stopped (AP going down)" : " - cut short");
+  syncBytes = syncBytes + (total - left);
+  if (!left) syncFiles = (uint16_t)(syncFiles + 1);
+  noteSync();
   dlBusy = false;
   // Closed either way, as "Connection: close" said: cut short, the client
   // sees the transfer end rather than waiting on a Content-Length that will

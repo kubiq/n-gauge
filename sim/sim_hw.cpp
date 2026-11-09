@@ -177,6 +177,7 @@ void web_stop() { webUp = false; }
 bool web_is_up() { return webUp; }
 uint8_t web_clients() { return 0; }
 bool web_download_active() { return false; }
+void web_sync_stats(uint32_t *at, uint16_t *files, uint32_t *bytes) { *at = 0; *files = 0; *bytes = 0; }
 const char *web_ip() { return webUp ? "4.3.2.1" : ""; }
 const char *web_reset_text() { return "power on"; }
 void web_sd_space_kb(uint32_t *u, uint32_t *t) { *u = 1024 * 1024; *t = 32 * 1024 * 1024; }

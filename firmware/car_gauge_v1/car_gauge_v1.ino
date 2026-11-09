@@ -435,6 +435,43 @@ static void gmeterTask(uint32_t now) {
   ui_update_gmeter_raw(gx, gy, gz);
 }
 
+// ---- the sync screen ----
+// While the phone pulls the logs from the gauge (webapi.h web_sync_stats),
+// "Syncing with the phone" in place of the gauges (ui_sync.cpp), with what
+// it has sent; then back to the screen it replaced (asked 2026-10-20). Only
+// parked: a sync while driving keeps the gauges. A touch, or a swipe away,
+// brings them back for the rest of that sync. A warning shows over it.
+static void syncTask(uint32_t now) {
+  uint32_t at;
+  uint16_t files;
+  uint32_t bytes;
+  web_sync_stats(&at, &files, &bytes);
+  static bool on = false, shown = false, dismissed = false;
+  static GaugeView back = VIEW_OIL;
+  static uint16_t files0 = 0;
+  static uint32_t bytes0 = 0;
+  const bool syncing = web_clients() > 0 && at &&
+                       (web_download_active() || !calc_elapsed(now, at, SYNC_QUIET_MS));
+  if (syncing && !on) { on = true; dismissed = false; files0 = files; bytes0 = bytes; }
+  if (!syncing) on = false;
+  if (shown && (ui_take_sync_touch() || ui_current_view() != VIEW_SYNC)) dismissed = true;
+  const bool want = on && !dismissed && podstate().motion != PS_DRIVING;
+  if (want && !shown) {
+    back = ui_current_view();
+    // Not back to the WiFi screen: it is what the phone joined from, and
+    // it would only count down to the gauges again.
+    if (back == VIEW_WIFI || back == VIEW_SYNC) back = (GaugeView)settings.lastView;
+    ui_take_sync_touch();               // a stale press does not end it at once
+    ui_set_view(VIEW_SYNC);
+    shown = true;
+  } else if (!want && shown) {
+    shown = false;
+    if (ui_current_view() == VIEW_SYNC) ui_set_view(back);
+    if (ui_current_view() == VIEW_SYNC) ui_set_view(ui_home_view());
+  }
+  if (shown) ui_update_sync((uint16_t)(files - files0), bytes - bytes0);
+}
+
 // ---- remember the screen across restarts ----
 // Deferred on purpose: cycling through six views to reach the one you want
 // would otherwise be six NVS writes. Only the screen you settle on is saved.
@@ -620,6 +657,7 @@ void loop() {
     // No button handling: screens change by swiping, and the WiFi AP follows
     // the car (up when awake, down while driving). The button only wakes the
     // gauge from deep sleep (power.cpp), like the door opening does.
+    syncTask(now);              // "Syncing with the phone" while it pulls the logs
     viewTask(now);
 
     rtc_task();                 // keep the PCF85063 in step with GNSS time

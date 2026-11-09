@@ -968,6 +968,9 @@
 #define WIFI_VIEW_MAX_MS   60000
 // The status screen (ui_status.cpp): its words rebuilt this often while shown.
 #define STATUS_REFRESH_MS  250
+// The sync screen (syncTask): a sync has ended this long after the last file
+// was sent - the phone asks for the next one at once, so a gap means done.
+#define SYNC_QUIET_MS      5000
 // The arc counting that down in this many steps (10 ms each at 60 s): finer
 // than a frame, so it sweeps smoothly. LV_USE_FLOAT lets the arc draw
 // fractions of a degree.

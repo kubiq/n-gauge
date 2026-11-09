@@ -93,6 +93,7 @@ lv_obj_t *ui_build_gps();      // ui_gps.cpp
 lv_obj_t *ui_build_track();    // ui_track.cpp:  lap timer
 lv_obj_t *ui_build_wifi();     // ui_wifi.cpp
 lv_obj_t *ui_build_status();   // ui_status.cpp: the upload and update
+lv_obj_t *ui_build_sync();     // ui_sync.cpp:   the phone pulling the logs
 void ui_build_notice();        // ui_notice.cpp: the rim, on lv_layer_top
 
 // ---- across files ------------------------------------------------------------

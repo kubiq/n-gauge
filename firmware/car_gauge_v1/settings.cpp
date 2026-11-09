@@ -309,6 +309,8 @@ void settings_save_view(uint8_t view) {
   // photographable, through the windscreen of a parked car. The check used to
   // live at the call site in the sketch, which protected that one path only.
   if (view == VIEW_WIFI) return;
+  // Nor the sync screen: it comes and goes by itself (syncTask).
+  if (view == VIEW_SYNC) return;
   settings.lastView = view;
   prefs.begin(NVS_NAMESPACE, /*readOnly=*/false);
   prefs.putUChar("view", view);

@@ -32,6 +32,11 @@ bool web_is_up();
 // A /dl transfer is running (on the web server's task), with a card file
 // open: the card is not to be unmounted or lent to the PC meanwhile.
 bool web_download_active();
+// The phone's sync from the gauge, for the sync screen: when a file was last
+// being sent (millis(), 0 = never), and the files and bytes sent whole since
+// boot - the caller counts from where a sync started. Not the file list: a
+// sync with nothing new is only that, and needs no screen.
+void web_sync_stats(uint32_t *lastAtMs, uint16_t *files, uint32_t *bytes);
 // The AP's beacons carry the last drive's fingerprint (logcrypt_beacon), for
 // the phone to see new drives without joining. Call when the last drive or
 // the log key changes; a no-op while the AP is down (it is set on start).

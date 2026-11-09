@@ -13,11 +13,14 @@
 // VIEW_WIFI is appended rather than inserted, so a lastView already stored in
 // NVS keeps meaning the same screen.
 enum GaugeView { VIEW_OIL = 0, VIEW_COOLANT, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
-                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_COUNT };
+                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_SYNC, VIEW_COUNT };
 // VIEW_TRACK appended for the same reason as VIEW_WIFI: lastView is stored in
 // NVS as a number, so inserting would silently change what old values mean.
 // VIEW_STATUS (2026-11-09), the upload's status, likewise - and not in
 // VIEW_ORDER_DEFAULT: hidden until the app's screen order shows it.
+// VIEW_SYNC (2026-11-09): "Syncing with the phone", shown by itself while
+// the phone pulls the logs (syncTask in the sketch) - never in the cycle,
+// never saved as the last view.
 
 // Wheel order matches the TPMS payload's four-byte-per-wheel slots (pressure at
 // 4 + i*4, temperature at 5 + i*4). Front vs rear is confirmed; left vs right
@@ -133,6 +136,10 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
 // "" hides either.
 void ui_update_status(uint8_t tone, const char *head, const char *detail,
                       const char *last, const char *fw);
+
+// The sync screen (ui_sync.cpp): what this sync has sent so far.
+void ui_update_sync(uint16_t files, uint32_t bytes);
+bool ui_take_sync_touch();     // true once per press on the sync screen
 
 // Boot splash: the gauge arcs sweep up and the name fades in, then it hands
 // over to the remembered screen. Non-blocking on purpose - start it, keep
