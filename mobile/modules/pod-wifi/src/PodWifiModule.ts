@@ -14,8 +14,6 @@ declare class PodWifiModule extends NativeModule<PodWifiEvents> {
   setKnownBeacons(fps: string[]): void;
   /** The background check, with the words of its note; or off. */
   watchBeacon(on: boolean, title: string, text: string): void;
-  /** A note of the background home server sync (home-task.ts): drives came. Replaces the last one. */
-  notifySynced(title: string, text: string): void;
 }
 
 export default requireNativeModule<PodWifiModule>('PodWifi');

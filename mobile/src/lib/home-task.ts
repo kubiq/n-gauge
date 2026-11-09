@@ -3,7 +3,7 @@
 // task; 15 minutes is the shortest it allows, and it waits for a network).
 // The same sync as the app's (home-sync.ts), into the same inbox - so a
 // drive the gauge uploaded as the car started is on the phone by the time
-// it is opened, and a note says it came.
+// it is opened.
 //
 // Defined at module scope, as TaskManager wants: imported by the root layout,
 // so it is there however the JS starts - the app opened or the task woken.
@@ -12,9 +12,6 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 
-import { storedLang } from '../hooks/use-language';
-import { setLang, t, tn } from '../i18n/index.ts';
-import PodWifi from '@modules/pod-wifi';
 import { updateKnownBeacons } from './beacon';
 import { loadHome } from './home';
 import { syncFromHome } from './home-sync';
@@ -40,11 +37,8 @@ TaskManager.defineTask(TASK, async () => {
       // The beacon's "a drive is waiting" note goes, now it is here.
       await updateKnownBeacons().catch(() => undefined);
       if (loadAutoSave()) await saveNewLogs().catch(() => undefined);
-      setLang(storedLang());
-      PodWifi.notifySynced(
-        t('New drives on the phone'),
-        tn(r.files, '1 new file from the home server.', '{n} new files from the home server.'),
-      );
+      // No note that they came (removed 2026-11-09): they always do now,
+      // by themselves - one each drive was noise.
     }
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (e) {

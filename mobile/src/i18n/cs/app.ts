@@ -78,7 +78,6 @@ export const app: Record<string, string> = {
     'Co synchronizace přinese, se samo uloží do složky, dešifrované - v telefonu není co dělat.',
 
   // The home server sync (home.ts, use-sync.tsx, home-task.ts)
-  'New drives on the phone': 'Nové jízdy v telefonu',
   'the home server refused the token': 'domácí server odmítl token',
   'the home server did not answer': 'domácí server neodpověděl',
   '1 new file from the home server.|{n} new files from the home server.':
