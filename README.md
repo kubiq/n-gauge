@@ -78,7 +78,9 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
   shows its public half for the router) and the server, with a time limit
   for how long the hotspot is the gauge's. Measured first, with a test build:
   transmitting costs ~6 dB of GNSS signal at any WiFi power, so it happens
-  in the seconds an upload takes, not the whole drive.
+  in the seconds an upload takes, not the whole drive. An optional status
+  screen shows where it is - the hotspot, the VPN, the firmware download,
+  the logs sent - and what came of the last one.
 - **Waking up:** the N badge until the car answers, so the gauges never
   show a row of dashes; with a PC on USB, a status page for the desk.
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
@@ -87,7 +89,9 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
 - **Firmware updates:** from the phone, the SD card or - by itself, before
   each upload - the home server, signed (Ed25519) so it installs nothing
   else; on probation, rolled back if the new one fails.
-- **Phone:** its own WiFi access point with settings pages, OTA firmware
+- **Phone:** its own WiFi access point - with the upload set up, only once
+  swiped to on the gauge, so the radio is free otherwise - with settings
+  pages, OTA firmware
   updates with rollback, and an Android app ([mobile/](mobile)) that joins it
   from a QR code on the gauge, syncs the logs by itself and then lets go of
   the gauge's WiFi, so the phone is back on the internet. Each drive is

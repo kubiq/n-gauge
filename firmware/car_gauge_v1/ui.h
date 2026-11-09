@@ -13,9 +13,11 @@
 // VIEW_WIFI is appended rather than inserted, so a lastView already stored in
 // NVS keeps meaning the same screen.
 enum GaugeView { VIEW_OIL = 0, VIEW_COOLANT, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
-                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_COUNT };
+                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_COUNT };
 // VIEW_TRACK appended for the same reason as VIEW_WIFI: lastView is stored in
 // NVS as a number, so inserting would silently change what old values mean.
+// VIEW_STATUS (2026-11-09), the upload's status, likewise - and not in
+// VIEW_ORDER_DEFAULT: hidden until the app's screen order shows it.
 
 // Wheel order matches the TPMS payload's four-byte-per-wheel slots (pressure at
 // 4 + i*4, temperature at 5 + i*4). Front vs rear is confirmed; left vs right
@@ -123,7 +125,14 @@ void ui_update_wifi_countdown(float remaining);
 bool ui_take_share_tap();      // true once per tap on it
 bool ui_take_wifi_touch();     // true once per press on the WiFi screen
 void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
-                    const char *ip, uint8_t clients);
+                    const char *ip, uint8_t clients, bool radioBusy);
+
+// The status screen (ui_status.cpp): the log upload and firmware update in
+// words - upload_status() fills them. tone: 0 waiting, 1 busy, 2 done,
+// 3 failed. `last` the last upload, `fw` a firmware waiting to install;
+// "" hides either.
+void ui_update_status(uint8_t tone, const char *head, const char *detail,
+                      const char *last, const char *fw);
 
 // Boot splash: the gauge arcs sweep up and the name fades in, then it hands
 // over to the remembered screen. Non-blocking on purpose - start it, keep

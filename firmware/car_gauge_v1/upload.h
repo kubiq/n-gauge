@@ -41,6 +41,21 @@ bool upload_busy();
 // Bench 'U': now, whatever the car says.
 void upload_now();
 
+// A hotspot and a server are set up (the app's Home server card).
+bool upload_configured();
+
+// The status screen (ui_update_status): where the upload is, in words.
+// From loop(); the task's step and counts are read as they are - a number
+// a step old at worst.
+struct UpStatus {
+  uint8_t tone;        // 0 waiting, 1 busy, 2 done, 3 failed
+  char head[24];       // "Uploading", "Waiting", "Done", ...
+  char detail[64];     // the step, or what it waits for
+  char last[64];       // the last upload: when, and what came of it
+  char fw[64];         // a firmware waiting to install, or ""
+};
+void upload_status(UpStatus *s);
+
 // An upload this wake downloaded a new, signed firmware to the card
 // (OTA_SD_PATH): power.cpp installs it before sleeping (ota_check_sd).
 bool upload_fw_staged();

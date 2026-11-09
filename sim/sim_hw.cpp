@@ -150,6 +150,17 @@ void upload_init() {}
 void upload_task(uint32_t) {}
 bool upload_holds_radio() { return false; }
 bool upload_busy() { return false; }
+bool upload_configured() { return false; }      // the AP up as before, always
+// The status screen, as a gauge with a server set up would show it mid-way:
+// every line in use, for its layout.
+void upload_status(UpStatus *s) {
+  *s = {};
+  s->tone = 1;
+  strlcpy(s->head, "Uploading", sizeof(s->head));
+  strlcpy(s->detail, "logs 3 of 11, 4210 KB", sizeof(s->detail));
+  strlcpy(s->last, "last 12:30: 11 files, 12472 KB", sizeof(s->last));
+  strlcpy(s->fw, "firmware e9a16e1a ready - installs when parked", sizeof(s->fw));
+}
 
 // ---- The RAM ledger: no ESP heap to measure ---------------------------------
 void ram_begin() {}

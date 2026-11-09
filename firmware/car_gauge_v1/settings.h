@@ -17,6 +17,10 @@ struct Settings {
   // The big numbers slide in and out when they change (slide_text); off,
   // they just change (asked 2026-11-06: switchable, off for now).
   bool    slideNums;
+  // The WiFi AP only while asked for - the WiFi screen shown, a phone on it
+  // (apTask, AP_LINGER_MS) - once an upload server is set up; off, up
+  // whenever awake and not driving, as before (asked 2026-11-09).
+  bool    apOnScreen;
   uint8_t nightBright;    // 10-255
   uint8_t motionWakeMg;   // wake-on-motion threshold, mg; 0 = off
   uint8_t sleepAfterMin;  // sleep this long after the car goes quiet, 1-60

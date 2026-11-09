@@ -385,6 +385,12 @@ static bool doneThisWake = false;
 static uint8_t triesFailed = 0;
 static uint32_t retryAtMs = 0;
 
+// Where a running upload is, for the status screen (upload_status): set by
+// the task as it goes, read by the loop.
+enum UpStep : uint8_t { STEP_JOIN, STEP_TUNNEL, STEP_SERVER, STEP_FW, STEP_PLAN, STEP_LOGS, STEP_CLOSE };
+static volatile uint8_t step = STEP_JOIN;
+static volatile uint32_t fwGot = 0, fwTotal = 0;   // bytes of the firmware download
+
 static void finish(UpResult &r, uint32_t t0, bool ok, const char *msg) {
   r.ok = ok;
   r.ms = millis() - t0;
@@ -535,6 +541,7 @@ static struct {
   uint32_t deadline;                  // millis()
   bool stop;                          // a worker failed: no new files
   uint16_t files;
+  uint16_t total;                     // files in the plan: the status screen's n / total
   uint32_t bytes;
   char err[72];                       // the first failure, "name: why"
   uint8_t running;                    // workers not done yet; all of it under lock
@@ -605,6 +612,9 @@ static void sendAll(const UpConfig &c, const String &todo, uint32_t t0, UpResult
   work.c = &c;
   work.todo = &todo;
   work.deadline = t0 + c.maxMin * 60000UL;
+  for (int i = 0; i < (int)todo.length(); i++)
+    if (todo[i] == '\n' || i == (int)todo.length() - 1) work.total++;
+  step = STEP_LOGS;
   work.lock = xSemaphoreCreateMutex();
   if (!work.lock) { finish(r, t0, false, "no memory"); return; }
   TaskHandle_t worker[UP_WORKERS] = {};
@@ -743,6 +753,7 @@ static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *b
           if (!lock || logger_card_shared() || f.write(buf, n) != (size_t)n) { err = "card write failed"; break; }
         }
         got += n;
+        fwGot = got;
         lastData = millis();
         taskYIELD();                    // the logger has the card next
       }
@@ -808,6 +819,9 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
   }
 
   const uint32_t t = millis();
+  fwGot = 0;
+  fwTotal = size;
+  step = STEP_FW;
   uint8_t signedMsg[40], sig[64];       // the image's SHA-256, its build time
   const char *err = downloadFirmware(c, size, buf, signedMsg);
   for (int i = 0; i < 8; i++) signedMsg[32 + i] = (uint8_t)(built >> (8 * i));
@@ -859,6 +873,7 @@ static void uploadTask(void *arg) {
   String todo;
   char fwNote[64] = "";
 
+  step = STEP_JOIN;
   if (!buf || !plan) { finish(r, t0, false, "no memory"); goto out; }
 
   WiFi.mode(WIFI_STA);
@@ -890,6 +905,7 @@ static void uploadTask(void *arg) {
       char priv[45];
       b64(priv, sizeof(priv), c.wgPriv, sizeof(c.wgPriv));
       Serial.println(F("[..] upload: starting the tunnel"));
+      step = STEP_TUNNEL;
       wgUp = wg.begin(addr, priv, c.wgHost, c.wgPeer, c.wgPort);
       memset(priv, 0, sizeof(priv));
     }
@@ -901,6 +917,7 @@ static void uploadTask(void *arg) {
     // has been done and the DNS answers. Which kind it is (not the
     // address) on the console.
     {
+      step = STEP_SERVER;
       const uint32_t td = millis();
       bool resolved = false;
       while (!(resolved = resolveServer(c.wgDns)) && millis() - td < UP_HANDSHAKE_MS) delay(1000);
@@ -920,6 +937,7 @@ static void uploadTask(void *arg) {
   {
     // Through the tunnel the first request may wait for the handshake:
     // tried until it answers.
+    step = STEP_PLAN;
     const uint32_t tw = millis();
     int code = -1;
     while (millis() - tw < UP_HANDSHAKE_MS) {
@@ -947,6 +965,7 @@ static void uploadTask(void *arg) {
   sendAll(c, todo, t0, r);
 
 out:
+  step = STEP_CLOSE;
   Serial.printf("[..] upload: closing (%s)\n", r.ok ? "done" : r.msg);
   if (wgUp) wg.end();
   Serial.println(F("[..] upload: tunnel closed"));
@@ -977,6 +996,73 @@ void upload_now() {
 
 bool upload_holds_radio() { return state != UP_IDLE; }
 bool upload_busy() { return state != UP_IDLE; }
+bool upload_configured() { return configured(); }
+
+// ---- the status screen -------------------------------------------------------
+void upload_status(UpStatus *s) {
+  memset(s, 0, sizeof(*s));
+  if (last.at || last.msg[0]) {
+    char when[8] = "";
+    if (last.at) {
+      const time_t t = last.at;
+      struct tm tm;
+      localtime_r(&t, &tm);
+      strftime(when, sizeof(when), "%H:%M", &tm);
+    }
+    if (last.ok)
+      snprintf(s->last, sizeof(s->last), "last %s: %u files, %lu KB", when, last.files,
+               (unsigned long)(last.bytes / 1024));
+    else
+      snprintf(s->last, sizeof(s->last), "last %s: %s", when, last.msg);
+  }
+  if (fwStaged)
+    snprintf(s->fw, sizeof(s->fw), "firmware %02x%02x%02x%02x ready - installs when parked",
+             fwStagedHash[0], fwStagedHash[1], fwStagedHash[2], fwStagedHash[3]);
+
+  const auto say = [s](uint8_t tone, const char *head, const char *detail) {
+    s->tone = tone;
+    strlcpy(s->head, head, sizeof(s->head));
+    strlcpy(s->detail, detail, sizeof(s->detail));
+  };
+  if (!configured()) return say(0, "Not set up", "the app's Home server card");
+  if (state == UP_WAIT_AP) return say(1, "Starting", "the gauge's WiFi goes off for it");
+  if (state == UP_RUNNING) {
+    char d[64];
+    switch (step) {
+      case STEP_JOIN:   strlcpy(d, "joining the phone's hotspot", sizeof(d)); break;
+      case STEP_TUNNEL: strlcpy(d, "opening the VPN", sizeof(d)); break;
+      case STEP_SERVER: strlcpy(d, "finding the server", sizeof(d)); break;
+      case STEP_FW:
+        snprintf(d, sizeof(d), "new firmware %lu of %lu KB", (unsigned long)(fwGot / 1024),
+                 (unsigned long)(fwTotal / 1024));
+        break;
+      case STEP_PLAN:   strlcpy(d, "asking what the server lacks", sizeof(d)); break;
+      case STEP_LOGS:
+        snprintf(d, sizeof(d), "logs %u of %u, %lu KB", work.files, work.total,
+                 (unsigned long)(work.bytes / 1024));
+        break;
+      default:          strlcpy(d, "closing", sizeof(d)); break;
+    }
+    return say(1, "Uploading", d);
+  }
+  const bool timeUp = !strncmp(last.msg, "time limit", 10);
+  if (doneThisWake) {
+    if (last.ok || timeUp) return say(2, "Done", timeUp ? "the rest goes next time" : "until the next drive");
+    return say(3, "Failed", "again on the next drive");
+  }
+  if (triesFailed) {
+    char d[64];
+    const int32_t left = (int32_t)(retryAtMs - millis());
+    snprintf(d, sizeof(d), "again in %ld s", (long)(left > 0 ? left / 1000 : 0));
+    return say(3, "Failed", d);
+  }
+  say(0, "Waiting",
+      podstate().car != PS_CAR_RUNNING          ? "for the engine"
+      : !clock_valid()                          ? "for the clock (the first GPS fix)"
+      : !logger_card_ok() || logger_card_shared() ? "for the card"
+      : web_clients() > 0                       ? "a phone is on the gauge's WiFi"
+                                                : "about to start");
+}
 
 void upload_task(uint32_t now) {
   static UpConfig taskCfg;            // the task's copy: /save may change cfg

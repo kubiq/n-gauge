@@ -16,6 +16,8 @@ export const SCREENS: { id: string; name: string }[] = [
   { id: '7', name: N_('Track') },
   { id: '3', name: N_('G-meter') },
   { id: WIFI, name: N_('WiFi') },
+  // Not in the gauge's default order: hidden until switched on (2026-11-09).
+  { id: '8', name: N_('Upload status') },
 ];
 
 export type ScreenItem = { id: string; name: string; on: boolean };

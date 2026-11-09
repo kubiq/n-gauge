@@ -49,6 +49,11 @@ export const SETTINGS: SettingDef[] = [
     hint: N_('0 = off. Below 30 is taken as 30.'), group: 'Power',
   },
   { key: 'sleepMin', json: 'sleepAfterMin', type: 'u8', lo: 1, hi: 60, label: N_('Sleep after'), unit: 'min', group: 'Power' },
+  {
+    key: 'apScr', json: 'wifiOnScreen', type: 'bool', lo: 0, hi: 1, label: N_('Gauge WiFi only from its screen'),
+    hint: N_('Swipe to the WiFi screen to turn it on; it goes off 3 minutes after you leave it and no phone is on it. Leaves the radio to the upload and the GPS alone. Without a home server set up it is always on.'),
+    group: 'Power',
+  },
   { key: 'oilRdy', json: 'oilReadyC', type: 'i16', lo: 40, hi: 150, label: N_('Oil ready'), unit: '°C', group: 'Warnings' },
   { key: 'oilWarn', json: 'oilWarnC', type: 'i16', lo: 90, hi: 200, label: N_('Oil warning'), unit: '°C', group: 'Warnings' },
   { key: 'cool', json: 'coolantWarnC', type: 'i16', lo: 90, hi: 200, label: N_('Coolant warning'), unit: '°C', group: 'Warnings' },

@@ -20,6 +20,7 @@ export const gauge: Record<string, string> = {
   Clock: 'Hodiny',
   'Zero the g-meter here': 'Vynulovat g-metr zde',
   'G-meter': 'G-metr',
+  'Upload status': 'Stav nahrávání',
   'Zero the g-meter?': 'Vynulovat g-metr?',
   'Only with the car level and standing still.': 'Jen když auto stojí na rovině a v klidu.',
   Zero: 'Vynulovat',
@@ -61,6 +62,9 @@ export const gauge: Record<string, string> = {
   'Wake on motion': 'Probudit pohybem',
   '0 = off. Below 30 is taken as 30.': '0 = vypnuto. Méně než 30 se bere jako 30.',
   'Sleep after': 'Uspat po',
+  'Gauge WiFi only from its screen': 'WiFi budíku jen z jeho obrazovky',
+  'Swipe to the WiFi screen to turn it on; it goes off 3 minutes after you leave it and no phone is on it. Leaves the radio to the upload and the GPS alone. Without a home server set up it is always on.':
+    'Zapne se přejetím na obrazovku WiFi; vypne se 3 minuty poté, co ji opustíte a není připojený žádný telefon. Nechává rádio nahrávání a neruší GPS. Bez nastaveného domácího serveru je zapnutá vždy.',
   'Oil ready': 'Olej zahřátý',
   'Oil warning': 'Varování oleje',
   'Coolant warning': 'Varování chladiva',

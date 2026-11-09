@@ -45,7 +45,7 @@ static const Shot SHOTS[] = {
     {"oil", VIEW_OIL, anytime, 30000},       {"boost", VIEW_BOOST, boosting, 30000},
     {"gmeter", VIEW_GMETER, cornering, 30000}, {"tyres", VIEW_TPMS, anytime, 30000},
     {"gps", VIEW_GPS, notSliding, 30000},    {"track", VIEW_TRACK, anytime, 30000},
-    {"oilhot", VIEW_TRACK, oilHot, 300000},
+    {"oilhot", VIEW_TRACK, oilHot, 300000},  {"status", VIEW_STATUS, anytime, 30000},
 };
 static const uint32_t SETTLE_MS = 1500;    // after switching: values, the g-meter's trail
 

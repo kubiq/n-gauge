@@ -159,22 +159,24 @@ bool ui_take_wifi_touch() {
 }
 
 void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
-                    const char *ip, uint8_t clients) {
+                    const char *ip, uint8_t clients, bool radioBusy) {
   // Guarded like the rest. The passphrase changes at most once in a session,
   // but the client count changes whenever a phone comes and goes, so it is
   // part of the comparison - otherwise the count would never refresh.
   static char lastPass[33] = "\x01";     // impossible value, forces first draw
   static char lastSsid[33] = "\x01";
   static bool lastUp = false;
+  static bool lastBusy = false;
   static int  lastClients = -1;
   const bool passChanged =
       strncmp(lastPass, pass ? pass : "", sizeof(lastPass) - 1) != 0;
   const bool ssidChanged =
       strncmp(lastSsid, ssid ? ssid : "", sizeof(lastSsid) - 1) != 0;
-  if (lastUp == apUp && lastClients == (int)clients &&
+  if (lastUp == apUp && lastBusy == radioBusy && lastClients == (int)clients &&
       !passChanged && !ssidChanged)
     return;
   lastUp = apUp;
+  lastBusy = radioBusy;
   lastClients = (int)clients;
   strncpy(lastPass, pass ? pass : "", sizeof(lastPass) - 1);
   lastPass[sizeof(lastPass) - 1] = '\0';
@@ -192,8 +194,10 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
     lv_label_set_text_fmt(wifiIp, "http://%s/", ip);
     lv_obj_set_style_text_color(wifiIp, COL_BLUE, 0);
   } else {
-    lv_label_set_text(wifiIp, "starting...");
-    lv_obj_set_style_text_color(wifiIp, COL_LINE, 0);
+    // The radio is the log upload's (upload.h): the AP comes once it is done
+    // - minutes, not the seconds "starting" promised (2026-11-09).
+    lv_label_set_text(wifiIp, radioBusy ? "after the upload..." : "starting...");
+    lv_obj_set_style_text_color(wifiIp, radioBusy ? COL_OIL : COL_LINE, 0);
   }
 
   // Standard WIFI: payload, understood by both Android and iOS cameras.

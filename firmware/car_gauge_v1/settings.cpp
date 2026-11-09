@@ -55,6 +55,7 @@ const SettingDef settings_table[] = {
   { "nightBr",  "nightBright",   SET_U8,   &settings.nightBright,    NIGHT_BRIGHTNESS_DEFAULT,   10,    255 },
   { "mph",      "mph",           SET_BOOL, &settings.mph,            0,                          0,     1 },
   { "slide",    "slideNumbers",  SET_BOOL, &settings.slideNums,      1,                          0,     1 },
+  { "apScr",    "wifiOnScreen",  SET_BOOL, &settings.apOnScreen,     1,                          0,     1 },
   // 0 = off; 1-29 becomes 30 in settings_fixup().
   { "womMg",    "motionWakeMg",  SET_U8,   &settings.motionWakeMg,   MOTION_WAKE_MG_DEFAULT,     0,     255 },
   { "sleepMin", "sleepAfterMin", SET_U8,   &settings.sleepAfterMin,  BUS_IDLE_SLEEP_MS / 60000,  1,     60 },
@@ -319,7 +320,7 @@ void settings_set_views(const char *ids) {
   // VIEW_OIL), so it cannot be ordered in.
   static const char valid[] = { '0' + VIEW_OIL, '0' + VIEW_BOOST, '0' + VIEW_GMETER,
                                 '0' + VIEW_TPMS, '0' + VIEW_GPS, '0' + VIEW_WIFI,
-                                '0' + VIEW_TRACK, '\0' };
+                                '0' + VIEW_TRACK, '0' + VIEW_STATUS, '\0' };
   calc_view_order(ids ? ids : "", valid, '0' + VIEW_WIFI, settings.views, sizeof(settings.views));
 }
 

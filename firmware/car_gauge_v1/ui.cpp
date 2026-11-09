@@ -20,6 +20,7 @@ void ui_init() {
   scr[VIEW_GPS]    = ui_build_gps();
   scr[VIEW_TRACK]  = ui_build_track();
   scr[VIEW_WIFI]   = ui_build_wifi();
+  scr[VIEW_STATUS] = ui_build_status();
 
   // Readouts must not be interactive, but LVGL makes arcs AND plain objects
   // clickable by default (lv_arc.c: lv_obj_add_flag(CLICKABLE), lv_obj.c:

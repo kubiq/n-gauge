@@ -857,6 +857,12 @@
 // is shut down as part of goToSleep(), so parked it goes away with everything
 // else. It does cost current while awake, which the engine is paying for.
 #define WIFI_AP_ALWAYS     1
+// Since 2026-11-09 "awake" is narrowed by a setting, on by default once an
+// upload server is set up (settings.apOnScreen, apTask): the AP comes up when
+// the WiFi screen is swiped to, stays while a phone is on it, and goes this
+// long after both are gone. Long enough to join from the QR - the screen
+// itself returns to the gauges after WIFI_VIEW_MAX_MS - or to come back.
+#define AP_LINGER_MS       180000
 
 // 1 = take the AP down while the car is being driven, and bring it back once
 // stopped. A 2.4 GHz transmitter a few centimetres from the GNSS antenna is
@@ -960,6 +966,8 @@
 // of seconds, typing a random 10-character passphrase by hand takes longer.
 // Tap back to it if you need another minute.
 #define WIFI_VIEW_MAX_MS   60000
+// The status screen (ui_status.cpp): its words rebuilt this often while shown.
+#define STATUS_REFRESH_MS  250
 // The arc counting that down in this many steps (10 ms each at 60 s): finer
 // than a frame, so it sweeps smoothly. LV_USE_FLOAT lets the arc draw
 // fractions of a degree.

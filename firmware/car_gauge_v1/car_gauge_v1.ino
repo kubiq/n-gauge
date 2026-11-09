@@ -396,7 +396,16 @@ static void gaugesTask(uint32_t now) {
     ui_update_track(&li);
   }
   ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
-                 web_clients());
+                 web_clients(), upload_holds_radio());
+  // The status screen (ui_status.cpp): only while it shows, a few times a
+  // second - the words are rebuilt each time.
+  static uint32_t statusAt = 0;
+  if (ui_current_view() == VIEW_STATUS && millis() - statusAt >= STATUS_REFRESH_MS) {
+    statusAt = millis();
+    UpStatus u;
+    upload_status(&u);
+    ui_update_status(u.tone, u.head, u.detail, u.last, u.fw);
+  }
 }
 
 static void gmeterTask(uint32_t now) {
@@ -503,16 +512,28 @@ static void apTask(uint32_t now) {
 #error "WIFI_GPS_TEST needs AP_DRIVE_OFF"
 #endif
 #if WIFI_AP_ALWAYS
+  // Only while asked for (settings.apOnScreen, 2026-11-09): the WiFi screen
+  // shown, or a phone on the AP, and AP_LINGER_MS after the last of them -
+  // time for the phone to join from the QR, or to come back. Then the radio
+  // is free for the log upload, and not transmitting by the GNSS antenna.
+  // Always up, as before, while no upload server is set up: then the AP is
+  // the only way the logs leave the gauge.
+  static uint32_t askedAt = 0;          // 0 = not asked for this wake
+  if (ui_current_view() == VIEW_WIFI || web_clients() > 0) askedAt = now ? now : 1;
+  const bool onlyAsked = settings.apOnScreen && upload_configured();
+  const bool asked = askedAt && !calc_elapsed(now, askedAt, AP_LINGER_MS);
 #if AP_DRIVE_OFF
   // The gauge's state (podstate.h): down while driving, by the car's own
   // speed - the GPS's only when the car is silent. By the GPS alone it
   // stayed up 2-5 minutes into a drive, until the first fix (2026-10-23).
   // A connected phone keeps it up; not while a wake is still checking.
-  // And not while the log upload has the radio (upload.h).
-  const bool want = podstate().wifiWanted && !bench_ap_held(now) && !upload_holds_radio();
+  // And not while the log upload has the radio (upload.h). Asked for from
+  // the WiFi screen, it comes up while driving too: someone wants it.
+  const bool carLets = podstate().wifiWanted || (onlyAsked && asked && !power_wake_pending());
 #else
-  const bool want = !power_wake_pending() && !bench_ap_held(now) && !upload_holds_radio();
+  const bool carLets = !power_wake_pending();
 #endif
+  const bool want = carLets && (!onlyAsked || asked) && !bench_ap_held(now) && !upload_holds_radio();
 #if WIFI_GPS_TEST
   // The WiFi/GPS test (wifitest.h) has the radio while the AP is down for a
   // drive, and lets go of it first whenever the AP is wanted again.
@@ -532,7 +553,9 @@ static void apTask(uint32_t now) {
     }
   } else if (!want && web_is_up()) {
     lastTryMs = 0;
-    Serial.println(F("[..] driving - WiFi AP down until stopped"));
+    Serial.println(upload_holds_radio()         ? F("[..] WiFi AP down for the upload")
+                   : onlyAsked && !asked        ? F("[..] WiFi AP down - not asked for")
+                                                : F("[..] driving - WiFi AP down until stopped"));
     web_stop();
     ram_freed("WiFi AP");
   }
