@@ -26,9 +26,12 @@ function status(pod: ReturnType<typeof usePod>, sync: ReturnType<typeof useSync>
     const p = sync.progress;
     // Of the whole pull, not the file: what is left of the sync.
     const pct = p.total > 0 ? Math.min(99, Math.floor((p.got / p.total) * 100)) : 0;
+    // The word up as the title, the figures alone below: "Synchronizace
+    // 15/16 · 43 %" was wider than the chip, and lost its "%" (2026-11-08).
+    // Connected goes without saying while it syncs.
     return {
-      title: t('Connected'),
-      detail: t('Syncing {at}/{of} · {pct} %', { at: p.at, of: p.of, pct }),
+      title: t('Syncing'),
+      detail: `${p.at}/${p.of} · ${pct} %`,
       ring: C.good,
       busy: true,
     };
