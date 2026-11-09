@@ -62,7 +62,9 @@ jobs:
             0x8000 "$OUT/car_gauge_v1.ino.partitions.bin" \
             0xe000 "$BOOTAPP" \
             0x10000 "$OUT/car_gauge_v1.ino.bin"
-          grep FW_BUILD firmware/car_gauge_v1/build_info.h
+          # The stamp in the image itself: build_info.h is the bench build's
+          # by now (check.sh builds it last).
+          echo "car image: $(grep -ao "[0-9-]* [0-9:]* $(git rev-parse --short HEAD)[^\"[:cntrl:]]*" dist/car_gauge_v1.bin | head -1)"
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
