@@ -28,6 +28,8 @@ export const trips: Record<string, string> = {
   'consumption': 'spotřeba',
   'No GPS track - car data only.': 'Bez trasy GPS - jen data z auta.',
   'Filled up': 'Natankováno',
+  'which fuel?': 'jaké palivo?',
+  'Consumption by fuel': 'Spotřeba podle paliva',
 
   // app/trip/[key].tsx - one drive
   'Files': 'Soubory',

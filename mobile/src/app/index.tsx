@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-na
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
-import { Card, Note, Pill, Screen, useUi } from '@/components/ui';
+import { Card, Note, Pill, Row, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
 import { duration, mb, when } from '@/lib/format';
 import { distance, speed } from '@/lib/units';
@@ -13,7 +13,8 @@ import { LogKeyError } from '@/lib/logtext';
 import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
-import { type ListFacts, loadListFacts } from '@/lib/store';
+import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
+import { type ListFacts, loadFuels, loadListFacts, saveFuel } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
@@ -51,6 +52,9 @@ export default function TripsScreen() {
   const [trips, setTrips] = useState<TripFiles[]>([]);
   // Settings, "Trip list" - read again on each focus, so a change shows on return.
   const [facts, setFacts] = useState(loadListFacts);
+  // The fuel picked at each fill-up (fuel-grade.ts).
+  const [fuels, setFuels] = useState<Fuels>(loadFuels);
+  const pickFuel = (id: string, fuel: Fuel | null) => setFuels(saveFuel(id, fuel));
   const [sums, setSums] = useState<Sums>({});
   // Why a file could not be read - an encrypted log without the right key.
   const [problems, setProblems] = useState<Record<string, string>>({});
@@ -222,8 +226,18 @@ export default function TripsScreen() {
     }
     if (c?.fuelStartPct != null) newer = r;
   }
+  // The fuel each drive ran on - the rows are newest first - and the
+  // consumption per fuel, of every drive read (the short ones too: what
+  // counts is the litres over the km).
+  const fuelOf = fuelByDrive(
+    [...rows].reverse().map((r) => ({ key: r.t.key, fills: fills[r.t.key] })),
+    fuels,
+  );
   const [showShort, setShowShort] = useState(false);
   const readOnes = rows.filter((r) => r.read);
+  const byFuel = totalsByFuel(
+    readOnes.map((r) => ({ fuel: fuelOf[r.t.key], fuelL: r.c?.fuelL ?? null, fuelKm: r.c?.fuelKm ?? null })),
+  );
   // A hop to the pump is short, but not hidden with the blips.
   const longOnes = readOnes.filter((r) => r.problem || fills[r.t.key] || !isStub(r.g, r.c));
   const hidden = readOnes.length - longOnes.length;
@@ -265,7 +279,20 @@ export default function TripsScreen() {
         <Card>
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>
         </Card>
-      ) : (
+      ) : null}
+      {byFuel.length ? (
+        // Over the drives since a fill-up with its fuel picked (fuel-grade.ts).
+        <Card title={t('Consumption by fuel')}>
+          {byFuel.map((f) => (
+            <Row
+              key={fuelLabel(f.fuel)}
+              label={fuelLabel(f.fuel)}
+              value={`${((f.litres / f.km) * 100).toFixed(1)} l/100  ·  ${distance(f.km * 1000)}`}
+            />
+          ))}
+        </Card>
+      ) : null}
+      {trips.length === 0 ? null : (
         weeks.map((w) => {
           const waiting = w.items.filter(unread).length;
           const monday = w.monday;
@@ -294,6 +321,9 @@ export default function TripsScreen() {
                     name={r.name}
                     facts={facts}
                     fills={fills[r.t.key]}
+                    fuel={fuelOf[r.t.key]}
+                    fuels={fuels}
+                    onFuel={pickFuel}
                     names={names}
                   />
                 ))}
@@ -335,6 +365,9 @@ function TripRow({
   name,
   facts,
   fills,
+  fuel,
+  fuels,
+  onFuel,
   names,
 }: {
   t: TripFiles;
@@ -344,6 +377,10 @@ function TripRow({
   name: string | null;
   facts: ListFacts;
   fills?: Refuel[];
+  /** What it ran on, if known (fuel-grade.ts). */
+  fuel: Fuel | null;
+  fuels: Fuels;
+  onFuel: (id: string, fuel: Fuel | null) => void;
   names: Names;
 }) {
   const start = g?.start ?? trip.start;
@@ -377,9 +414,19 @@ function TripRow({
         {facts.boost && c?.maxBoostBar != null ? <Fact label={t('boost')} value={`${c.maxBoostBar.toFixed(2)} bar`} /> : null}
         {facts.oil && c?.maxOilC != null ? <Fact label={t('oil')} value={`${Math.round(c.maxOilC)} °C`} /> : null}
         {facts.fuelL && c?.fuelL != null && c.fuelL > 0 ? <Fact label={t('fuel')} value={`${c.fuelL.toFixed(1)} l`} /> : null}
-        {facts.per100 && per100 !== null ? <Fact label={t('consumption')} value={`${per100.toFixed(1)} l/100`} /> : null}
+        {facts.per100 && per100 !== null ? (
+          <Fact label={t('consumption')} value={`${per100.toFixed(1)} l/100${fuel ? `  ·  ${fuelLabel(fuel)}` : ''}`} />
+        ) : null}
       </View>
-      {fills?.map((f) => <FillLine key={`${f.at}:${f.fromPct}`} f={f} names={names} />)}
+      {fills?.map((f) => (
+        <FillLine
+          key={`${f.at}:${f.fromPct}`}
+          f={f}
+          names={names}
+          fuel={fuels[fillId(f)] ?? null}
+          onFuel={(v) => onFuel(fillId(f), v)}
+        />
+      ))}
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
@@ -389,21 +436,66 @@ function TripRow({
 // A fill-up on its drive's card: the levels, the litres they come to and
 // where. The litres are the levels' difference over the tank, so roughly:
 // the car reads the level in steps.
-function FillLine({ f, names }: { f: Refuel; names: Names }) {
+//
+// A tap opens the fuel that went in (fuel-grade.ts): the octane, then if
+// known the ethanol; a picked one tapped again is cleared. Not set, the
+// line asks for it.
+function FillLine({
+  f,
+  names,
+  fuel,
+  onFuel,
+}: {
+  f: Refuel;
+  names: Names;
+  fuel: Fuel | null;
+  onFuel: (fuel: Fuel | null) => void;
+}) {
   const ui = useUi();
   const styles = useStyles();
+  const [open, setOpen] = useState(false);
   const place = endName(f.pt, f.place ?? null, names);
   const litres = Math.round(((f.toPct - f.fromPct) / 100) * TANK_L);
+  const chip = (label: string, on: boolean, onPress: () => void, off = false) => (
+    <Pressable
+      key={label}
+      onPress={onPress}
+      disabled={off}
+      hitSlop={4}
+      style={[styles.chip, on && styles.chipOn, off && { opacity: 0.4 }]}>
+      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+    </Pressable>
+  );
   return (
-    <View style={styles.fuel}>
+    <Pressable onPress={() => setOpen((o) => !o)} hitSlop={4} style={styles.fuel}>
       <Text style={styles.fuelTitle}>
         {t('Filled up')}
+        {fuel ? `  ·  ${fuelLabel(fuel)}` : ''}
         <Text style={styles.fuelFacts}>
           {`  ·  ${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${litres} l`}
         </Text>
+        {!fuel && !open ? <Text style={styles.fuelAsk}>{`  ·  ${t('which fuel?')}`}</Text> : null}
       </Text>
       {place ? <Text style={ui.note}>{place}</Text> : null}
-    </View>
+      {open ? (
+        <View style={styles.chips}>
+          {OCTANES.map((o) =>
+            chip(String(o), fuel?.octane === o, () =>
+              onFuel(fuel?.octane === o ? null : { octane: o, ethanol: fuel?.ethanol ?? null }),
+            ),
+          )}
+          <View style={styles.chipGap} />
+          {ETHANOLS.map((e) =>
+            chip(
+              `E${e}`,
+              fuel?.ethanol === e,
+              () => fuel && onFuel({ ...fuel, ethanol: fuel.ethanol === e ? null : e }),
+              !fuel,
+            ),
+          )}
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -434,6 +526,23 @@ const useStyles = themed((C) =>
     fuel: { borderLeftWidth: 3, borderLeftColor: C.accent, paddingLeft: S.sm },
     fuelTitle: { color: C.text, fontSize: 14, fontWeight: '600' },
     fuelFacts: { color: C.dim, fontWeight: '400' },
+    fuelAsk: { color: C.link, fontWeight: '400' },
+    // The fuel's choices: the octanes, a gap, the ethanol.
+    chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: S.sm, marginTop: S.sm },
+    chipGap: { width: S.md },
+    chip: {
+      minWidth: 48,
+      minHeight: 36,
+      paddingHorizontal: S.sm,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: C.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chipOn: { borderColor: C.accent },
+    chipText: { color: C.dim, fontSize: 14 },
+    chipTextOn: { color: C.accent, fontWeight: '700' },
     // A link, not a card: 48 dp tall to hit, styled like the app's other links.
     more: { minHeight: 48, justifyContent: 'center' },
     moreText: { color: C.link, fontSize: 14 },

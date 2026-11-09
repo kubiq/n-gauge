@@ -10,6 +10,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { t } from '../i18n/index.ts';
+import { asFuel, type Fuel, type Fuels } from './fuel-grade';
 import { GPX_TAIL } from './gpx-share';
 import { type Downloader, downloadRange } from './pod';
 import { isPodLog, type Known, type Pull } from './sync-plan';
@@ -124,6 +125,33 @@ export function loadAutoSave(): boolean {
 export function saveAutoSave(on: boolean): void {
   if (on) autoSaveFile.write('1');
   else if (autoSaveFile.exists) autoSaveFile.delete();
+}
+
+// The fuel picked at each fill-up (fuel-grade.ts), by its id. Only what was
+// picked: a fill-up not in it has no fuel set.
+const fuelsFile = new File(Paths.document, 'fuels.json');
+
+export function loadFuels(): Fuels {
+  try {
+    const raw = fuelsFile.exists ? JSON.parse(fuelsFile.textSync()) : {};
+    const out: Fuels = {};
+    for (const [id, v] of Object.entries(raw ?? {})) {
+      const f = asFuel(v);
+      if (f) out[id] = f;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** The fuel of one fill-up; null clears it. Returns them all, as saved. */
+export function saveFuel(id: string, fuel: Fuel | null): Fuels {
+  const all = loadFuels();
+  if (fuel) all[id] = fuel;
+  else delete all[id];
+  fuelsFile.write(JSON.stringify(all));
+  return all;
 }
 
 function ensureDir() {
