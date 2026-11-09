@@ -28,6 +28,10 @@ struct RtcState {
   bool timeValid = false;   // held a plausible time at boot, oscillator OK
   bool seeded    = false;   // GNSS time has been written to it this boot
   long driftSec  = 0;       // last measured RTC-minus-system, signed
+  // Its oscillator had stopped - the chip lost power (no backup cell): what
+  // it held was its reset value, so no drift is measured against it. The
+  // boot line said drift=-847534460s for one (2026-11-09) - 2000-01-01.
+  bool lostPower = false;
 };
 
 extern RtcState rtc;

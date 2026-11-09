@@ -226,6 +226,7 @@ void rtc_init() {
   // value back would destroy the only evidence that it is stale, and the next
   // boot would trust it completely. OS is the whole signal.
   if (os) {
+    rtc.lostPower = true;
     char stale[24];
     struct tm stm;
     gmtime_r(&e, &stm);
@@ -301,7 +302,10 @@ void rtc_task() {
   bool os = false;
   const bool readOk = rtcReadEpoch(&inChip, &os);
 
-  if (readOk) {
+  // Its oscillator stopped (lost power): what it holds is where it restarted
+  // from, not time it kept - no drift to measure; it is simply set.
+  if (readOk && os) rtc.lostPower = true;
+  if (readOk && !os) {
     rtc.driftSec = (long)(inChip - sys);
     if (rtc.driftSec > -RTC_DRIFT_TOL_SEC && rtc.driftSec < RTC_DRIFT_TOL_SEC) {
       return;                           // close enough; leave the chip alone
@@ -318,7 +322,8 @@ void rtc_task() {
   // if it drifts, CAP_SEL is the first thing to suspect.
   if (!rtc.seeded) {
     rtc.seeded = true;
-    Serial.println(F("[OK] RTC set from GNSS"));
+    Serial.println(rtc.lostPower ? F("[OK] RTC set from GNSS, after it lost power")
+                                 : F("[OK] RTC set from GNSS"));
   } else {
     Serial.printf("[..] RTC corrected by %+ld s\n", rtc.driftSec);
   }

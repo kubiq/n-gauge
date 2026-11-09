@@ -44,13 +44,13 @@ void bootlog_task(uint32_t now) {
   static const char *const ack[] = { "not-tried", "ack", "NAK", "no-answer" };
   snprintf(line, sizeof(line),
            "fw=%s reset=%s | gps baud=%lu sentences=%lu config=%s rate=%.1fHz fix=%d sats=%u"
-           " | clock %s rtc present=%d valid=%d drift=%lds | can driver=%d frames=%d"
+           " | clock %s rtc present=%d valid=%d drift=%lds lost=%d | can driver=%d frames=%d"
            " | card=%d ram=%uKB min=%uKB ap=%d",
            ota_build(), web_reset_text(),
            (unsigned long)gps.baud, (unsigned long)gps.sentences,
            ack[gps.configAck < 4 ? gps.configAck : 0], hz, gps.haveFix ? 1 : 0, gps.sats,
            clock_valid() ? "valid" : "unset", rtc.present ? 1 : 0, rtc.timeValid ? 1 : 0,
-           rtc.driftSec, obd.linkUp ? 1 : 0, obd.lastFrameMs ? 1 : 0,
+           rtc.driftSec, rtc.lostPower ? 1 : 0, obd.linkUp ? 1 : 0, obd.lastFrameMs ? 1 : 0,
            logger_card_ok() ? 1 : 0,
            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
            (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
