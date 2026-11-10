@@ -16,6 +16,7 @@
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
 #include "esp_app_format.h"
+#include "esp_task_wdt.h"    // fed through an install from loop()
 
 static char lastError[64] = "";
 static bool probation = false;          // running image not yet confirmed
@@ -229,16 +230,24 @@ void ota_check_sd() {
   constexpr size_t BUF_N = 4096;
   std::unique_ptr<uint8_t[]> buf(new (std::nothrow) uint8_t[BUF_N]);
   if (!buf) snprintf(lastError, sizeof(lastError), "no RAM for the copy buffer");
+  // The watchdog fed as it goes: from loop() (an update from the server,
+  // before sleep - upload.h) the 2 MB take longer than WDT_TIMEOUT_MS, and
+  // the first one (2026-11-09) ended in a watchdog reset - luckily just
+  // after the image was complete. Mid-copy it would have been lost, and as
+  // "seen" never tried again. At boot it is not armed yet; harmless then.
+  esp_task_wdt_reset();
   bool ok = buf && ota_begin(size);
   while (ok && f.available()) {
     const size_t n = f.read(buf.get(), BUF_N);
     if (n == 0) break;
     ok = ota_write(buf.get(), n);
+    esp_task_wdt_reset();
   }
   buf.reset();
   f.close();
-  if (ok) ok = ota_end();
+  if (ok) ok = ota_end();               // checks the whole image: a while too
   else    ota_abort();
+  esp_task_wdt_reset();
 
   if (!ok) {
     Serial.printf("[ERR] SD update failed: %s\n", ota_error());
