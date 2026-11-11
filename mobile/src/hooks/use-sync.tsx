@@ -18,6 +18,7 @@ import { usePod } from '@/hooks/use-pod';
 import { t, tn } from '@/i18n';
 import { loadBeaconAutoSync, newDriveBeacon, updateKnownBeacons } from '@/lib/beacon';
 import { saveNewLogs } from '@/lib/share';
+import { lookForFirmware } from '@/lib/fw-download';
 import { syncFromHome } from '@/lib/home-sync';
 import { deletePodFile, getLive, listFiles } from '@/lib/pod';
 import {
@@ -248,7 +249,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           // firmware does not say; a failure here is no failed sync.
           try {
             const fw = (await getLive()).fw;
-            if (fw) saveGaugeFw(fw.build);
+            if (fw) saveGaugeFw(fw);
           } catch {
             // the next sync tries again
           }
@@ -341,6 +342,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pod.state !== 'idle') return;
     const look = () => {
+      // A newer firmware on GitHub (fw-download.ts): here, with the app open
+      // and off the gauge's WiFi - at most once a day; Gauge settings offers
+      // it. Not from the background task (home-task.ts), for the battery.
+      lookForFirmware().then(
+        (said) => console.log('firmware release:', said),
+        (e) => console.warn('firmware release', e),
+      );
       if (Date.now() - homeTriedAt.current < HOME_EVERY_MS) return;
       homeTriedAt.current = Date.now();
       syncHome().catch((e) => console.warn('home sync', e));

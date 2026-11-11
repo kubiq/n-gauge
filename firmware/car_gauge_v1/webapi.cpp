@@ -362,7 +362,10 @@ static esp_err_t handleLiveJson(httpd_req_t *r) {
            "\"rtc\":{\"present\":%s,\"valid\":%s,\"seeded\":%s,\"driftSec\":%ld},"
            // Which build is running, for the app's Settings: the build time
            // and the first bytes of the image's ELF hash (as the Device page).
-           "\"fw\":{\"build\":\"%s\",\"hash\":\"%s\"},"
+           // built and pub (2026-11-11): its build time and the update key's
+           // public half - the app checks a release from GitHub against
+           // what this gauge trusts, and that it is newer.
+           "\"fw\":{\"build\":\"%s\",\"hash\":\"%s\",\"built\":%lu,\"pub\":\"%s\"},"
            // Resources: internal RAM now and at its lowest since boot (WiFi
            // fails without it), PSRAM, SD in KB, the firmware against its
            // partition, the chip's temperature, why it last started.
@@ -389,7 +392,7 @@ static esp_err_t handleLiveJson(httpd_req_t *r) {
            gps.timeSet ? "true" : "false", utc, local, settings.tz,
            rtc.present ? "true" : "false", rtc.timeValid ? "true" : "false",
            rtc.seeded ? "true" : "false", rtc.driftSec,
-           ota_build(), ota_hash(),
+           ota_build(), ota_hash(), (unsigned long)ota_build_time(), ota_sign_pub(),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
            (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
            (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),

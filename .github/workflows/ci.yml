@@ -11,7 +11,9 @@
 #
 # The firmware carries the update signing key's public half from the
 # repository variable FW_SIGN_PUB (scripts/build.sh) - public, not a secret.
-# Unset, the builds simply never update themselves from a server.
+# Unset, the builds simply never update themselves from a server. The
+# private half, the secret FW_SIGN_KEY, signs the images (release-fw.py
+# --sign-into), as the home server's are signed.
 name: CI
 
 on:
@@ -33,8 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-arduino-cli@v2
-      - name: SDL2 for the simulator
-        run: sudo apt-get update -q && sudo apt-get install -yq libsdl2-dev
+      # SDL2 for the simulator; cryptography for signing (release-fw.py).
+      - name: Packages
+        run: sudo apt-get update -q && sudo apt-get install -yq libsdl2-dev python3-cryptography
       - name: Cache the Arduino core and libraries
         uses: actions/cache@v4
         with:
@@ -46,8 +49,13 @@ jobs:
         run: arduino-cli update && ./scripts/setup-libs.sh
       - name: Checks
         run: ./scripts/check.sh
-      # The car build check.sh made, as a release takes it: the app image,
-      # and everything at its flash offset in one file (as build.sh flashes).
+      # The car build once more, after check.sh's bench build: build_info.h
+      # is then the car's - its build time is what the signature covers.
+      # Cached, so only its stamp's file recompiles.
+      - name: Car build
+        run: ./scripts/build.sh gauge
+      # As a release takes it: the app image, and everything at its flash
+      # offset in one file (as build.sh flashes).
       - name: Firmware images
         run: |
           OUT=.build/car_gauge_v1
@@ -62,9 +70,17 @@ jobs:
             0x8000 "$OUT/car_gauge_v1.ino.partitions.bin" \
             0xe000 "$BOOTAPP" \
             0x10000 "$OUT/car_gauge_v1.ino.bin"
-          # The stamp in the image itself: build_info.h is the bench build's
-          # by now (check.sh builds it last).
           echo "car image: $(grep -ao "[0-9-]* [0-9:]* $(git rev-parse --short HEAD)[^\"[:cntrl:]]*" dist/car_gauge_v1.bin | head -1)"
+      # Signed as release-fw.py signs for the home server: the image's
+      # SHA-256 and build time, by the private key in the secret FW_SIGN_KEY
+      # - so the app (and a gauge) can check a release came from it. A fork
+      # without the secret gets unsigned images.
+      - name: Sign
+        env:
+          FW_SIGN_KEY: ${{ secrets.FW_SIGN_KEY }}
+        run: |
+          if [ -z "$FW_SIGN_KEY" ]; then echo "no FW_SIGN_KEY secret - the images go unsigned"; exit 0; fi
+          python3 scripts/release-fw.py --sign-into dist
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
@@ -111,7 +127,8 @@ jobs:
           {
             echo "Firmware for the gauge, built from $(git rev-parse --short "$TAG")."
             echo
-            echo "- \`car_gauge_v1.bin\`: an update - from the app, the gauge's settings page, or as /firmware.bin on the card."
+            echo "- \`car_gauge_v1.bin\`: an update - the app fetches it by itself, or from the gauge's settings page, or as /firmware.bin on the card."
+            echo "- \`car_gauge_v1.bin.sig\`, \`latest\`: its signature, and its app hash, size and build time - what the app checks it by."
             echo "- \`car_gauge_v1-full.bin\`: a first flash over USB: \`esptool --chip esp32s3 write-flash 0x0 car_gauge_v1-full.bin\`."
             echo
             echo "Since ${PREV:-the start}:"

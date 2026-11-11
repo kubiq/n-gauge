@@ -19,7 +19,12 @@ only one built later than the firmware it replaces.
       image, its signature and "latest" there with scp - "latest" last, so
       the gauge never sees it before the image.
 
-The key is looked for first in the keyring (the Secret Service - GNOME
+  scripts/release-fw.py --sign-into DIR
+      CI (.github/workflows/ci.yml): signs the last car build into DIR,
+      without building or copying - a GitHub release carries those files.
+
+The key is FW_SIGN_KEY (64 hex digits) when that is set - CI's, from a
+GitHub secret. Otherwise it is looked for in the keyring (the Secret Service - GNOME
 Keyring, KWallet, or KeePassXC with its Secret Service integration on): the
 entry whose attributes are service=n-gauge and key=fw-signing, the key as 64
 hex digits in its password. Then in the FW_KEY file (raw 32 bytes, or the 64
@@ -80,8 +85,18 @@ def from_file() -> bytes | None:
     sys.exit(f"{KEY} is neither 32 bytes nor 64 hex digits")
 
 
+def from_env() -> bytes | None:
+    """FW_SIGN_KEY, 64 hex digits - CI's, from a GitHub secret."""
+    s = os.environ.get("FW_SIGN_KEY", "").strip()
+    if not s:
+        return None
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", s):
+        sys.exit("FW_SIGN_KEY is set but not 64 hex digits")
+    return bytes.fromhex(s)
+
+
 def load_key() -> Ed25519PrivateKey:
-    seed = from_keyring() or from_file()
+    seed = from_env() or from_keyring() or from_file()
     if not seed:
         sys.exit(f"no signing key: not in the keyring ({' '.join(KEYRING)}), no {KEY} - make one with --init")
     return Ed25519PrivateKey.from_private_bytes(seed)
@@ -132,6 +147,18 @@ def release(dest: str) -> None:
     if os.environ.get("FW_SIGN_PUB", on_file) != pub:
         sys.exit(f"the build's public key is not this key's ({pub}) - run --pub, or fix FW_SIGN_PUB")
     subprocess.run([os.path.join(REPO, "scripts", "build.sh"), "gauge"], check=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        app_hash, size, built = sign_into(key, tmp)
+        files = [os.path.join(tmp, n) for n in ("car_gauge_v1.bin", "car_gauge_v1.bin.sig")]
+        subprocess.run(["scp", "-q", *files, dest + "/"], check=True)
+        subprocess.run(["scp", "-q", os.path.join(tmp, "latest"), dest + "/"], check=True)
+    print(f"released {app_hash[:8]} ({size} bytes, built {built}) to {dest}")
+
+
+def sign_into(key: Ed25519PrivateKey, out: str) -> tuple[str, int, int]:
+    """The last car build (IMAGE, and its build_info.h) signed into `out`:
+    car_gauge_v1.bin, car_gauge_v1.bin.sig and latest - what the server
+    serves, and what a GitHub release carries (.github/workflows/ci.yml)."""
     with open(IMAGE, "rb") as f:
         image = f.read()
     if int.from_bytes(image[APP_DESC:APP_DESC + 4], "little") != APP_DESC_MAGIC:
@@ -139,15 +166,26 @@ def release(dest: str) -> None:
     app_hash = image[ELF_SHA_AT:ELF_SHA_AT + 32].hex()
     built = build_time()
     sig = key.sign(hashlib.sha256(image).digest() + built.to_bytes(8, "little"))
-    with tempfile.TemporaryDirectory() as tmp:
-        for name, data in (("car_gauge_v1.bin", image), ("car_gauge_v1.bin.sig", sig),
-                           ("latest", f"{app_hash} {len(image)} {built}\n".encode())):
-            with open(os.path.join(tmp, name), "wb") as f:
-                f.write(data)
-        files = [os.path.join(tmp, n) for n in ("car_gauge_v1.bin", "car_gauge_v1.bin.sig")]
-        subprocess.run(["scp", "-q", *files, dest + "/"], check=True)
-        subprocess.run(["scp", "-q", os.path.join(tmp, "latest"), dest + "/"], check=True)
-    print(f"released {app_hash[:8]} ({len(image)} bytes, built {built}) to {dest}")
+    os.makedirs(out, exist_ok=True)
+    for name, data in (("car_gauge_v1.bin", image), ("car_gauge_v1.bin.sig", sig),
+                       ("latest", f"{app_hash} {len(image)} {built}\n".encode())):
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(data)
+    return app_hash, len(image), built
+
+
+def sign_existing(out: str) -> None:
+    """CI: the build check.sh made, signed - FW_SIGN_KEY from a secret. Its
+    public half must be the one built in (FW_SIGN_PUB), or the gauges would
+    refuse every release."""
+    key = load_key()
+    pub = pub_hex(key)
+    if os.environ.get("FW_SIGN_PUB", "") != pub:
+        sys.exit(f"FW_SIGN_PUB is not this key's public half ({pub})")
+    if f'#define FW_SIGN_PUB "{pub}"' not in open(BUILD_INFO).read():
+        sys.exit(f"the last build ({BUILD_INFO}) does not carry this key's public half")
+    app_hash, size, built = sign_into(key, out)
+    print(f"signed {app_hash[:8]} ({size} bytes, built {built}) into {out}")
 
 
 def main() -> None:
@@ -156,6 +194,8 @@ def main() -> None:
     p.add_argument("--init", action="store_true", help="make the signing key")
     p.add_argument("--pub", action="store_true", help="write the .pub again from the key")
     p.add_argument("--to", help="scp destination folder, e.g. server:/path/to/data/firmware")
+    p.add_argument("--sign-into", metavar="DIR",
+                   help="CI: sign the last car build into DIR (no build, no copy)")
     a = p.parse_args()
     if a.init:
         init()
@@ -163,6 +203,8 @@ def main() -> None:
         print(f"{PUB}: {write_pub(load_key())}")
     elif a.to:
         release(a.to)
+    elif a.sign_into:
+        sign_existing(a.sign_into)
     else:
         p.print_help()
 

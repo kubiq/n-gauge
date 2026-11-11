@@ -42,8 +42,14 @@ export const gauge: Record<string, string> = {
   'The settings are read from the gauge itself - it must be awake (car on, or a door opened). Meanwhile the phone has no internet.':
     'Nastavení se čte přímo z budíku - ten musí být vzhůru (auto nastartované, nebo otevřené dveře). Telefon mezitím nemá internet.',
   'Reading the gauge’s settings…': 'Načítám nastavení budíku…',
-  'Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.':
-    'Vyberte soubor car_gauge_v1 .bin v telefonu. Pokud nová verze selže, budík se sám vrátí k předchozí.',
+  'Or pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.':
+    'Nebo vyberte soubor car_gauge_v1 .bin v telefonu. Pokud nová verze selže, budík se sám vrátí k předchozí.',
+  'Once a day, while the app is open with internet, it looks for a newer release on GitHub, checks its signature against this gauge’s key and keeps it until it is installed here.':
+    'Jednou denně, když je aplikace otevřená a má internet, hledá novější verzi na GitHubu, ověří její podpis klíčem tohoto budíku a ponechá si ji, dokud ji sem nenainstalujete.',
+  'Newer on GitHub': 'Novější na GitHubu',
+  'Install {tag}': 'Nainstalovat {tag}',
+  '{tag} from GitHub, signed - checked against this gauge’s key. Takes ~30 s; the gauge restarts.':
+    '{tag} z GitHubu, podepsaná - ověřená klíčem tohoto budíku. Trvá ~30 s; budík se restartuje.',
   'Update firmware': 'Aktualizovat firmware',
 
   // settings-schema.ts

@@ -10,6 +10,8 @@ import { Button, Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { useHoldPod, usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { N_, t } from '@/i18n';
+import { clearReadyFw, loadReadyFw, type ReadyFw } from '@/lib/fw-download';
+import { isNewer } from '@/lib/fw-release';
 import { getLive, getSettings, type PodLive, saveSettings, setClock, uploadFirmware, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
 import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
@@ -44,6 +46,10 @@ export default function GaugeSettingsScreen() {
       connect();
     }
   }, [creds, state, connect]);
+  // A release from GitHub, downloaded and checked while the app was open
+  // with internet (fw-download.ts) - offered if newer than what the gauge
+  // runs; dropped once installed, or when the gauge has it already.
+  const [ready, setReady] = useState<ReadyFw | null>(loadReadyFw);
 
   const scan = async () => {
     const r = await scanPodQr();
@@ -99,7 +105,15 @@ export default function GaugeSettingsScreen() {
     getLive().then(
       (l) => {
         setLive(l);
-        if (l.fw) saveGaugeFw(l.fw.build);
+        if (l.fw) {
+          saveGaugeFw(l.fw);
+          // A downloaded release the gauge has already, or something newer: gone.
+          const r = loadReadyFw();
+          if (r && !isNewer(r, l.fw)) {
+            clearReadyFw();
+            setReady(null);
+          }
+        }
       },
       () => setLive(null),
     );
@@ -208,6 +222,33 @@ export default function GaugeSettingsScreen() {
     );
   };
 
+  const offer = ready && live?.fw && isNewer(ready, live.fw) ? ready : null;
+  const installReady = (r: ReadyFw) =>
+    Alert.alert(
+      t('Update firmware?'),
+      t('{tag} from GitHub, signed - checked against this gauge’s key. Takes ~30 s; the gauge restarts.', { tag: r.tag }),
+      [
+        { text: t('Cancel'), style: 'cancel' },
+        {
+          text: t('Update'),
+          onPress: async () => {
+            setBusy('fw');
+            try {
+              await sync.cancel();
+              const said = await uploadFirmware(new File(r.uri));
+              clearReadyFw();
+              setReady(null);
+              Alert.alert(t('Firmware'), said);
+            } catch (e) {
+              Alert.alert(t('Firmware'), String((e as Error).message));
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+
   if (pod.ready && !pod.creds) {
     return (
       <Screen>
@@ -311,7 +352,18 @@ export default function GaugeSettingsScreen() {
       {/* Last (asked 2026-11-06): not the first thing passed on the way to
           the other cards. */}
       <Card title={t('Firmware')}>
-        <Note>{t('Pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
+        {offer ? (
+          <>
+            <Row label={t('Newer on GitHub')} value={offer.tag} tone="good" />
+            <Button title={t('Install {tag}', { tag: offer.tag })} busy={busy === 'fw'} onPress={() => installReady(offer)} />
+          </>
+        ) : null}
+        <Note>
+          {t(
+            'Once a day, while the app is open with internet, it looks for a newer release on GitHub, checks its signature against this gauge’s key and keeps it until it is installed here.',
+          )}
+        </Note>
+        <Note>{t('Or pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
       {another}

@@ -86,7 +86,10 @@ export function saveListFacts(f: ListFacts): void {
 // app is on the gauge's WiFi only for a sync (Settings, About shows it).
 const gaugeFwFile = new File(Paths.document, 'gauge-fw.json');
 
-export type GaugeFw = { build: string; at: number };
+// Since 2026-11-11 also its hash, build time and update key (firmware from
+// then on says them): a release from GitHub is checked against them while
+// the phone has internet - off the gauge's WiFi (fw-release.ts).
+export type GaugeFw = { build: string; at: number; hash?: string; built?: number; pub?: string };
 
 export function loadGaugeFw(): GaugeFw | null {
   try {
@@ -96,8 +99,10 @@ export function loadGaugeFw(): GaugeFw | null {
   }
 }
 
-export function saveGaugeFw(build: string): void {
-  gaugeFwFile.write(JSON.stringify({ build, at: Date.now() } satisfies GaugeFw));
+export function saveGaugeFw(fw: { build: string; hash?: string; built?: number; pub?: string }): void {
+  gaugeFwFile.write(
+    JSON.stringify({ build: fw.build, hash: fw.hash, built: fw.built, pub: fw.pub, at: Date.now() } satisfies GaugeFw),
+  );
 }
 
 // Where "Save to a folder" writes: the URI Android's folder picker returned.
