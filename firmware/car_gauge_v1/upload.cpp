@@ -966,6 +966,10 @@ static void uploadTask(void *arg) {
   step = STEP_JOIN;
   if (!buf || !plan) { finish(r, t0, false, "no memory"); goto out; }
 
+  // Its name in the phone's hotspot list (asked 2026-11-11), not the
+  // ESP32's "esp32s3-xxxxxx": DHCP sends it as it joins. Set before the
+  // interface starts - after, it is not used until the next start.
+  WiFi.setHostname(WIFI_STA_HOSTNAME);
   WiFi.mode(WIFI_STA);
   WiFi.begin(c.ssid, c.pass);
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < UP_JOIN_MS) delay(250);

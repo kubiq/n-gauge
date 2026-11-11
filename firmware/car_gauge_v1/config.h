@@ -840,6 +840,10 @@
 // Up whenever the gauge is awake (WIFI_AP_ALWAYS below), down while driving
 // (AP_DRIVE_OFF). Parked, the gauge sleeps and the AP goes with it.
 #define WIFI_AP_SSID       "n-gauge"
+// Its name when it joins the phone's hotspot for the log upload (upload.cpp):
+// what the hotspot's list of connected devices shows. A DNS name: letters,
+// digits and hyphens only.
+#define WIFI_STA_HOSTNAME  "n-gauge"
 // There is deliberately NO default password any more. The AP is up the whole
 // time the board is awake and serves the complete GPS history of every drive,
 // and a passphrase committed to a public repository protects none of it - the
