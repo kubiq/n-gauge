@@ -36,6 +36,9 @@ step() {
 step "host tests"            ./scripts/test.sh
 step "firmware (car)"        ./scripts/build.sh gauge
 step "firmware (bench)"      env BENCH=1 ./scripts/build.sh gauge
+# SKIP_SIM=1: CI builds the simulator in a job of its own (it needs SDL2
+# from Ubuntu's mirrors, which can hang for an hour - 2026-11-11).
+[ "${SKIP_SIM:-0}" = 1 ] ||
 step "simulator"             bash -c 'cmake -S sim -B sim/build >/dev/null && cmake --build sim/build -j"$(nproc)"'
 step "upload server"         bash -c 'cd server && python3 -m unittest -q test_upload_server.py'
 
