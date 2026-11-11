@@ -32,6 +32,10 @@ export const app: Record<string, string> = {
   App: 'Aplikace',
   'older firmware': 'starší firmware',
   '{build}, read {when}': '{build}, zjištěno {when}',
+  'Look for a newer gauge firmware': 'Hledat novější firmware budíku',
+  'Not while on the gauge’s WiFi - it has no internet.': 'Ne na WiFi budíku - ta nemá internet.',
+  '{tag} downloaded and checked - install it in Gauge settings.':
+    '{tag} stažena a ověřena - nainstalujte ji v Nastavení budíku.',
   'Place names © GeoNames (geonames.org), CC BY 4.0.': 'Názvy míst © GeoNames (geonames.org), CC BY 4.0.',
   'City quarter boundaries © ČÚZK (RÚIAN), via ČSÚ open data, CC BY 4.0.':
     'Hranice městských částí © ČÚZK (RÚIAN), z otevřených dat ČSÚ, CC BY 4.0.',

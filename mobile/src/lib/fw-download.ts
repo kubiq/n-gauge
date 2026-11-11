@@ -55,20 +55,20 @@ async function bytesOf(url: string, signal: AbortSignal): Promise<Uint8Array> {
 
 /**
  * Looks for a newer release and keeps it if it checks out - at most
- * LOOK_MAX_MS, at most once in EVERY_MS. Does nothing without a gauge read
- * since 2026-11-11 (no key to check by). Returns what happened, in
- * English, for the console.
+ * LOOK_MAX_MS, at most once in EVERY_MS unless `now` (the About card's
+ * button). Does nothing without a gauge read since 2026-11-11 (no key to
+ * check by). Returns what happened, in English.
  */
-export async function lookForFirmware(): Promise<string> {
+export async function lookForFirmware(now = false): Promise<string> {
   const gauge = loadGaugeFw();
-  if (!gauge?.pub) return 'the gauge has not said its update key yet';
+  if (!gauge?.pub) return 'the gauge has not said its update key yet - open Gauge settings once';
   let looked = 0;
   try {
     looked = lookedFile.exists ? Number(lookedFile.textSync()) || 0 : 0;
   } catch {
     // unreadable: look
   }
-  if (Date.now() - looked < EVERY_MS) return 'looked today already';
+  if (!now && Date.now() - looked < EVERY_MS) return 'looked today already';
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), LOOK_MAX_MS);
   try {
