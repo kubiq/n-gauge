@@ -86,9 +86,10 @@ from the [simulator](sim) on a made-up track session (`sim/screenshots.sh`).*
 - **Power:** deep sleep when the car goes quiet, ~11 mA parked (about 57
   days on the battery); wakes on CAN activity, the button, or the door
   opening (the IMU's wake-on-motion).
-- **Firmware updates:** from the phone, the SD card or - by itself, before
-  each upload - the home server, signed (Ed25519) so it installs nothing
-  else; on probation, rolled back if the new one fails.
+- **Firmware updates:** from the phone, the SD card or - by itself, after
+  each upload of the logs, resuming a download that was cut off - the home
+  server, signed (Ed25519) so it installs nothing else; on probation, rolled
+  back if the new one fails.
 - **Phone:** its own WiFi access point - with the upload set up, only once
   swiped to on the gauge, so the radio is free otherwise - with settings
   pages, OTA firmware

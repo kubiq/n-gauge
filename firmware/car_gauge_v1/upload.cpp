@@ -54,7 +54,7 @@ struct UpConfig {
   char     wgDns[16];                 // a DNS inside the tunnel, for the server's name; "" = the hotspot's
   uint16_t wgPort;
   uint8_t  maxMin;                    // the time limit, minutes
-  uint8_t  autoUpdate;                // firmware from the server before the logs (1 = yes)
+  uint8_t  autoUpdate;                // firmware from the server after the logs (1 = yes)
   uint8_t  wgPriv[32];                // made here, never leaves
 };
 static UpConfig cfg;
@@ -660,7 +660,8 @@ static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo
 }
 
 // ---- a new firmware from the server (2026-11-09) ------------------------------
-// Before the logs, when the Upload card's "Automatic updates" is on (the
+// After the logs (before them until 2026-11-11), when time is left and the
+// Upload card's "Automatic updates" is on (the
 // default) and the build has a signing key (ota_sign_pub): the server's
 // /fw/latest says which firmware it holds ("<app hash> <size> <build time>",
 // from scripts/release-fw.py). One built after this one (no downgrade to an
@@ -707,35 +708,108 @@ static int getSmall(const UpConfig &c, const char *path, uint8_t *out, size_t n,
 }
 
 // /fw/bin into OTA_SD_NEW, `size` bytes, its SHA-256 into digest: "" or a reason.
-static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *buf, uint8_t digest[32]) {
+// A download cut off goes on next time from where it stopped (asked
+// 2026-11-11): the garage's mobile signal cut two in a row, and each try
+// started the 2 MB over. OTA_SD_NEW stays on the card, and NVS "fwPart"
+// says which release it is of - another release, and it starts over.
+// The upload's time limit, for the download (millis()): it comes after the
+// logs, with what time they left; stopped there, it goes on next time.
+static uint32_t fwDeadlineMs = 0;
+
+static bool partOf(const uint8_t hash[32]) {
+  uint8_t h[32];
+  Preferences p;
+  if (!p.begin(NS, true)) return false;
+  const bool is = p.getBytes("fwPart", h, sizeof(h)) == sizeof(h) && !memcmp(h, hash, 32);
+  p.end();
+  return is;
+}
+
+static void setPart(const uint8_t *hash) {   // nullptr: none
+  Preferences p;
+  if (!p.begin(NS, false)) return;
+  if (hash) p.putBytes("fwPart", hash, 32);
+  else      p.remove("fwPart");
+  p.end();
+}
+
+// /fw/bin into OTA_SD_NEW, `size` bytes, its SHA-256 into digest: "" or a
+// reason. What the card already holds of this release is read back into the
+// hash - the signature is over the whole image - and only the rest asked for
+// (Range); *from says how much that was.
+static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *buf, uint8_t digest[32],
+                                    const uint8_t hash[32], uint32_t *from) {
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts(&sha, 0);
   File f;
+  uint32_t had = 0;
   {
     LoggerSdLock lock(SD_LOCK_WEB_MS);
-    if (!lock || logger_card_shared()) return "card busy";
-    SD_MMC.remove(OTA_SD_NEW);
-    f = SD_MMC.open(OTA_SD_NEW, FILE_WRITE);
+    if (!lock || logger_card_shared()) { mbedtls_sha256_free(&sha); return "card busy"; }
+    if (partOf(hash) && SD_MMC.exists(OTA_SD_NEW)) {
+      f = SD_MMC.open(OTA_SD_NEW, FILE_READ);
+      had = f ? f.size() : 0;
+    }
   }
-  if (!f) return "card not writable";
+  if (had > size) had = 0;              // not this image after all
+  for (uint32_t left = had; left;) {
+    size_t got = 0;
+    {
+      LoggerSdLock lock(SD_LOCK_WEB_MS);
+      if (lock && !logger_card_shared()) got = f.read(buf, left < UP_CHUNK ? left : UP_CHUNK);
+    }
+    if (!got) {                         // unreadable: from the start
+      had = 0;
+      mbedtls_sha256_starts(&sha, 0);
+      break;
+    }
+    mbedtls_sha256_update(&sha, buf, got);
+    left -= got;
+    taskYIELD();
+  }
+  {
+    LoggerSdLock lock(SD_LOCK_WEB_MS);
+    if (f) f.close();
+    if (lock && !logger_card_shared()) {
+      if (!had) SD_MMC.remove(OTA_SD_NEW);
+      f = SD_MMC.open(OTA_SD_NEW, had ? FILE_APPEND : FILE_WRITE);
+    }
+  }
+  *from = had;
+  fwGot = had;
+  if (!f) { mbedtls_sha256_free(&sha); return "card not writable"; }
+  setPart(hash);
+  if (had == size) {                    // all there already: only the signature was missing
+    mbedtls_sha256_finish(&sha, digest);
+    mbedtls_sha256_free(&sha);
+    LoggerSdLock lock(SD_LOCK_WEB_MS);
+    f.close();
+    return "";
+  }
   NetworkClient tcp;
   HTTPClient http;
   http.setConnectTimeout(UP_HTTP_MS);
   http.setTimeout(UP_HTTP_MS);
   const char *err = "";
-  uint32_t got = 0;
+  uint32_t got = had;
   if (!openRequest(http, tcp, "/fw/bin")) {
     err = "server not reached";
   } else {
     authorise(http, c);
+    if (had) {
+      char range[32];
+      snprintf(range, sizeof(range), "bytes=%lu-", (unsigned long)had);
+      http.addHeader("Range", range);
+    }
     const int code = http.GET();
-    if (code != 200) err = "download refused";
-    else if (http.getSize() != (int)size) err = "the server's size differs";
+    if (code != (had ? 206 : 200)) err = "download refused";
+    else if (http.getSize() != (int)(size - had)) err = "the server's size differs";
     else {
-      mbedtls_sha256_context sha;
-      mbedtls_sha256_init(&sha);
-      mbedtls_sha256_starts(&sha, 0);
       NetworkClient *s = http.getStreamPtr();
       uint32_t lastData = millis();
       while (got < size && millis() - lastData < UP_HTTP_MS) {
+        if ((int32_t)(millis() - fwDeadlineMs) >= 0) { err = "time limit"; break; }
         const int avail = s->available();
         if (avail <= 0) {
           if (!s->connected()) break;
@@ -757,15 +831,21 @@ static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *b
         lastData = millis();
         taskYIELD();                    // the logger has the card next
       }
-      mbedtls_sha256_finish(&sha, digest);
-      mbedtls_sha256_free(&sha);
       if (!err[0] && got != size) err = "download cut short";
     }
     http.end();
   }
+  mbedtls_sha256_finish(&sha, digest);
+  mbedtls_sha256_free(&sha);
   LoggerSdLock lock(SD_LOCK_WEB_MS);
   f.close();
-  if (err[0]) SD_MMC.remove(OTA_SD_NEW);
+  // Cut short, it stays for next time. Refused, or of another size: what
+  // the card holds is no good - from the start then.
+  if (err[0] && strcmp(err, "download cut short") && strcmp(err, "server not reached") &&
+      strcmp(err, "card write failed") && strcmp(err, "time limit")) {
+    SD_MMC.remove(OTA_SD_NEW);
+    setPart(nullptr);
+  }
   return err;
 }
 
@@ -823,19 +903,19 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
   fwTotal = size;
   step = STEP_FW;
   uint8_t signedMsg[40], sig[64];       // the image's SHA-256, its build time
-  const char *err = downloadFirmware(c, size, buf, signedMsg);
+  uint32_t from = 0;                    // already on the card from an earlier try
+  const char *err = downloadFirmware(c, size, buf, signedMsg, hash, &from);
   for (int i = 0; i < 8; i++) signedMsg[32 + i] = (uint8_t)(built >> (8 * i));
   if (!err[0]) {
     if (getSmall(c, "/fw/sig", sig, sizeof(sig), &len) != 200 || len != sizeof(sig)) {
-      err = "no signature";
+      err = "no signature";             // the image stays: next time only this
     } else if (crypto_ed25519_check(sig, pub, signedMsg, sizeof(signedMsg)) != 0) {
       err = "bad signature";
       if (p.begin(NS, false)) {         // not downloaded again: only a new release
         p.putBytes("fwBad", hash, sizeof(hash));
         p.end();
       }
-    }
-    if (err[0]) {
+      setPart(nullptr);
       LoggerSdLock lock(SD_LOCK_WEB_MS);
       SD_MMC.remove(OTA_SD_NEW);
     }
@@ -846,15 +926,17 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
     else {
       SD_MMC.remove(OTA_SD_PATH);
       if (!SD_MMC.rename(OTA_SD_NEW, OTA_SD_PATH)) err = "card rename failed";
+      else setPart(nullptr);
     }
   }
   if (err[0]) {
-    snprintf(note, n, "firmware %s: %s", shortHash, err);
+    snprintf(note, n, "firmware %s: %s (%lu of %lu KB)", shortHash, err,
+             (unsigned long)(fwGot / 1024), size / 1024);
   } else {
     fwStaged = true;
     memcpy(fwStagedHash, hash, sizeof(hash));
-    snprintf(note, n, "firmware %s ready (%lu KB in %lu s)", shortHash, size / 1024,
-             (unsigned long)(millis() - t) / 1000);
+    snprintf(note, n, "firmware %s ready (%lu KB in %lu s%s)", shortHash, (size - from) / 1024,
+             (unsigned long)(millis() - t) / 1000, from ? ", resumed" : "");
   }
   Serial.printf("[..] upload: %s\n", note);
 }
@@ -871,7 +953,7 @@ static void uploadTask(void *arg) {
   size_t planLen = 0;
   uint16_t onCard = 0;
   String todo;
-  char fwNote[64] = "";
+  char fwNote[80] = "";
 
   step = STEP_JOIN;
   if (!buf || !plan) { finish(r, t0, false, "no memory"); goto out; }
@@ -930,10 +1012,6 @@ static void uploadTask(void *arg) {
     }
   }
 
-  // A new firmware first, then the logs (asked so, 2026-11-09): a firmware
-  // is one file, and the logs' time limit would otherwise crowd it out.
-  fetchFirmware(c, buf, fwNote, sizeof(fwNote));
-
   {
     // Through the tunnel the first request may wait for the handshake:
     // tried until it answers.
@@ -963,6 +1041,14 @@ static void uploadTask(void *arg) {
   // "name offset" per line: each file's missing part, several at once.
   // Out of time only with files still to go - the next upload sends them.
   sendAll(c, todo, t0, r);
+
+  // Then a new firmware, with the time the logs left (2026-11-11 - first
+  // until then): a download the garage's mobile signal cut off took the
+  // logs with it. Cut off now, it goes on from there next time.
+  if (r.ok) {
+    fwDeadlineMs = t0 + c.maxMin * 60000UL;
+    fetchFirmware(c, buf, fwNote, sizeof(fwNote));
+  }
 
 out:
   step = STEP_CLOSE;

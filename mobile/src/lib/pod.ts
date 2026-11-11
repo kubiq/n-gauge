@@ -127,7 +127,7 @@ export type PodUpload = {
   wgDns?: string;
   /** The upload's time limit, minutes (1-60); the rest goes next time. Firmware from 2026-11-06 12:30 on. */
   maxMin?: number;
-  /** A new firmware from the server, before the logs (default on). Firmware from 2026-11-09 on. */
+  /** A new firmware from the server, after the logs (default on). Firmware from 2026-11-09 on. */
   autoUpdate?: boolean;
   /** Whether that firmware was built with a signing key - without one it never updates itself. */
   fwKey?: boolean;

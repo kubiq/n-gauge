@@ -118,8 +118,8 @@ export const gauge: Record<string, string> = {
   Token: 'Token',
   'Time limit, minutes': 'Časový limit, minuty',
   'Automatic firmware updates': 'Automatické aktualizace firmwaru',
-  'Before the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.':
-    'Před logy si budík stáhne ze serveru nový firmware, pokud tam je, ověří jeho podpis a nainstaluje ho, až auto zaparkuje.',
+  'After the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.':
+    'Po lozích si budík stáhne ze serveru nový firmware, pokud tam je, ověří jeho podpis a nainstaluje ho, až auto zaparkuje.',
   'This firmware was built without a signing key, so it never updates itself.':
     'Tento firmware byl sestaven bez podpisového klíče, takže se nikdy sám neaktualizuje.',
   'The server at home, as the gauge reaches it through the VPN. The phone syncs the drives from the same address with the same token - set here once, for both.':

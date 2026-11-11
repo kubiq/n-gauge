@@ -271,7 +271,7 @@ export function UploadCard() {
           <Note tone={up.fwKey ? undefined : 'bad'}>
             {up.fwKey
               ? t(
-                  'Before the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.',
+                  'After the logs, the gauge fetches a new firmware from the server if there is one, checks its signature and installs it once the car is parked.',
                 )
               : t('This firmware was built without a signing key, so it never updates itself.')}
           </Note>

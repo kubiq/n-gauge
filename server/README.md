@@ -51,9 +51,11 @@ cut-off one leaves the previous file whole and the next plan asks again.
 
 ## Firmware updates
 
-The same service can hand the gauge a new firmware: before each upload the
-gauge asks `/fw/latest`, and one newer than its own it downloads, checks and
-installs once the car is parked, with the usual rollback if it misbehaves.
+The same service can hand the gauge a new firmware: after each upload of the
+logs the gauge asks `/fw/latest`, and one newer than its own it downloads,
+checks and installs once the car is parked, with the usual rollback if it
+misbehaves. A download cut off - mobile data in a garage - goes on from where
+it stopped next time (`Range`).
 The files sit in `firmware/` in the data folder, put there by the release
 script on the PC that builds the firmware:
 
