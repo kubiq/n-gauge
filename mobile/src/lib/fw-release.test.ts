@@ -29,6 +29,12 @@ test('latest: as release-fw.py writes it', () => {
     size: 2139312,
     built: 1794408200,
   });
+  assert.deepEqual(parseLatest(`${'a'.repeat(64)} 2139312 1794408200 48cfc3a\n`), {
+    hash: 'a'.repeat(64),
+    size: 2139312,
+    built: 1794408200,
+    commit: '48cfc3a',
+  });
   assert.equal(parseLatest('nonsense'), null);
   assert.equal(parseLatest(`${'a'.repeat(63)} 1 2`), null);
 });

@@ -354,7 +354,9 @@ export default function GaugeSettingsScreen() {
       <Card title={t('Firmware')}>
         {offer ? (
           <>
-            <Row label={t('Newer on GitHub')} value={offer.tag} tone="good" />
+            {/* Its commit, as the gauge's own build stamp shows one: one
+                hash for a build, not the image's too (asked 2026-11-11). */}
+            <Row label={t('Newer on GitHub')} value={offer.commit ? `${offer.tag} · ${offer.commit}` : offer.tag} tone="good" />
             <Button title={t('Install {tag}', { tag: offer.tag })} busy={busy === 'fw'} onPress={() => installReady(offer)} />
           </>
         ) : null}

@@ -33,7 +33,7 @@ hex digits). Once it is in the keyring, the file can go; the .pub stays.
 The signature is standard Ed25519 (RFC 8032 - as minisign, signify and
 OpenSSL make it) over 40 bytes: the image's SHA-256, then its build time
 (FW_BUILD_TIME, Unix seconds) as 8 bytes little-endian. "latest" is
-"<app hash> <size> <build time>". The gauge refuses a build time not after
+"<app hash> <size> <build time> <commit>". The gauge refuses a build time not after
 its own, so an old signed release cannot be served as an update.
 """
 
@@ -134,6 +134,16 @@ def build_time() -> int:
     return int(m.group(1))
 
 
+def build_name() -> str:
+    """The build as people see it: the git commit of its stamp ("48cfc3a",
+    "+changes" kept) - what the gauge's settings and the app show. The
+    image's own hash stays inside, for telling builds apart (2026-11-11:
+    two hashes for one build were confusing)."""
+    with open(BUILD_INFO) as f:
+        m = re.search(r'#define FW_BUILD "\S+ \S+ ([^" ]+)', f.read())
+    return m.group(1) if m else "unknown"
+
+
 def release(dest: str) -> None:
     key = load_key()
     pub = pub_hex(key)
@@ -148,30 +158,34 @@ def release(dest: str) -> None:
         sys.exit(f"the build's public key is not this key's ({pub}) - run --pub, or fix FW_SIGN_PUB")
     subprocess.run([os.path.join(REPO, "scripts", "build.sh"), "gauge"], check=True)
     with tempfile.TemporaryDirectory() as tmp:
-        app_hash, size, built = sign_into(key, tmp)
+        name, size = sign_into(key, tmp)
         files = [os.path.join(tmp, n) for n in ("car_gauge_v1.bin", "car_gauge_v1.bin.sig")]
         subprocess.run(["scp", "-q", *files, dest + "/"], check=True)
         subprocess.run(["scp", "-q", os.path.join(tmp, "latest"), dest + "/"], check=True)
-    print(f"released {app_hash[:8]} ({size} bytes, built {built}) to {dest}")
+    print(f"released {name} ({size} bytes) to {dest}")
 
 
-def sign_into(key: Ed25519PrivateKey, out: str) -> tuple[str, int, int]:
+def sign_into(key: Ed25519PrivateKey, out: str) -> tuple[str, int]:
     """The last car build (IMAGE, and its build_info.h) signed into `out`:
     car_gauge_v1.bin, car_gauge_v1.bin.sig and latest - what the server
-    serves, and what a GitHub release carries (.github/workflows/ci.yml)."""
+    serves, and what a GitHub release carries (.github/workflows/ci.yml).
+    Returns the build's name (its commit) and size."""
     with open(IMAGE, "rb") as f:
         image = f.read()
     if int.from_bytes(image[APP_DESC:APP_DESC + 4], "little") != APP_DESC_MAGIC:
         sys.exit(f"{IMAGE} has no app description - not an ESP32 app image?")
     app_hash = image[ELF_SHA_AT:ELF_SHA_AT + 32].hex()
     built = build_time()
+    name = build_name()
     sig = key.sign(hashlib.sha256(image).digest() + built.to_bytes(8, "little"))
     os.makedirs(out, exist_ok=True)
-    for name, data in (("car_gauge_v1.bin", image), ("car_gauge_v1.bin.sig", sig),
-                       ("latest", f"{app_hash} {len(image)} {built}\n".encode())):
-        with open(os.path.join(out, name), "wb") as f:
+    # The commit fourth: shown by the gauge and the app; gauges from before
+    # 2026-11-11 read the first three only.
+    for file, data in (("car_gauge_v1.bin", image), ("car_gauge_v1.bin.sig", sig),
+                       ("latest", f"{app_hash} {len(image)} {built} {name}\n".encode())):
+        with open(os.path.join(out, file), "wb") as f:
             f.write(data)
-    return app_hash, len(image), built
+    return name, len(image)
 
 
 def sign_existing(out: str) -> None:
@@ -184,8 +198,8 @@ def sign_existing(out: str) -> None:
         sys.exit(f"FW_SIGN_PUB is not this key's public half ({pub})")
     if f'#define FW_SIGN_PUB "{pub}"' not in open(BUILD_INFO).read():
         sys.exit(f"the last build ({BUILD_INFO}) does not carry this key's public half")
-    app_hash, size, built = sign_into(key, out)
-    print(f"signed {app_hash[:8]} ({size} bytes, built {built}) into {out}")
+    name, size = sign_into(key, out)
+    print(f"signed {name} ({size} bytes) into {out}")
 
 
 def main() -> None:

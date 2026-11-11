@@ -25,7 +25,7 @@ const EVERY_MS = 24 * 3600 * 1000;
 const lookedFile = new File(Paths.document, 'fw-looked.txt');
 
 /** A release downloaded and checked, waiting to go on the gauge. */
-export type ReadyFw = { tag: string; hash: string; built: number; size: number; uri: string };
+export type ReadyFw = { tag: string; hash: string; built: number; size: number; commit?: string; uri: string };
 
 export function loadReadyFw(): ReadyFw | null {
   try {

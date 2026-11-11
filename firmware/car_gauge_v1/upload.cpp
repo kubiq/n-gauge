@@ -663,7 +663,7 @@ static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo
 // After the logs (before them until 2026-11-11), when time is left and the
 // Upload card's "Automatic updates" is on (the
 // default) and the build has a signing key (ota_sign_pub): the server's
-// /fw/latest says which firmware it holds ("<app hash> <size> <build time>",
+// /fw/latest says which firmware it holds ("<app hash> <size> <build time> <commit>",
 // from scripts/release-fw.py). One built after this one (no downgrade to an
 // older signed release), not tried before, is downloaded to OTA_SD_NEW,
 // checked against its signature and only then renamed to OTA_SD_PATH -
@@ -676,6 +676,7 @@ static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo
 // signed, so a server cannot pass an old release off as a new one.
 static bool fwStaged = false;           // OTA_SD_PATH holds a checked one, this wake
 static uint8_t fwStagedHash[32];
+static char fwStagedName[16];           // its commit, as the status screen says it
 
 bool upload_fw_staged() { return fwStaged; }
 
@@ -865,14 +866,20 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
   uint8_t hash[32];
   char *rest = nullptr;
   const unsigned long size = len > 65 ? strtoul(latest + 65, &rest, 10) : 0;
-  const unsigned long long built = rest ? strtoull(rest, nullptr, 10) : 0;
+  char *after = nullptr;
+  const unsigned long long built = rest ? strtoull(rest, &after, 10) : 0;
   if (code != 200 || len < 66 || latest[64] != ' ' || !unhex(latest, hash, 32) || !size || !built) {
     snprintf(note, n, "firmware check failed (%d)", code);
     return;
   }
-  char shortHash[9];
-  memcpy(shortHash, latest, 8);
-  shortHash[8] = '\0';
+  // What it is called where people see it: its git commit, the fourth
+  // field (release-fw.py since 2026-11-11) - the same as the build stamp
+  // the gauge's settings show. Without one, the image hash's first digits.
+  char name[16];
+  if (!after || sscanf(after, " %15s", name) != 1) {
+    memcpy(name, latest, 8);
+    name[8] = '\0';
+  }
 
   // Not the one running, nor one handled before: installed and rolled back
   // (ota.cpp's "seen" - put there before each install), refused here
@@ -894,7 +901,7 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
   }
   const esp_partition_t *slot = esp_ota_get_next_update_partition(nullptr);
   if (!slot || size > slot->size) {
-    snprintf(note, n, "firmware %s too big", shortHash);
+    snprintf(note, n, "firmware %s too big", name);
     return;
   }
 
@@ -930,12 +937,13 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
     }
   }
   if (err[0]) {
-    snprintf(note, n, "firmware %s: %s (%lu of %lu KB)", shortHash, err,
+    snprintf(note, n, "firmware %s: %s (%lu of %lu KB)", name, err,
              (unsigned long)(fwGot / 1024), size / 1024);
   } else {
     fwStaged = true;
     memcpy(fwStagedHash, hash, sizeof(hash));
-    snprintf(note, n, "firmware %s ready (%lu KB in %lu s%s)", shortHash, (size - from) / 1024,
+    strlcpy(fwStagedName, name, sizeof(fwStagedName));
+    snprintf(note, n, "firmware %s ready (%lu KB in %lu s%s)", name, (size - from) / 1024,
              (unsigned long)(millis() - t) / 1000, from ? ", resumed" : "");
   }
   Serial.printf("[..] upload: %s\n", note);
@@ -1102,8 +1110,7 @@ void upload_status(UpStatus *s) {
       snprintf(s->last, sizeof(s->last), "last %s: %s", when, last.msg);
   }
   if (fwStaged)
-    snprintf(s->fw, sizeof(s->fw), "firmware %02x%02x%02x%02x ready - installs when parked",
-             fwStagedHash[0], fwStagedHash[1], fwStagedHash[2], fwStagedHash[3]);
+    snprintf(s->fw, sizeof(s->fw), "firmware %s ready - installs when parked", fwStagedName);
 
   const auto say = [s](uint8_t tone, const char *head, const char *detail) {
     s->tone = tone;

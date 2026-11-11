@@ -1,5 +1,5 @@
 // A firmware release, checked before it goes to the gauge (asked 2026-11-11):
-// the image, its signature and `latest` ("<app hash> <size> <build time>"),
+// the image, its signature and `latest` ("<app hash> <size> <build time> <commit>"),
 // as scripts/release-fw.py makes them for the home server and CI for a GitHub
 // release. The signature is standard Ed25519 over the image's SHA-256 and its
 // build time (8 bytes, little-endian) - what the gauge checks for its own
@@ -12,12 +12,16 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
-export type Latest = { hash: string; size: number; built: number };
+/** commit: the build's git commit, as its stamp shows it - absent in releases before 2026-11-11. */
+export type Latest = { hash: string; size: number; built: number; commit?: string };
 
 /** `latest` as release-fw.py writes it, or null. */
 export function parseLatest(text: string): Latest | null {
-  const m = /^([0-9a-f]{64}) (\d+) (\d+)\s*$/.exec(text);
-  return m ? { hash: m[1], size: Number(m[2]), built: Number(m[3]) } : null;
+  const m = /^([0-9a-f]{64}) (\d+) (\d+)(?: (\S+))?\s*$/.exec(text);
+  if (!m) return null;
+  const l: Latest = { hash: m[1], size: Number(m[2]), built: Number(m[3]) };
+  if (m[4]) l.commit = m[4];
+  return l;
 }
 
 // esp_app_desc_t follows the image header (24 bytes) and the first segment

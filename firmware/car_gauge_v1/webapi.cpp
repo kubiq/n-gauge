@@ -1308,7 +1308,7 @@ static esp_err_t handleDevicePage(httpd_req_t *r) {
     // Its own form: a file upload is multipart, the settings above are not.
     "<form method='POST' action='/update' enctype='multipart/form-data'>"
     "<fieldset><legend>Firmware</legend>"
-    "<p class='sub'>Running: built %s (%s).%s</p>"
+    "<p class='sub'>Running: built %s.%s</p>"
     "<input type='file' name='fw' accept='.bin' required>"
     "<button type='submit'>Update firmware</button>"
     "<p class='sub'>Pick car_gauge_v1.ino.bin. Takes ~30-60 s, then the gauge "
@@ -1331,7 +1331,7 @@ static esp_err_t handleDevicePage(httpd_req_t *r) {
     "<p class='sub'>Log encryption: %s</p>"
     "<script>%s</script>",
     htmlEscape(settings.apSsid),
-    ota_build(), ota_hash(),
+    ota_build(),                     // its commit is the name: one hash, not two (2026-11-11)
     ota_rolled_back() ? " <b>An update was rolled back</b> - this is the previous firmware." : "",
     ipText.c_str(),                  // the hint under the Firmware form
     logKeyText(),
