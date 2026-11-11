@@ -36,9 +36,14 @@
 #define UP_MAX_MIN_TOP      60
 #define UP_HTTP_MS       10000
 // A failed try (no hotspot yet, no answer) is tried again this much later,
-// up to UP_TRIES per wake.
-#define UP_RETRY_MS     300000
-#define UP_TRIES             3
+// up to UP_TRIES per wake. A minute (asked 2026-11-11; was 5 min, 3
+// tries): the garage's signal fails the tunnel's handshake, and leaving it
+// takes about a minute - by the third try at 5 min apart the phone's
+// hotspot, up ~10 min after the car starts, was gone. A try takes ~1-2
+// min itself (a join, the 30 s handshake wait), so 8 cover those 10 min
+// and a little more; a failed one costs a few KB of mobile data.
+#define UP_RETRY_MS      60000
+#define UP_TRIES             8
 #define UP_CHUNK          4096   // a card read, under the lock (internal: SD DMA)
 #define UP_PLAN_MAX    (48 * 1024)
 #define UP_TASK_STACK     8192
