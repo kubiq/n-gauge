@@ -11,7 +11,7 @@ import { cleanGpx } from './gpx-share';
 import { readLogText } from './logtext';
 import { inboxFile, loadInbox, loadLogsFolder, saveLogsFolder } from './store';
 import { tripFiles } from './trip-cache';
-import { isGpxName, isVboName, plainName } from './trips';
+import { isGpxName, isVboName, plainName, stampOf } from './trips';
 
 /**
  * The track sessions' .vbo files the phone holds. Not drives, so not in the
@@ -120,10 +120,17 @@ async function logsFolder(ask: boolean): Promise<{ target: Directory; there: Map
  * Every log "Save all to a folder" takes: each drive's GPX and CSV, the
  * track sessions' .vbo files and the pod's sleep and boot logs.
  */
-export function allLogNames(): string[] {
+// `since` (ms): only the drives and track sessions started then or later
+// (asked 2026-11-12: all of them, 500 MB, took long) - an undated one counts
+// as old. The gauge's own text logs (boot, sleep) always: small, and current.
+export function allLogNames(since?: number): string[] {
+  const recent = (start: number | null) => since === undefined || (start !== null && start >= since);
   return [
-    ...tripFiles().flatMap((t) => [t.gpx, t.csv]).filter((n): n is string => !!n),
-    ...trackLogNames(),
+    ...tripFiles()
+      .filter((t) => recent(t.start))
+      .flatMap((t) => [t.gpx, t.csv])
+      .filter((n): n is string => !!n),
+    ...trackLogNames().filter((n) => recent(stampOf(n))),
     ...podTextLogNames(),
   ];
 }

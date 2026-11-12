@@ -142,13 +142,21 @@ export default function TripsScreen() {
     }, [landed, rerun, syncing, opened]),
   );
 
-  const saveAll = async () => {
+  // All of them, or the last week's (asked 2026-11-12: all were 500 MB and
+  // took long - and saving again is mostly for what is new).
+  const saveAll = () =>
+    Alert.alert(t('Save to a folder'), t('Which logs?'), [
+      { text: t('Cancel'), style: 'cancel' },
+      { text: t('All'), onPress: () => save() },
+      { text: t('Last 7 days'), onPress: () => save(Date.now() - 7 * 24 * 3600 * 1000) },
+    ]);
+  const save = async (since?: number) => {
     setSaving(true);
     try {
       // Read now, not from `trips`: the header's ⋮ keeps the function it was
       // given when it last updated (the effect below), and so its list - drives
       // synced since were missing, and "Save all" said all was already there.
-      const r = await saveLogsToFolder(allLogNames(), setStatus);
+      const r = await saveLogsToFolder(allLogNames(since), setStatus);
       setStatus(null);
       // Done is a toast, like the sync's messages (asked 2026-10-24); files
       // left out keep the box - their names are a list to read.
@@ -182,7 +190,7 @@ export default function TripsScreen() {
         />
       ),
     });
-  }, [navigation, hasTrips, saving]);
+  }, [navigation, hasTrips, saving]); // eslint-disable-line react-hooks/exhaustive-deps -- saveAll reads the list itself
 
   // Rows with their summaries; restart fragments and blips hidden (isStub),
   // with a line saying how many - nothing just disappears.
