@@ -105,6 +105,14 @@ arduino-cli compile --warnings default --fqbn "$FQBN" --output-dir "$OUT" "${BUI
 # outputs are $OUT, separate per variant: the copy goes.
 rm -rf "$REPO/$SKETCH/build"
 echo "==> Image: ${OUT#"$REPO"/}/$NAME.ino.bin"
+# Its ELF kept by commit, for a crash the boot log names (crashrec.h): its
+# addresses mean something only against the very build that crashed.
+# addr2line: ~/.arduino15/packages/esp32/tools/esp-x32/*/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e <elf> <addr>...
+if [ "${BENCH:-0}" != "1" ]; then
+  mkdir -p "$REPO/.build/elf"
+  ELF_NAME="$(echo "$STAMP" | awk '{print $3}')"
+  cp "$OUT/$NAME.ino.elf" "$REPO/.build/elf/$NAME-$ELF_NAME.elf"
+fi
 
 [ "${2:-}" = "flash" ] || { echo "==> Not flashing (pass 'flash' to upload)"; exit 0; }
 

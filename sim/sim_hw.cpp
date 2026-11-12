@@ -151,6 +151,11 @@ void upload_task(uint32_t) {}
 bool upload_holds_radio() { return false; }
 bool upload_busy() { return false; }
 bool upload_configured() { return false; }      // the AP up as before, always
+void upload_give_way(bool) {}
+uint8_t upload_last_close_step() { return 0; }
+// No panics to record on a PC.
+void crashrec_init() {}
+const char *crashrec_last() { return ""; }
 // The status screen, as a gauge with a server set up would show it mid-way:
 // every line in use, for its layout.
 void upload_status(UpStatus *s) {

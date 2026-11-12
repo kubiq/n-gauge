@@ -196,7 +196,9 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
   } else {
     // The radio is the log upload's (upload.h): the AP comes once it is done
     // - minutes, not the seconds "starting" promised (2026-11-09).
-    lv_label_set_text(wifiIp, radioBusy ? "after the upload..." : "starting...");
+    // (Since 2026-11-12 the upload stops for this screen: "stopping the
+    // upload" is a second or two, not a wait for it to end.)
+    lv_label_set_text(wifiIp, radioBusy ? "stopping the upload..." : "starting...");
     lv_obj_set_style_text_color(wifiIp, radioBusy ? COL_OIL : COL_LINE, 0);
   }
 

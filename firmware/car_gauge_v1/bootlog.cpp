@@ -18,12 +18,14 @@
 #include "logger.h"
 #include "power.h"
 #include "taskwdt.h"      // taskwdt_last_culprit(): after a watchdog reset
+#include "crashrec.h"     // crashrec_last(): after a crash, where
+#include "upload.h"       // upload_last_close_step(): the tunnel close, before it
 
 void bootlog_task(uint32_t now) {
   static bool written = false;
   static uint32_t fixesAt = 0;            // gps.fixes at BOOT_LOG_RATE_FROM_MS
   static bool haveFrom = false;
-  static char line[300] = "";             // made once; tried until it goes
+  static char line[480] = "";             // made once; tried until it goes - room for a crash's
   static uint32_t triedAt = 0;
   if (written || now < BOOT_LOG_RATE_FROM_MS) return;
   if (!haveFrom) { haveFrom = true; fixesAt = gps.fixes; return; }
@@ -60,6 +62,20 @@ void bootlog_task(uint32_t now) {
   if (*wdt) {
     const size_t n = strlen(line);
     snprintf(line + n, sizeof(line) - n, " | wdt:%s", wdt);
+  }
+  // After a crash, where (crashrec.cpp) - and how far the upload's tunnel
+  // close got, if it was in one (upload.cpp): both crashes of 2026-11-12
+  // came closing it.
+  const char *cr = crashrec_last();
+  if (*cr) {
+    size_t n = strlen(line);
+    snprintf(line + n, sizeof(line) - n, " | crash: %s", cr);
+    // The step the last tunnel close reached (6: it finished) - from
+    // before this crash's reset, kept in RTC memory by the library.
+    if (const uint8_t wgStep = upload_last_close_step()) {
+      n = strlen(line);
+      snprintf(line + n, sizeof(line) - n, " | wgclose: step %u of 6", wgStep);
+    }
   }
   Serial.printf("[..] boot log: %s\n", line);
   triedAt = now;

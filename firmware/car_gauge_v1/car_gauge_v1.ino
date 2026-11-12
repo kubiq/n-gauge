@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include "esp_task_wdt.h"
 #include "taskwdt.h"      // the background tasks are watched too
+#include "crashrec.h"     // where a crash was, for the next boot's line
 #include "lvgl.h"
 #include "config.h"
 #include "bsp.h"
@@ -89,6 +90,7 @@ static void bootTimingsPrint() {
 }
 
 void setup() {
+  crashrec_init();     // first: a crash from here on says where (crashrec.h)
   ram_begin();         // the baseline for what each part below takes (ramlog.h)
   Serial.begin(115200);
   // Why we rebooted. Distinguishes our own faults (PANIC / TASK_WDT / BROWNOUT)
@@ -349,10 +351,10 @@ static void faultsTask() {
   uint8_t faults = podstate().faults;
   // And a phone on the WiFi, in blue below any fault (ui.h, FAULT_PHONE).
   if (web_clients() > 0) faults |= FAULT_PHONE;
-  // Not the CAN one over the screen saver: it is up because the car is
-  // silent - a parked wake that has heard nothing yet - and a red rim round
-  // the dim badge only alarms (2026-11-12).
-  if (ui_current_view() == VIEW_SAVER) faults &= (uint8_t)~FAULT_CAN;
+  // Not the CAN one, on any screen (asked 2026-11-12): a red rim for "not
+  // connected to CAN bus" came with every parked wake that had heard
+  // nothing yet. It is on the status screen instead (statusTask).
+  faults &= (uint8_t)~FAULT_CAN;
   if (bench_no_rim()) faults = 0;
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }
@@ -409,6 +411,14 @@ static void gaugesTask(uint32_t now) {
     UpStatus u;
     upload_status(&u);
     ui_update_status(u.tone, u.head, u.detail, u.last, u.fw);
+    // And the car's link - "not connected to CAN bus" here, not as a rim
+    // over every screen (2026-11-12).
+    const PodState &ps = podstate();
+    ui_update_status_car((ps.faults & PS_FAULT_CAN) ? 2 : ps.car == PS_CAR_OFF ? 0 : 1,
+                         (ps.faults & PS_FAULT_CAN) ? "not connected to CAN bus"
+                         : ps.car == PS_CAR_RUNNING ? "car: engine running"
+                         : ps.car == PS_CAR_ON      ? "car: talking"
+                                                    : "car: silent");
   }
 }
 
@@ -595,6 +605,10 @@ static void apTask(uint32_t now) {
   if (ui_current_view() == VIEW_WIFI || web_clients() > 0) askedAt = now ? now : 1;
   const bool onlyAsked = settings.apOnScreen && upload_configured();
   const bool asked = askedAt && !calc_elapsed(now, askedAt, AP_LINGER_MS);
+  // Asked for, the WiFi wins over the log upload, whatever the setting: a
+  // running one stops, none starts meanwhile (asked 2026-11-12 - the WiFi
+  // screen sat on "after the upload..." through a garage's failed tries).
+  upload_give_way(asked);
 #if AP_DRIVE_OFF
   // The gauge's state (podstate.h): down while driving, by the car's own
   // speed - the GPS's only when the car is silent. By the GPS alone it

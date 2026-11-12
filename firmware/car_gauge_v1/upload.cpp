@@ -11,6 +11,7 @@
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>    // the app slot's size: the most a firmware may be
 #include <esp_random.h>
+#include <esp_system.h>     // esp_reset_reason: no upload in a wake begun by a crash
 #include <lwip/dns.h>    // dns_setserver: the server's name by public resolvers
 #include <lwip/tcpip.h>  // LOCK_TCPIP_CORE around it
 #include <mbedtls/base64.h>
@@ -114,6 +115,16 @@ static void getStr(Preferences &p, const char *k, char *out, size_t n) {
 extern volatile uint32_t wg_end_step;
 static uint8_t endStepSeen = 0;         // printed from upload_task, after USB is up
 
+// The gauge's own WiFi is asked for (upload_give_way): every wait in the
+// upload stops on it, and it ends with UP_STOPPED - not a failed try.
+static volatile bool giveWay = false;
+#define UP_STOPPED "stopped for the gauge's WiFi"
+
+// No upload in a wake that began with a crash (2026-11-12): two in a row
+// came closing a failed upload's tunnel, and each fresh boot tried again -
+// a loop holding the radio, the gauge's WiFi never up.
+static bool afterCrash = false;
+
 // ---- the result, for /api/upload and the boot log --------------------------
 struct UpResult {
   uint32_t at;                        // epoch s, 0 = none yet / no clock
@@ -137,6 +148,8 @@ static void saveLast() {
 void upload_init() {
   if ((wg_end_step & 0xFFFFFFF0u) == 0x57470000u) endStepSeen = wg_end_step & 0xF;
   wg_end_step = 0;
+  afterCrash = esp_reset_reason() == ESP_RST_PANIC;
+  if (afterCrash) Serial.println(F("[..] upload: none this wake - it began with a crash"));
   memset(&cfg, 0, sizeof(cfg));
   cfg.wgPort = 51820;
   cfg.maxMin = UP_MAX_MIN_DEFAULT;
@@ -299,6 +312,7 @@ class CardStream : public Stream {
   bool fill() {
     if (pos_ < have_) return true;
     if (!left_ || failed_) return false;
+    if (giveWay) { failed_ = true; return false; }   // a file mid-way stops too
     size_t got;
     {
       LoggerSdLock lock(SD_LOCK_WEB_MS);
@@ -565,7 +579,7 @@ static bool nextFile(char *name, size_t n, uint32_t *offset) {
   xSemaphoreTake(work.lock, portMAX_DELAY);
   bool got = false;
   const String &todo = *work.todo;
-  while (!work.stop && !got && work.from < (int)todo.length() &&
+  while (!work.stop && !giveWay && !got && work.from < (int)todo.length() &&
          (int32_t)(millis() - work.deadline) < 0) {
     int nl = todo.indexOf('\n', work.from);
     if (nl < 0) nl = todo.length();
@@ -645,7 +659,8 @@ static void sendAll(const UpConfig &c, const String &todo, uint32_t t0, UpResult
   vSemaphoreDelete(work.lock);
   r.files = work.files;
   r.bytes = work.bytes;
-  if (work.err[0]) finish(r, t0, false, work.err);
+  if (giveWay) finish(r, t0, false, UP_STOPPED);
+  else if (work.err[0]) finish(r, t0, false, work.err);
   else if (work.from < (int)todo.length()) finish(r, t0, false, "time limit - the rest goes next time");
   else finish(r, t0, true, "");
 }
@@ -816,6 +831,7 @@ static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *b
       uint32_t lastData = millis();
       while (got < size && millis() - lastData < UP_HTTP_MS) {
         if ((int32_t)(millis() - fwDeadlineMs) >= 0) { err = "time limit"; break; }
+        if (giveWay) { err = UP_STOPPED; break; }
         const int avail = s->available();
         if (avail <= 0) {
           if (!s->connected()) break;
@@ -848,7 +864,7 @@ static const char *downloadFirmware(const UpConfig &c, uint32_t size, uint8_t *b
   // Cut short, it stays for next time. Refused, or of another size: what
   // the card holds is no good - from the start then.
   if (err[0] && strcmp(err, "download cut short") && strcmp(err, "server not reached") &&
-      strcmp(err, "card write failed") && strcmp(err, "time limit")) {
+      strcmp(err, "card write failed") && strcmp(err, "time limit") && strcmp(err, UP_STOPPED)) {
     SD_MMC.remove(OTA_SD_NEW);
     setPart(nullptr);
   }
@@ -977,7 +993,8 @@ static void uploadTask(void *arg) {
   WiFi.setHostname(WIFI_STA_HOSTNAME);
   WiFi.mode(WIFI_STA);
   WiFi.begin(c.ssid, c.pass);
-  while (WiFi.status() != WL_CONNECTED && millis() - t0 < UP_JOIN_MS) delay(250);
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < UP_JOIN_MS && !giveWay) delay(250);
+  if (giveWay) { finish(r, t0, false, UP_STOPPED); goto out; }
   if (WiFi.status() != WL_CONNECTED) { finish(r, t0, false, "no hotspot"); goto out; }
   Serial.printf("[..] upload: joined the hotspot in %lu ms, RSSI %d\n",
                 (unsigned long)(millis() - t0), WiFi.RSSI());
@@ -1019,7 +1036,8 @@ static void uploadTask(void *arg) {
       step = STEP_SERVER;
       const uint32_t td = millis();
       bool resolved = false;
-      while (!(resolved = resolveServer(c.wgDns)) && millis() - td < UP_HANDSHAKE_MS) delay(1000);
+      while (!giveWay && !(resolved = resolveServer(c.wgDns)) && millis() - td < UP_HANDSHAKE_MS) delay(1000);
+      if (giveWay) { finish(r, t0, false, UP_STOPPED); goto out; }
       if (!resolved) {
         finish(r, t0, false, wg.is_peer_up() ? "the server's name did not resolve" : "no handshake from the router");
         goto out;
@@ -1035,13 +1053,14 @@ static void uploadTask(void *arg) {
     step = STEP_PLAN;
     const uint32_t tw = millis();
     int code = -1;
-    while (millis() - tw < UP_HANDSHAKE_MS) {
+    while (millis() - tw < UP_HANDSHAKE_MS && !giveWay) {
       code = askPlan(c, plan, planLen, todo, 5000);
       Serial.printf("[..] upload: %u logs on the card, the server through the tunnel -> %d after %lu ms\n",
                     onCard, code, (unsigned long)(millis() - tw));
       if (code > 0) break;
       delay(2000);
     }
+    if (giveWay) { finish(r, t0, false, UP_STOPPED); goto out; }
     if (code != 200) {
       // No answer at all: did the router even do the handshake? Four
       // "server not reached" in a row (2026-11-07, hotspot on mobile data)
@@ -1062,7 +1081,7 @@ static void uploadTask(void *arg) {
   // Then a new firmware, with the time the logs left (2026-11-11 - first
   // until then): a download the garage's mobile signal cut off took the
   // logs with it. Cut off now, it goes on from there next time.
-  if (r.ok) {
+  if (r.ok && !giveWay) {
     fwDeadlineMs = t0 + c.maxMin * 60000UL;
     fetchFirmware(c, buf, fwNote, sizeof(fwNote));
   }
@@ -1097,6 +1116,10 @@ void upload_now() {
   retryAtMs = 0;
 }
 
+uint8_t upload_last_close_step() { return endStepSeen; }
+
+void upload_give_way(bool yes) { giveWay = yes; }
+
 bool upload_holds_radio() { return state != UP_IDLE; }
 bool upload_busy() { return state != UP_IDLE; }
 bool upload_configured() { return configured(); }
@@ -1127,6 +1150,8 @@ void upload_status(UpStatus *s) {
     strlcpy(s->detail, detail, sizeof(s->detail));
   };
   if (!configured()) return say(0, "Not set up", "the app's Home server card");
+  if (afterCrash) return say(3, "Off", "this wake began with a crash");
+  if (giveWay && state == UP_IDLE) return say(0, "Waiting", "the gauge's WiFi is in use");
   if (state == UP_WAIT_AP) return say(1, "Starting", "the gauge's WiFi goes off for it");
   if (state == UP_RUNNING) {
     char d[64];
@@ -1168,15 +1193,22 @@ void upload_status(UpStatus *s) {
 
 void upload_task(uint32_t now) {
   static UpConfig taskCfg;            // the task's copy: /save may change cfg
-  if (endStepSeen && now > 10000) {
+  static bool stepSaid = false;       // kept for the boot line (upload_last_close_step)
+  if (endStepSeen && !stepSaid && now > 10000) {
+    stepSaid = true;
     Serial.printf("[..] upload: the last tunnel close reached step %u of 6\n", endStepSeen);
-    endStepSeen = 0;
   }
   if (state == UP_RUNNING) {
     if (!taskDone) return;
     state = UP_IDLE;                  // the radio goes back to the AP
     saveLast();                       // for the app, after the gauge has slept
-    if (last.ok || !strncmp(last.msg, "time limit", 10)) {
+    if (!strcmp(last.msg, UP_STOPPED)) {
+      // Not a failed try: the gauge's WiFi was wanted. Again once it is not
+      // (upload_give_way), a minute on.
+      retryAtMs = now + UP_RETRY_MS;
+      if (!triesFailed) triesFailed = 1;   // so the retry time holds
+      Serial.println(F("[..] upload: stopped for the gauge's WiFi"));
+    } else if (last.ok || !strncmp(last.msg, "time limit", 10)) {
       doneThisWake = true;
     } else if (++triesFailed >= UP_TRIES) {
       doneThisWake = true;
@@ -1188,6 +1220,7 @@ void upload_task(uint32_t now) {
     return;
   }
   if (state == UP_WAIT_AP) {
+    if (giveWay) { state = UP_IDLE; return; }   // asked for the WiFi meanwhile: not now
     if (web_is_up()) return;          // apTask takes it down: it sees the hold
     taskCfg = cfg;
     taskDone = false;
@@ -1198,7 +1231,8 @@ void upload_task(uint32_t now) {
     }
     return;
   }
-  if (doneThisWake) return;
+  if (doneThisWake || afterCrash) return;
+  if (giveWay && !requested) return;    // the gauge's WiFi first
   if (triesFailed && (int32_t)(now - retryAtMs) < 0 && !requested) return;
   // The engine running, a valid clock, the card in and the gauge's own, and
   // nobody on the AP. Or the bench says now - and is told what stops it, once.

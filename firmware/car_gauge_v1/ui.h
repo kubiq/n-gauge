@@ -137,6 +137,8 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
 // "" hides either.
 void ui_update_status(uint8_t tone, const char *head, const char *detail,
                       const char *last, const char *fw);
+// Its top line: the car's link. tone 0 silent, 1 talking, 2 no CAN bus (red).
+void ui_update_status_car(uint8_t tone, const char *text);
 
 // The screen saver (ui_saver.cpp): a press on it, once - the gauges back.
 bool ui_take_saver_touch();

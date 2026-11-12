@@ -44,6 +44,16 @@ void upload_now();
 // A hotspot and a server are set up (the app's Home server card).
 bool upload_configured();
 
+// How far the last tunnel close got before this boot (1-6, 6 = finished;
+// 0 = none known) - for the boot line after a crash.
+uint8_t upload_last_close_step();
+
+// The gauge's own WiFi is asked for (apTask: its screen shown, a phone on
+// it): a running upload stops at once, and none starts while this holds -
+// the WiFi screen always brings the AP up (asked 2026-11-12). From loop(),
+// every pass.
+void upload_give_way(bool yes);
+
 // The status screen (ui_update_status): where the upload is, in words.
 // From loop(); the task's step and counts are read as they are - a number
 // a step old at worst.

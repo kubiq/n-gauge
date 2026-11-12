@@ -73,6 +73,9 @@ jobs:
           ESPTOOL="$(find ~/.arduino15/packages/esp32/tools/esptool_py -name 'esptool' -type f | sort -V | tail -1)"
           mkdir -p dist
           cp "$OUT/car_gauge_v1.ino.bin" dist/car_gauge_v1.bin
+          # The ELF, for a crash the boot log names (crashrec.h) - in the
+          # artifact, not the release.
+          mkdir -p elf && cp "$OUT/car_gauge_v1.ino.elf" "elf/car_gauge_v1-$(git rev-parse --short HEAD).elf"
           "$ESPTOOL" --chip esp32s3 merge-bin -o dist/car_gauge_v1-full.bin \
             --flash-mode qio --flash-size 16MB \
             0x0 "$OUT/car_gauge_v1.ino.bootloader.bin" \
@@ -95,6 +98,10 @@ jobs:
           name: firmware
           path: dist/
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-elf
+          path: elf/
 
   # The APK, signed with the app's own key (mobile/plugins/
   # with-release-signing.js) from the secrets APP_KEYSTORE (the keystore,
