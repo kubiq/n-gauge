@@ -94,6 +94,7 @@ lv_obj_t *ui_build_track();    // ui_track.cpp:  lap timer
 lv_obj_t *ui_build_wifi();     // ui_wifi.cpp
 lv_obj_t *ui_build_status();   // ui_status.cpp: the upload and update
 lv_obj_t *ui_build_sync();     // ui_sync.cpp:   the phone pulling the logs
+lv_obj_t *ui_build_saver();    // ui_saver.cpp:  the screen saver
 void ui_build_notice();        // ui_notice.cpp: the rim, on lv_layer_top
 
 // ---- across files ------------------------------------------------------------

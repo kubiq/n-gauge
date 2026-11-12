@@ -349,6 +349,10 @@ static void faultsTask() {
   uint8_t faults = podstate().faults;
   // And a phone on the WiFi, in blue below any fault (ui.h, FAULT_PHONE).
   if (web_clients() > 0) faults |= FAULT_PHONE;
+  // Not the CAN one over the screen saver: it is up because the car is
+  // silent - a parked wake that has heard nothing yet - and a red rim round
+  // the dim badge only alarms (2026-11-12).
+  if (ui_current_view() == VIEW_SAVER) faults &= (uint8_t)~FAULT_CAN;
   if (bench_no_rim()) faults = 0;
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }
@@ -460,7 +464,7 @@ static void syncTask(uint32_t now) {
     back = ui_current_view();
     // Not back to the WiFi screen: it is what the phone joined from, and
     // it would only count down to the gauges again.
-    if (back == VIEW_WIFI || back == VIEW_SYNC) back = (GaugeView)settings.lastView;
+    if (back == VIEW_WIFI || back == VIEW_SYNC || back == VIEW_SAVER) back = (GaugeView)settings.lastView;
     ui_take_sync_touch();               // a stale press does not end it at once
     ui_set_view(VIEW_SYNC);
     shown = true;
@@ -470,6 +474,38 @@ static void syncTask(uint32_t now) {
     if (ui_current_view() == VIEW_SYNC) ui_set_view(ui_home_view());
   }
   if (shown) ui_update_sync((uint16_t)(files - files0), bytes - bytes0);
+}
+
+// ---- the screen saver ----
+// With the car silent (podstate: no frame for a while - ignition off, a
+// parked wake, no answer yet) the gauges have nothing to show and read "--".
+// After SAVER_AFTER_MS untouched a gauge screen gives way to the screen
+// saver (ui_saver.cpp): the N badge, dimmed and still (asked 2026-11-12). A
+// touch brings the gauges back - empty - for as long again; the car talking
+// takes it away at once. Not over the WiFi, status or sync screens, nor
+// while the boot splash holds (it waits for the car itself), nor on the
+// bench (a PC on USB: the gauges are what is being looked at).
+static void saverTask(uint32_t now) {
+  (void)now;
+  static GaugeView back = VIEW_OIL;
+  const GaugeView v = ui_current_view();
+  const bool silent = podstate().car == PS_CAR_OFF;
+  if (v == VIEW_SAVER) {
+    if (ui_take_saver_touch() || !silent) {
+      ui_set_view(back);
+      if (ui_current_view() == VIEW_SAVER) ui_set_view(ui_home_view());
+    }
+    return;
+  }
+  const bool gauges = v != VIEW_WIFI && v != VIEW_STATUS && v != VIEW_SYNC;
+#if BOOT_ANIM_MS > 0
+  if (ui_boot_splash_up()) return;
+#endif
+  if (gauges && silent && !usbdisk_host_connected() && ui_idle_ms() >= SAVER_AFTER_MS) {
+    back = v;
+    ui_take_saver_touch();              // a stale press does not end it at once
+    ui_set_view(VIEW_SAVER);
+  }
 }
 
 // ---- remember the screen across restarts ----
@@ -658,6 +694,7 @@ void loop() {
     // the car (up when awake, down while driving). The button only wakes the
     // gauge from deep sleep (power.cpp), like the door opening does.
     syncTask(now);              // "Syncing with the phone" while it pulls the logs
+    saverTask(now);             // the dim badge in place of gauges with no car
     viewTask(now);
 
     rtc_task();                 // keep the PCF85063 in step with GNSS time

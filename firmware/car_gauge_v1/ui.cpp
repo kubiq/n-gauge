@@ -22,6 +22,7 @@ void ui_init() {
   scr[VIEW_WIFI]   = ui_build_wifi();
   scr[VIEW_STATUS] = ui_build_status();
   scr[VIEW_SYNC]   = ui_build_sync();
+  scr[VIEW_SAVER]  = ui_build_saver();
 
   // Readouts must not be interactive, but LVGL makes arcs AND plain objects
   // clickable by default (lv_arc.c: lv_obj_add_flag(CLICKABLE), lv_obj.c:
@@ -89,6 +90,8 @@ void ui_step_view(int delta) {
 }
 
 GaugeView ui_current_view()  { return s_view; }
+
+uint32_t ui_idle_ms() { return lv_display_get_inactive_time(NULL); }
 
 bool ui_view_shown(GaugeView v) { return strchr(settings.views, '0' + v) != nullptr; }
 

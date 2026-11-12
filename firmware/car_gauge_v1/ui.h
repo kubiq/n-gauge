@@ -13,14 +13,15 @@
 // VIEW_WIFI is appended rather than inserted, so a lastView already stored in
 // NVS keeps meaning the same screen.
 enum GaugeView { VIEW_OIL = 0, VIEW_COOLANT, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
-                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_SYNC, VIEW_COUNT };
+                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_SYNC, VIEW_SAVER, VIEW_COUNT };
 // VIEW_TRACK appended for the same reason as VIEW_WIFI: lastView is stored in
 // NVS as a number, so inserting would silently change what old values mean.
 // VIEW_STATUS (2026-11-09), the upload's status, likewise - and not in
 // VIEW_ORDER_DEFAULT: hidden until the app's screen order shows it.
 // VIEW_SYNC (2026-11-09): "Syncing with the phone", shown by itself while
 // the phone pulls the logs (syncTask in the sketch) - never in the cycle,
-// never saved as the last view.
+// never saved as the last view. VIEW_SAVER (2026-11-12) likewise: the
+// screen saver (saverTask), in place of gauges with nothing to show.
 
 // Wheel order matches the TPMS payload's four-byte-per-wheel slots (pressure at
 // 4 + i*4, temperature at 5 + i*4). Front vs rear is confirmed; left vs right
@@ -136,6 +137,11 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
 // "" hides either.
 void ui_update_status(uint8_t tone, const char *head, const char *detail,
                       const char *last, const char *fw);
+
+// The screen saver (ui_saver.cpp): a press on it, once - the gauges back.
+bool ui_take_saver_touch();
+// How long since the panel was last touched, ms (LVGL's own count).
+uint32_t ui_idle_ms();
 
 // The sync screen (ui_sync.cpp): what this sync has sent so far.
 void ui_update_sync(uint16_t files, uint32_t bytes);
