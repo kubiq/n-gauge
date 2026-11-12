@@ -153,6 +153,7 @@ the wrong turns, are in [DECISIONS.md](DECISIONS.md).
 | [tests](tests) | host tests of the firmware's pure logic |
 | [hardware](hardware), [mechanical](mechanical) | carrier PCB, 3D-printed parts |
 | [DECISIONS.md](DECISIONS.md) | why things are the way they are |
+| [docs/flows.md](docs/flows.md) | how it decides, as diagrams: the logs' way, the upload, the WiFi, updates, screens, sleep |
 | [PROTOTYPE_GUIDE.md](PROTOTYPE_GUIDE.md), [PRINTING_GUIDE.md](PRINTING_GUIDE.md) | wiring the prototype; printing the pod |
 
 ## Building
