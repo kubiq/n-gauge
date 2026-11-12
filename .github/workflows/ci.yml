@@ -6,8 +6,8 @@
 # - app: mobile/'s typecheck, lint and tests.
 # - release (a tag v*, e.g. v2026.11.09): the car firmware as the phone's OTA
 #   and /firmware.bin take it, and a full image for a first flash over USB,
-#   with the commits since the last tag. The APK is built locally (not here:
-#   it would need the app's signing key as a secret).
+#   with the commits since the last tag, and the APK.
+# - apk: the Android app, signed with the app's own key from secrets.
 #
 # The firmware carries the update signing key's public half from the
 # repository variable FW_SIGN_PUB (scripts/build.sh) - public, not a secret.
@@ -96,6 +96,56 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The APK, signed with the app's own key (mobile/plugins/
+  # with-release-signing.js) from the secrets APP_KEYSTORE (the keystore,
+  # base64) and APP_KEYSTORE_PASSWORD - the same key as the owner's local
+  # build, so it installs as an update over it. Without them (a fork): the
+  # debug key. arm64-v8a only, as scripts/build-apk.sh builds it.
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                 # versionCode is the commit count (app.config.ts)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json') }}
+      - run: npm ci
+        working-directory: mobile
+      - name: Signing key
+        env:
+          APP_KEYSTORE_B64: ${{ secrets.APP_KEYSTORE }}
+        run: |
+          if [ -z "$APP_KEYSTORE_B64" ]; then echo "no APP_KEYSTORE secret - signed with the debug key"; exit 0; fi
+          echo "$APP_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/app-signing.jks"
+          echo "APP_KEYSTORE=$RUNNER_TEMP/app-signing.jks" >> "$GITHUB_ENV"
+      - name: APK
+        env:
+          APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
+        run: |
+          APK_JAVA_HOME="$JAVA_HOME" ./scripts/build-apk.sh
+          mkdir -p dist && cp mobile/android/app/build/outputs/apk/release/app-release.apk "dist/n-gauge-$(git rev-parse --short HEAD).apk"
+          rm -f "$RUNNER_TEMP/app-signing.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/
+          if-no-files-found: error
+
   app:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -116,7 +166,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [firmware, app]
+    needs: [firmware, apk, app]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -129,6 +179,10 @@ jobs:
         with:
           name: firmware
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: dist
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,8 +190,9 @@ jobs:
         run: |
           PREV="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
           {
-            echo "Firmware for the gauge, built from $(git rev-parse --short "$TAG")."
+            echo "The gauge's firmware and the app, built from $(git rev-parse --short "$TAG")."
             echo
+            echo "- \`n-gauge-*.apk\`: the Android app (arm64), signed with the app's own key - it updates an install of the same."
             echo "- \`car_gauge_v1.bin\`: an update - the app fetches it by itself, or from the gauge's settings page, or as /firmware.bin on the card."
             echo "- \`car_gauge_v1.bin.sig\`, \`latest\`: its signature, and its app hash, size and build time - what the app checks it by."
             echo "- \`car_gauge_v1-full.bin\`: a first flash over USB: \`esptool --chip esp32s3 write-flash 0x0 car_gauge_v1-full.bin\`."
