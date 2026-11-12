@@ -1,4 +1,5 @@
 import { AboutCard } from '@/components/about-card';
+import { BackupCard } from '@/components/backup-card';
 import { ConnectionCard } from '@/components/connection-card';
 import { LanguageCard } from '@/components/language-card';
 import { LogKeyCard } from '@/components/log-key-card';
@@ -22,6 +23,7 @@ export default function SettingsScreen() {
       <LogKeyCard />
       <LogsFolderCard />
       <PlacesCard />
+      <BackupCard />
       <AboutCard />
     </Screen>
   );

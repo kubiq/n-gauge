@@ -33,6 +33,20 @@ export const app: Record<string, string> = {
   'older firmware': 'starší firmware',
   '{build}, read {when}': '{build}, zjištěno {when}',
   'Look for a newer gauge firmware': 'Hledat novější firmware budíku',
+  'Backup': 'Záloha',
+  'Your places, drive names, fuel picks and settings, as one file - what reinstalling the app would lose. The drives come back by themselves, and the log key is in your password manager.':
+    'Vaše místa, názvy jízd, zvolená paliva a nastavení jako jeden soubor - to, co by přeinstalace aplikace smazala. Jízdy se vrátí samy a klíč k logům máte ve správci hesel.',
+  'Save a backup': 'Uložit zálohu',
+  'Restore from a backup': 'Obnovit ze zálohy',
+  'Save the backup': 'Uložit zálohu',
+  'Back up': 'Záloha',
+  'Restore': 'Obnovit',
+  'Restore the backup?': 'Obnovit zálohu?',
+  'From {when}. Your places, drive names, fuel picks and settings here are replaced by it.':
+    'Ze dne {when}. Vaše místa, názvy jízd, zvolená paliva a nastavení se jí nahradí.',
+  'Restored': 'Obnoveno',
+  'Close the app and open it again, so every screen reads it.':
+    'Zavřete aplikaci a otevřete ji znovu, aby ji načetly všechny obrazovky.',
   'Not while on the gauge’s WiFi - it has no internet.': 'Ne na WiFi budíku - ta nemá internet.',
   '{tag} downloaded and checked - install it in Gauge settings.':
     '{tag} stažena a ověřena - nainstalujte ji v Nastavení budíku.',
