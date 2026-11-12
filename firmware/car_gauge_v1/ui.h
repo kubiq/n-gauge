@@ -7,12 +7,13 @@
 
 // All views that exist. Which of them are actually reachable, and in what
 // order, is settings.views (set from the app; default VIEW_ORDER_DEFAULT).
-// VIEW_OIL shows oil AND coolant together (concentric arcs). VIEW_COOLANT is
-// retained only so the stored "last view" numbering doesn't shift; no screen
-// is built for it and ui_set_view rejects it.
+// VIEW_OIL shows oil AND coolant together (concentric arcs). Slot 1 was a
+// coolant screen of its own; since 2026-11-13 it is the analog clock: the
+// order is stored as one digit per view, and 1 was the last free digit - no
+// stored order or last view could hold it (settings_set_views dropped it).
 // VIEW_WIFI is appended rather than inserted, so a lastView already stored in
 // NVS keeps meaning the same screen.
-enum GaugeView { VIEW_OIL = 0, VIEW_COOLANT, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
+enum GaugeView { VIEW_OIL = 0, VIEW_CLOCK, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
                  VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_SYNC, VIEW_SAVER, VIEW_COUNT };
 // VIEW_TRACK appended for the same reason as VIEW_WIFI: lastView is stored in
 // NVS as a number, so inserting would silently change what old values mean.
@@ -139,6 +140,10 @@ void ui_update_status(uint8_t tone, const char *head, const char *detail,
                       const char *last, const char *fw);
 // Its top line: the car's link. tone 0 silent, 1 talking, 2 no CAN bus (red).
 void ui_update_status_car(uint8_t tone, const char *text);
+
+// The analog clock (ui_clock.cpp), local time. valid false: no clock yet -
+// the hands hidden. date: "Thu 13 Nov".
+void ui_update_clock(bool valid, int hour, int minute, int second, const char *date);
 
 // The screen saver (ui_saver.cpp): a press on it, once - the gauges back.
 bool ui_take_saver_touch();

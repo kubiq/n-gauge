@@ -18,6 +18,8 @@ export const SCREENS: { id: string; name: string }[] = [
   { id: WIFI, name: N_('WiFi') },
   // Not in the gauge's default order: hidden until switched on (2026-11-09).
   { id: '8', name: N_('Upload status') },
+  // Slot 1, the old coolant screen's (ui.h) - firmware from 2026-11-13 on.
+  { id: '1', name: N_('Clock') },
 ];
 
 export type ScreenItem = { id: string; name: string; on: boolean };

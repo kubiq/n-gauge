@@ -23,6 +23,7 @@ void ui_init() {
   scr[VIEW_STATUS] = ui_build_status();
   scr[VIEW_SYNC]   = ui_build_sync();
   scr[VIEW_SAVER]  = ui_build_saver();
+  scr[VIEW_CLOCK]  = ui_build_clock();
 
   // Readouts must not be interactive, but LVGL makes arcs AND plain objects
   // clickable by default (lv_arc.c: lv_obj_add_flag(CLICKABLE), lv_obj.c:

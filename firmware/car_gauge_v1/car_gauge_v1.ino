@@ -403,6 +403,19 @@ static void gaugesTask(uint32_t now) {
   }
   ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
                  web_clients(), upload_holds_radio());
+  // The clock (ui_clock.cpp): only while it shows, once a second.
+  if (ui_current_view() == VIEW_CLOCK) {
+    static time_t clockAt = 0;
+    const time_t t = time(nullptr);
+    if (t != clockAt) {
+      clockAt = t;
+      struct tm tm;
+      localtime_r(&t, &tm);
+      char date[24];
+      strftime(date, sizeof(date), "%a %d %b", &tm);
+      ui_update_clock(clock_valid(), tm.tm_hour, tm.tm_min, tm.tm_sec, date);
+    }
+  }
   // The status screen (ui_status.cpp): only while it shows, a few times a
   // second - the words are rebuilt each time.
   static uint32_t statusAt = 0;

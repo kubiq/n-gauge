@@ -319,11 +319,11 @@ void settings_save_view(uint8_t view) {
 }
 
 void settings_set_views(const char *ids) {
-  // Every view with a screen; VIEW_COOLANT has none (oil and coolant share
-  // VIEW_OIL), so it cannot be ordered in.
+  // Every view that can be ordered in - not the sync screen or the screen
+  // saver, which come and go by themselves.
   static const char valid[] = { '0' + VIEW_OIL, '0' + VIEW_BOOST, '0' + VIEW_GMETER,
                                 '0' + VIEW_TPMS, '0' + VIEW_GPS, '0' + VIEW_WIFI,
-                                '0' + VIEW_TRACK, '0' + VIEW_STATUS, '\0' };
+                                '0' + VIEW_TRACK, '0' + VIEW_STATUS, '0' + VIEW_CLOCK, '\0' };
   calc_view_order(ids ? ids : "", valid, '0' + VIEW_WIFI, settings.views, sizeof(settings.views));
 }
 
