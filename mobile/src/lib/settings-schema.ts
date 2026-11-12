@@ -44,6 +44,7 @@ export const SETTINGS: SettingDef[] = [
     group: 'Display',
   },
   { key: 'slide', json: 'slideNumbers', type: 'bool', lo: 0, hi: 1, label: N_('Numbers slide when they change'), group: 'Display' },
+  { key: 'clkSec', json: 'clockSeconds', type: 'bool', lo: 0, hi: 1, label: N_('Clock: second hand'), group: 'Display' },
   {
     key: 'womMg', json: 'motionWakeMg', type: 'u8', lo: 0, hi: 255, label: N_('Wake on motion'), unit: 'mg',
     hint: N_('0 = off. Below 30 is taken as 30.'), group: 'Power',

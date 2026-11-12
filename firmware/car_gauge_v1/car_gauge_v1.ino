@@ -403,17 +403,21 @@ static void gaugesTask(uint32_t now) {
   }
   ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
                  web_clients(), upload_holds_radio());
-  // The clock (ui_clock.cpp): only while it shows, once a second.
+  // The clock (ui_clock.cpp): only while it shows - once a second with the
+  // second hand, once a minute without (settings.clockSeconds).
   if (ui_current_view() == VIEW_CLOCK) {
     static time_t clockAt = 0;
+    static bool clockSecs = false;
     const time_t t = time(nullptr);
-    if (t != clockAt) {
-      clockAt = t;
+    const time_t tick = settings.clockSeconds ? t : t - t % 60;
+    if (tick != clockAt || settings.clockSeconds != clockSecs) {
+      clockAt = tick;
+      clockSecs = settings.clockSeconds;
       struct tm tm;
       localtime_r(&t, &tm);
       char date[24];
       strftime(date, sizeof(date), "%a %d %b", &tm);
-      ui_update_clock(clock_valid(), tm.tm_hour, tm.tm_min, tm.tm_sec, date);
+      ui_update_clock(clock_valid(), tm.tm_hour, tm.tm_min, tm.tm_sec, date, settings.clockSeconds);
     }
   }
   // The status screen (ui_status.cpp): only while it shows, a few times a

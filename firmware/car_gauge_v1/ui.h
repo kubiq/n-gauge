@@ -142,8 +142,8 @@ void ui_update_status(uint8_t tone, const char *head, const char *detail,
 void ui_update_status_car(uint8_t tone, const char *text);
 
 // The analog clock (ui_clock.cpp), local time. valid false: no clock yet -
-// the hands hidden. date: "Thu 13 Nov".
-void ui_update_clock(bool valid, int hour, int minute, int second, const char *date);
+// the hands hidden. date: "Thu 13 Nov". seconds: the second hand shown.
+void ui_update_clock(bool valid, int hour, int minute, int second, const char *date, bool seconds);
 
 // The screen saver (ui_saver.cpp): a press on it, once - the gauges back.
 bool ui_take_saver_touch();

@@ -91,21 +91,25 @@ lv_obj_t *ui_build_clock() {
   return s;
 }
 
-void ui_update_clock(bool valid, int hour, int minute, int second, const char *date) {
-  static int lastValid = -1;
-  if ((int)valid != lastValid) {
+void ui_update_clock(bool valid, int hour, int minute, int second, const char *date, bool seconds) {
+  static int lastValid = -1, lastSeconds = -1;
+  if ((int)valid != lastValid || (int)seconds != lastSeconds) {
     lastValid = valid;
+    lastSeconds = seconds;
     lv_obj_t *const shown[] = {hourH.line, minH.line, secH.line, dateL};
     for (lv_obj_t *o : shown) {
-      if (valid) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
-      else       lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+      // The second hand only when asked for (settings.clockSeconds).
+      if (valid && (o != secH.line || seconds)) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+      else                                      lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     }
     if (valid) lv_obj_add_flag(noClock, LV_OBJ_FLAG_HIDDEN);
     else       lv_obj_clear_flag(noClock, LV_OBJ_FLAG_HIDDEN);
   }
   if (!valid) return;
-  setHand(secH, second / 60.0f);
-  setHand(minH, (minute + second / 60.0f) / 60.0f);
+  if (seconds) setHand(secH, second / 60.0f);
+  // Without it, the minute hand on the minute (the caller calls once a
+  // minute then): no creep each second to show for it.
+  setHand(minH, (minute + (seconds ? second / 60.0f : 0.0f)) / 60.0f);
   setHand(hourH, ((hour % 12) + minute / 60.0f) / 12.0f);
   static char lastDate[24] = "";
   if (strncmp(lastDate, date, sizeof(lastDate) - 1)) {
