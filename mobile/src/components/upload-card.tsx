@@ -9,6 +9,7 @@ import { shortWhen } from '@/lib/format';
 import { loadHome, saveHome } from '@/lib/home';
 import { scheduleHomeTask } from '@/lib/home-task';
 import { getUpload, type PodUpload, saveSettings } from '@/lib/pod';
+import { saveGaugeUpload } from '@/lib/store';
 import { S, themed, useColors } from '@/theme';
 
 // The gauge's log upload (upload.h): as the car starts it joins the phone's
@@ -119,7 +120,10 @@ export function UploadCard() {
   };
   const apply = (u: PodUpload | null) => {
     setUp(u);
-    if (u) setForm(fromPod(u));
+    if (u) {
+      setForm(fromPod(u));
+      saveGaugeUpload(u);                 // for Gauge settings off the gauge's WiFi
+    }
   };
   useEffect(() => {
     let live = true;
@@ -156,6 +160,7 @@ export function UploadCard() {
         const u = await getUpload();
         setUp(u);
         if (u) {
+          saveGaugeUpload(u);
           const held = fromPod(u);
           setForm((f) => {
             if (!f) return f;

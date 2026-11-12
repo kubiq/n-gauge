@@ -94,6 +94,10 @@ export const gauge: Record<string, string> = {
   Track: 'Okruh',
   WiFi: 'Wi-Fi',
   Screens: 'Obrazovky',
+  'As last read, {when} - the gauge may have other values now. Connect to change them.':
+    'Naposledy načteno {when} - budík už může mít jiné hodnoty. Pro změny se připojte.',
+  on: 'zapnuto',
+  off: 'vypnuto',
   'The order a swipe goes through on the gauge. WiFi stays: it is the way to the phone.':
     'Pořadí, v jakém je budík projíždí přejetím. Wi-Fi zůstává: je to cesta k telefonu.',
   'Move up': 'Posunout nahoru',

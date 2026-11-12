@@ -12,10 +12,12 @@ import { useSync } from '@/hooks/use-sync';
 import { N_, t } from '@/i18n';
 import { clearReadyFw, loadReadyFw, type ReadyFw } from '@/lib/fw-download';
 import { isNewer } from '@/lib/fw-release';
-import { getLive, getSettings, type PodLive, saveSettings, setClock, uploadFirmware, zeroGmeter } from '@/lib/pod';
+import { shortWhen } from '@/lib/format';
+import { getLive, getSettings, type PodLive, type PodUpload, saveSettings, setClock, uploadFirmware, zeroGmeter } from '@/lib/pod';
 import { scanPodQr } from '@/lib/scan-qr';
+import { screenItems } from '@/lib/screens';
 import { checkValue, GROUP_TITLES, type PodSettings, type SettingDef, SETTINGS, saveForm } from '@/lib/settings-schema';
-import { saveGaugeFw } from '@/lib/store';
+import { loadGaugeFw, loadGaugeSnapshot, saveGaugeFw, saveGaugeSettings } from '@/lib/store';
 import { setMph } from '@/lib/units';
 import { S, themed, useColors } from '@/theme';
 
@@ -88,6 +90,7 @@ export default function GaugeSettingsScreen() {
     getSettings().then(
       (s) => {
         setOrig(s);
+        saveGaugeSettings(s);             // for this screen off its WiFi
         setEdit({});
         setErr(null);
         // The app reads speeds and distances as the gauge is set (units.ts);
@@ -163,6 +166,7 @@ export default function GaugeSettingsScreen() {
       setSaved(await saveSettings(body));
       const s = await getSettings();
       setOrig(s);
+      saveGaugeSettings(s);
       if (typeof s.mph === 'boolean') setMph(s.mph);
       setEdit((e) => {
         const left = { ...e };
@@ -268,7 +272,12 @@ export default function GaugeSettingsScreen() {
   const another = <Button title={t('Scan a different gauge')} kind="plain" onPress={scan} />;
 
   if (!connected) {
-    // The settings live on the gauge: nothing to show until it answers.
+    // The settings live on the gauge - but the last ones read are kept
+    // (store.ts GaugeSnapshot) and shown, read-only, until it answers
+    // (asked 2026-11-12: they could not be read without the gauge).
+    const snap = loadGaugeSnapshot();
+    const fw = loadGaugeFw();
+    const s = snap.settings;
     return (
       <Screen>
         <Card title={pod.state === 'connecting' ? t('Connecting…') : t('Not connected')}>
@@ -280,6 +289,38 @@ export default function GaugeSettingsScreen() {
           <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={() => pod.connect()} />
           {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
         </Card>
+        {s ? (
+          <>
+            <Note>
+              {t('As last read, {when} - the gauge may have other values now. Connect to change them.', {
+                when: shortWhen(snap.settingsAt ?? 0),
+              })}
+            </Note>
+            {fw ? (
+              <Card title={t('Gauge')}>
+                <Row label={t('Firmware')} value={fw.build} />
+              </Card>
+            ) : null}
+            {GROUPS.map((g) => (
+              <Card key={g} title={t(GROUP_TITLES[g])}>
+                {SETTINGS.filter((d) => d.group === g).map((d) => (
+                  <SettingRow key={d.key} d={d} value={s[d.json]} changed={false} onChange={() => {}} readOnly />
+                ))}
+              </Card>
+            ))}
+            {typeof s.views === 'string' ? (
+              <Card title={t('Screens')}>
+                <Note>
+                  {screenItems(s.views)
+                    .filter((i) => i.on)
+                    .map((i) => t(i.name))
+                    .join('  ·  ')}
+                </Note>
+              </Card>
+            ) : null}
+            {snap.upload ? <UploadSummary u={snap.upload} /> : null}
+          </>
+        ) : null}
         {another}
       </Screen>
     );
@@ -373,16 +414,51 @@ export default function GaugeSettingsScreen() {
   );
 }
 
+// The Home server card as last read, off the gauge's WiFi: what it is set to,
+// not the fields to change it - that needs the gauge.
+function UploadSummary({ u }: { u: PodUpload }) {
+  return (
+    <Card title={t('Home server')}>
+      <Row label={t('Phone hotspot')} value={u.ssid || t('not set up')} />
+      <Row label={t('Upload server')} value={u.url || t('not set up')} />
+      <Row label="WireGuard VPN" value={u.wgHost ? `${u.wgHost}:${u.wgPort}` : t('not set up')} />
+      {u.maxMin !== undefined ? <Row label={t('Time limit, minutes')} value={String(u.maxMin)} /> : null}
+      {u.autoUpdate !== undefined ? (
+        <Row label={t('Automatic firmware updates')} value={u.autoUpdate ? t('on') : t('off')} />
+      ) : null}
+      {u.last.at || u.last.msg ? (
+        <Row
+          label={t('Last upload')}
+          value={
+            u.last.ok
+              ? t('{files} files, {kb} KB, {when}', {
+                  files: u.last.files,
+                  kb: Math.round(u.last.bytes / 1024),
+                  when: u.last.at ? shortWhen(u.last.at * 1000) : '',
+                })
+              : u.last.msg
+          }
+          tone={u.last.ok ? 'good' : 'bad'}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
+// `readOnly`: the last values read, shown off the gauge's WiFi - nothing to
+// change there, a save needs the gauge.
 function SettingRow({
   d,
   value,
   changed,
   onChange,
+  readOnly = false,
 }: {
   d: SettingDef;
   value: string | number | boolean | undefined;
   changed: boolean;
   onChange: (v: string | boolean) => void;
+  readOnly?: boolean;
 }) {
   const C = useColors();
   const ui = useUi();
@@ -400,6 +476,7 @@ function SettingRow({
             return (
               <Pressable
                 key={o.value}
+                disabled={readOnly}
                 onPress={() => onChange(String(o.value))}
                 style={({ pressed }) => [ui.option, on && ui.optionOn, pressed && { opacity: 0.6 }]}>
                 <View style={[ui.radio, on && ui.radioOn]} />
@@ -419,11 +496,12 @@ function SettingRow({
         {d.hint ? <Text style={ui.note}>{t(d.hint)}</Text> : null}
       </View>
       {d.type === 'bool' ? (
-        <Switch value={!!value} onValueChange={onChange} trackColor={{ true: C.accent }} />
+        <Switch value={!!value} onValueChange={onChange} disabled={readOnly} trackColor={{ true: C.accent }} />
       ) : (
         <View style={styles.inputWrap}>
           <TextInput
-            style={styles.input}
+            editable={!readOnly}
+            style={[styles.input, readOnly && { color: C.dim }]}
             keyboardType={d.type === 'f32' ? 'decimal-pad' : 'number-pad'}
             value={value === undefined ? '' : String(value)}
             onChangeText={onChange}

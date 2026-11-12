@@ -12,7 +12,8 @@ import * as SecureStore from 'expo-secure-store';
 import { t } from '../i18n/index.ts';
 import { asFuel, type Fuel, type Fuels } from './fuel-grade';
 import { GPX_TAIL } from './gpx-share';
-import { type Downloader, downloadRange } from './pod';
+import { type Downloader, downloadRange, type PodUpload } from './pod';
+import type { PodSettings } from './settings-schema';
 import { isPodLog, type Known, type Pull } from './sync-plan';
 import type { WifiCreds } from './wifi-qr';
 
@@ -130,6 +131,29 @@ export function loadAutoSave(): boolean {
 export function saveAutoSave(on: boolean): void {
   if (on) autoSaveFile.write('1');
   else if (autoSaveFile.exists) autoSaveFile.delete();
+}
+
+// The gauge's settings as last read from it, for Gauge settings off its WiFi
+// (asked 2026-11-12: they could not be read without the gauge) - shown
+// read-only, with when. Each part as it was read; a newer read replaces it.
+const gaugeSnapFile = new File(Paths.document, 'gauge-snapshot.json');
+
+export type GaugeSnapshot = { settings?: PodSettings; settingsAt?: number; upload?: PodUpload; uploadAt?: number };
+
+export function loadGaugeSnapshot(): GaugeSnapshot {
+  try {
+    return gaugeSnapFile.exists ? JSON.parse(gaugeSnapFile.textSync()) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveGaugeSettings(settings: PodSettings): void {
+  gaugeSnapFile.write(JSON.stringify({ ...loadGaugeSnapshot(), settings, settingsAt: Date.now() }));
+}
+
+export function saveGaugeUpload(upload: PodUpload): void {
+  gaugeSnapFile.write(JSON.stringify({ ...loadGaugeSnapshot(), upload, uploadAt: Date.now() }));
 }
 
 // The fuel picked at each fill-up (fuel-grade.ts), by its id. Only what was
