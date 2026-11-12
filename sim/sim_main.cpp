@@ -22,6 +22,9 @@
 
 #include "Arduino.h"
 #include "sim_replay.h"
+#include "config.h"     // VIEW_ORDER_DEFAULT
+#include "settings.h"   // settings_set_views: every screen in the order
+#include "ui.h"         // the views
 void setup();
 void loop();
 void shots_init(const char *dir);   // sim_shots.cpp
@@ -105,6 +108,15 @@ int main(int argc, char **argv) {
   }
 
   setup();
+  // Every screen in the swipe order, the optional ones too (asked
+  // 2026-11-13) - the gauge's default leaves the status screen and the
+  // clock out until the app shows them; here they are all to be looked at.
+  {
+    char all[16] = VIEW_ORDER_DEFAULT;
+    const char extra[] = {'0' + VIEW_STATUS, '0' + VIEW_CLOCK, '\0'};
+    strncat(all, extra, sizeof(all) - strlen(all) - 1);
+    settings_set_views(all);
+  }
   SDL_AddEventWatch(onEvent, nullptr);
   if (shots_on()) { rebase(); speed = 20.0; }   // nobody watching: no need to wait
   // SIM_SPEED=20: replay faster from the start - with SIM_INVALIDATE, to read

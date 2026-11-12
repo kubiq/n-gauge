@@ -23,7 +23,9 @@ sim/run.sh                                     # the newest drive in data/
 sim/run.sh data/drive_X.csv data/trip_X.gpx    # a given one (either, or both)
 ```
 
-The mouse is the finger: click to tap, drag sideways to swipe.
+The mouse is the finger: click to tap, drag sideways to swipe. Every screen
+is in the swipe order here, the optional ones (the upload status, the clock)
+too - on the gauge they wait for the app's screen order to show them.
 
 | Key | |
 |---|---|
