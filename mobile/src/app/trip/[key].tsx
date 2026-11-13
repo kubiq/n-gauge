@@ -9,14 +9,14 @@ import { Card, Note, Row, Screen } from '@/components/ui';
 import { usePod } from '@/hooks/use-pod';
 import { useSync } from '@/hooks/use-sync';
 import { t } from '@/i18n';
-import { duration, when } from '@/lib/format';
+import { duration, unfinishedText, when } from '@/lib/format';
 import { distance, speed } from '@/lib/units';
 import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, seriesOf, summarise, trackOf, tripFiles } from '@/lib/trip-cache';
 import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
-import { type CsvSummary, litresPer100, pointAt, type TrackPoint } from '@/lib/trips';
+import { type CsvSummary, litresPer100, pointAt, type TrackPoint, unfinished } from '@/lib/trips';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -173,6 +173,7 @@ export default function TripScreen() {
       {!ready ? trip.gpx ? <MapLoading /> : <Note>{t('Reading the logs…')}</Note> : null}
       {busy ? <Note>{busy === 'save' ? t('Saving…') : t('Preparing the file…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
+      {ready && unfinished(g, c) ? <Note tone="bad">{unfinishedText(tripFiles()[0]?.key === trip.key)}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} mark={mark} /> : null}
 
       {/* The drive's shape first - where (the map), then how (the charts) -

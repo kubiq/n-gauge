@@ -3,7 +3,21 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { distM, isStub, litresPer100, pairTrips, parseCsv, parseGpx, pointAt, sessionOf, stampOf, staleCopyCandidates, staleTitleKeys } from './trips.ts';
+import {
+  distM,
+  GPX_END,
+  isStub,
+  litresPer100,
+  pairTrips,
+  parseCsv,
+  parseGpx,
+  pointAt,
+  sessionOf,
+  stampOf,
+  staleCopyCandidates,
+  staleTitleKeys,
+  unfinished,
+} from './trips.ts';
 
 // One line exactly as log_gpx.cpp writes it.
 const pt = (lat: number, lon: number, time: string, ms: number) =>
@@ -277,6 +291,31 @@ test('csv: no fuel column is null, not zero', () => {
 });
 
 // The one real drive log in the repo (2026-09, an older header without rpm).
+test('ended: the end row and the end mark, or a cut-off', () => {
+  const head = 'utc,ms,rpm,end\r\n';
+  const rows = ',1000,800,\r\n,2000,900,\r\n';
+  const closed = parseCsv(`${head}${rows},5000,,1\r\n`);
+  assert.equal(closed.ended, true);
+  assert.equal(closed.rows, 2);              // the end row is no reading
+  assert.equal(closed.durationS, 4);         // but it is when the drive ended
+  const cut = parseCsv(`${head}${rows}`);
+  assert.equal(cut.ended, false);
+  assert.equal(parseCsv('utc,ms,rpm\r\n,1000,800\r\n').ended, null);   // before the column
+
+  const track = gpx([pt(50.0, 14.0, '2026-10-11T10:00:00Z', 10)]);
+  const ended = parseGpx(track.replace('</trkseg>', `${GPX_END}\n</trkseg>`));
+  assert.equal(ended.ended, true);
+  assert.equal(ended.points, 1);
+  assert.equal(parseGpx(track).ended, false);
+
+  assert.equal(unfinished(ended, closed), false);
+  assert.equal(unfinished(ended, cut), true);
+  assert.equal(unfinished(parseGpx(track), closed), true);       // the track cut short
+  assert.equal(unfinished(parseGpx(track), { ended: null }), false);   // old logs: no telling
+  assert.equal(unfinished({}, closed), false);                   // a summary cached before the mark
+  assert.equal(unfinished(undefined, cut), true);                // car data only
+});
+
 test('csv: the real drive_0181.csv parses', { skip: !existsSync('../data/drive_0181.csv') }, () => {
   const s = parseCsv(readFileSync('../data/drive_0181.csv', 'utf8'));
   assert.ok(s.rows > 10000);

@@ -27,6 +27,10 @@ export const trips: Record<string, string> = {
   'fuel': 'palivo',
   'consumption': 'spotřeba',
   'No GPS track - car data only.': 'Bez trasy GPS - jen data z auta.',
+  'Not all of this drive is here yet - the rest comes with the next upload or sync.':
+    'Tahle jízda tu ještě není celá - zbytek přijde s dalším nahráním nebo synchronizací.',
+  'This drive is cut off - the gauge lost power or restarted before it ended.':
+    'Jízda je useknutá - budík ztratil napájení nebo se restartoval, než skončila.',
   'Filled up': 'Natankováno',
   'which fuel?': 'jaké palivo?',
   'Consumption by fuel': 'Spotřeba podle paliva',

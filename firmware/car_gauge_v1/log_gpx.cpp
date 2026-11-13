@@ -42,6 +42,7 @@ RTC_DATA_ATTR static int nextTripN = 0;
 static uint32_t gpxTailPos = 0;
 
 static const char GPX_TAIL[] = "</trkseg></trk></gpx>\n";
+static const char GPX_END[] = "<!-- end -->\n";   // gpxlog_close(): the app's gpxEnded
 
 // After every batch: writes the closing tags and then rewinds to before them.
 // The file on the card is therefore ALWAYS valid XML, which matters because
@@ -326,6 +327,9 @@ static void gpxPoint(const GpsSample &s, uint32_t now) {
 
 void gpxlog_close() {
   if (!gpx.open) return;
+  // The end mark, as the CSV's end row (log_csv.cpp "end"): the track ended
+  // here rather than being cut off. A comment, so every reader skips it.
+  logfile_puts(gpx, GPX_END);
   gpxCommit();                   // don't lose the batch still in RAM
   if (!gpx.enc) {
     // Advance past the tail we keep rewinding over, so the closing tags

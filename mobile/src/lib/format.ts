@@ -24,6 +24,17 @@ export function shortWhen(ms: number, now = Date.now()): string {
 }
 
 /**
+ * A drive whose logs did not end (trips.ts unfinished()). The newest is most
+ * likely uploaded while it was still being driven, the rest still on the
+ * gauge's card; an older one the gauge lost power or restarted during.
+ */
+export function unfinishedText(latest: boolean): string {
+  return latest
+    ? t('Not all of this drive is here yet - the rest comes with the next upload or sync.')
+    : t('This drive is cut off - the gauge lost power or restarted before it ended.');
+}
+
+/**
  * Local date and time of day, e.g. "Sat 11 Oct, 14:45" - or "Today, 11:16",
  * "Yesterday, 17:43" for the last two days, by the phone's calendar.
  */

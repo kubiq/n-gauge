@@ -7,7 +7,7 @@ import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
 import { Card, Note, Pill, Row, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
-import { duration, mb, when } from '@/lib/format';
+import { duration, mb, unfinishedText, when } from '@/lib/format';
 import { distance, speed } from '@/lib/units';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
@@ -25,6 +25,7 @@ import {
   litresPer100,
   type Refuel,
   type TripFiles,
+  unfinished,
 } from '@/lib/trips';
 import { S, themed } from '@/theme';
 
@@ -333,6 +334,7 @@ export default function TripsScreen() {
                     fuels={fuels}
                     onFuel={pickFuel}
                     names={names}
+                    latest={r.t.key === trips[0]?.key}
                   />
                 ))}
               {waiting && monday !== null ? (
@@ -377,6 +379,7 @@ function TripRow({
   fuels,
   onFuel,
   names,
+  latest,
 }: {
   t: TripFiles;
   g?: GpxStats;
@@ -390,6 +393,8 @@ function TripRow({
   fuels: Fuels;
   onFuel: (id: string, fuel: Fuel | null) => void;
   names: Names;
+  /** The newest drive: unfinished, it is most likely still coming. */
+  latest: boolean;
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
@@ -436,6 +441,7 @@ function TripRow({
         />
       ))}
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
+      {unfinished(g, c) ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );

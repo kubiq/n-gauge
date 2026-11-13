@@ -55,7 +55,8 @@ const VERSION = 9;
 // re-read every GPX, which takes far longer.
 // 1: the tank level at a drive's ends and its fill-ups, for the list (2026-10-22).
 // 2: the series carries the car's state, off / engine off / running (2026-10-22).
-const CSV_VERSION = 2;
+// 3: whether the drive ended - the gauge's end row (2026-11-13).
+const CSV_VERSION = 3;
 const csvV = VERSION * 1000 + CSV_VERSION;
 
 function read<T>(f: File, size: number, v = VERSION): T | null {

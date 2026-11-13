@@ -209,6 +209,13 @@ static const CsvCol COLS[] = {
   {"cn0",        [](const CsvRow &) { if (gps.cn0Sats) put("%.1f", gps.cn0Top4); }},
   {"cn0Sats",    [](const CsvRow &) { put("%u", gps.cn0Sats); }},
 #endif
+  // Empty on every row but the last: the row csvlog_close() writes, with the
+  // time and end=1 (asked 2026-11-13). A file whose header has this column
+  // and no such row did not end - the power went, the gauge reset, or (on
+  // the phone) the rest is not uploaded yet: the app says so, where it used
+  // to show the part as a whole drive. Last whatever the build, so the test
+  // build's columns above keep their places.
+  {"end",        [](const CsvRow &) {}},
 };
 
 // Create the drive log on first use, not at boot.
@@ -280,6 +287,16 @@ static void driveRenameDated() {
   else         Serial.printf("[ERR] drive log rename failed, keeping %s\n", csv.path);
 }
 
+// The utc column: the time once the clock is trusted, blank before.
+static void stampUtc(char *out, size_t n) {
+  out[0] = '\0';
+  if (!clock_valid()) return;
+  const time_t t = time(nullptr);
+  struct tm tm;
+  gmtime_r(&t, &tm);
+  strftime(out, n, "%Y-%m-%dT%H:%M:%SZ", &tm);
+}
+
 void csvlog_task() {
   const uint32_t now = millis();
   if (now - lastSampleMs < (log_idle() ? LOG_IDLE_INTERVAL_MS : LOG_INTERVAL_MS)) return;
@@ -298,13 +315,7 @@ void csvlog_task() {
   CsvRow r;
   r.now = now;
   r.st = podstate_copy();
-  r.utc[0] = '\0';
-  if (clock_valid()) {
-    const time_t t = time(nullptr);
-    struct tm tm;
-    gmtime_r(&t, &tm);
-    strftime(r.utc, sizeof(r.utc), "%Y-%m-%dT%H:%M:%SZ", &tm);
-  }
+  stampUtc(r.utc, sizeof(r.utc));
   // Same snapshot rule as the GPX: lat and lon must come from one fix.
   int32_t lat, lon;
   r.fix = gps.haveFix && gps_read_position(&lat, &lon, nullptr);
@@ -335,6 +346,17 @@ void csvlog_task() {
 
 void csvlog_close() {
   if (!csv.open) return;
+  // The end row (the "end" column): utc and ms, so it is a moment like any
+  // other row, every value empty, end=1.
+  CsvRow r;
+  r.now = millis();
+  stampUtc(r.utc, sizeof(r.utc));
+  for (size_t i = 0; i < sizeof(COLS) / sizeof(COLS[0]); i++) {
+    if (i) logfile_puts(csv, ",");
+    if (!strcmp(COLS[i].name, "utc") || !strcmp(COLS[i].name, "ms")) COLS[i].write(r);
+    else if (!strcmp(COLS[i].name, "end")) logfile_puts(csv, "1");
+  }
+  logfile_puts(csv, "\r\n");
   logfile_commit(csv);
   csv.f.close();
   logfile_end(csv);

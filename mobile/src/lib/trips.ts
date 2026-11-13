@@ -31,7 +31,16 @@ export type GpxSummary = {
   /** [lon, lat] of the first and last kept points - what the drive is named after (places.ts). */
   from: [number, number] | null;
   to: [number, number] | null;
+  /**
+   * The gauge's end mark is in it (GPX_END): the track ended there. Without,
+   * it was cut off - or is from before the mark (see unfinished()). Absent
+   * from summaries cached before it.
+   */
+  ended?: boolean;
 };
+
+/** log_gpx.cpp's GPX_END, written as the file is closed. */
+export const GPX_END = '<!-- end -->';
 
 const MOVING_KMH = 3;
 const THIN_M = 10;
@@ -136,6 +145,7 @@ export function parseGpx(text: string): GpxSummary {
   // Pass 2: the stats, from the kept points only.
   const s: GpxSummary = {
     start: null, end: null, distanceM: 0, movingS: 0, maxKmh: 0, points: pts.length, track: [], bbox: null, from: null, to: null,
+    ended: text.includes(GPX_END),
   };
   let prev: Pt | undefined;
   let kept: Pt | undefined;   // the last point that went into the track
@@ -247,6 +257,13 @@ export type CsvSummary = {
   fuelEndPct: number | null;
   /** Fill-ups during the drive: the engine stopped, and started on more fuel. */
   refuels: Refuel[];
+  /**
+   * The gauge's end row is in it (the `end` column, 1 on the row written as
+   * the file is closed): the drive ended there. False: the header has the
+   * column but no end row - cut off, or not all here yet. Null: a log from
+   * before the column, which cannot tell.
+   */
+  ended: boolean | null;
 };
 
 export type Refuel = {
@@ -298,9 +315,10 @@ export function parseCsv(text: string): CsvSummary {
   const iMs = col('ms'), iBoost = col('boostBar'), iOil = col('oilC'), iCool = col('coolantC');
   const iRpm = col('rpm'), iKmh = col('obdKmh'), iFuel = col('fuelLh');
   const iPct = col('fuelPct'), iUtc = col('utc'), iLat = col('lat'), iLon = col('lon');
+  const iEnd = col('end');
   const s: CsvSummary = {
     rows: 0, durationS: 0, maxBoostBar: null, maxOilC: null, maxCoolantC: null, maxRpm: null, maxObdKmh: null, lastOilC: null,
-    fuelL: null, fuelKm: null, fuelStartPct: null, fuelEndPct: null, refuels: [],
+    fuelL: null, fuelKm: null, fuelStartPct: null, fuelEndPct: null, refuels: [], ended: iEnd >= 0 ? false : null,
   };
   // Engine-running stretches, split where it was off STOP_MIN_MS or more:
   // their tank readings [ms, %], and when and where each ended.
@@ -321,8 +339,14 @@ export function parseCsv(text: string): CsvSummary {
     const line = lines[k];
     if (!line) continue;
     const f = line.split(',');
-    s.rows++;
     const ms = +f[iMs];
+    // The end row: a time and nothing else - only the duration takes it.
+    if (iEnd >= 0 && f[iEnd] === '1') {
+      s.ended = true;
+      if (iMs >= 0 && f[iMs] && Number.isFinite(ms) && !Number.isNaN(firstMs)) lastMs = ms;
+      continue;
+    }
+    s.rows++;
     if (iMs >= 0 && f[iMs] && Number.isFinite(ms)) {
       if (Number.isNaN(firstMs)) firstMs = ms;
       lastMs = ms;
@@ -376,6 +400,18 @@ export function parseCsv(text: string): CsvSummary {
     if (l.tail !== null) before = l;
   }
   return s;
+}
+
+/**
+ * The drive did not end in its logs (asked 2026-11-13: a part uploaded
+ * mid-drive showed as a whole 2.3 km drive). Told by the CSV, which every
+ * drive has: its end row missing, or its GPX's end mark missing while the
+ * CSV is from a gauge that writes them. A log from before the marks, or a
+ * summary cached before them, says nothing: false.
+ */
+export function unfinished(g?: Pick<GpxSummary, 'ended'> | null, c?: Pick<CsvSummary, 'ended'> | null): boolean {
+  if (c?.ended === false) return true;
+  return c?.ended === true && g?.ended === false;
 }
 
 /**
