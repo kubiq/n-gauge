@@ -21,6 +21,7 @@ export const gauge: Record<string, string> = {
   'Zero the g-meter here': 'Vynulovat g-metr zde',
   'G-meter': 'G-metr',
   'Upload status': 'Stav nahrávání',
+  Overview: 'Přehled',
   'Zero the g-meter?': 'Vynulovat g-metr?',
   'Only with the car level and standing still.': 'Jen když auto stojí na rovině a v klidu.',
   Zero: 'Vynulovat',

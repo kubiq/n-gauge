@@ -800,10 +800,10 @@
 
 // ---- Screens -------------------------------------------------------------
 // The order a tap or swipe cycles through until the app sets another
-// (settings.views): GaugeView ids as digits - oil, boost, tyres, GPS, track,
-// g-meter, WiFi. WiFi last: set-up and the phone, not something to read
-// while driving.
-#define VIEW_ORDER_DEFAULT    "0245736"
+// (settings.views): GaugeView ids as digits - the overview, oil, boost,
+// tyres, GPS, track, g-meter, WiFi. WiFi last: set-up and the phone, not
+// something to read while driving.
+#define VIEW_ORDER_DEFAULT    "01234569"   // GaugeView ids; the clock (7) and status (8) off
 
 // ---- G-meter -----------------------------------------------------------
 // The trail is the point: a g-g trace shows how smooth the inputs were, which
@@ -970,6 +970,10 @@
 // of seconds, typing a random 10-character passphrase by hand takes longer.
 // Tap back to it if you need another minute.
 #define WIFI_VIEW_MAX_MS   60000
+// The overview (ui_overview.cpp): its values set this often while shown; the
+// instant fuel per 100 km from this speed, per hour below it.
+#define OVERVIEW_REFRESH_MS   250
+#define OVERVIEW_ROLLING_KMH  5
 // The status screen (ui_status.cpp): its words rebuilt this often while shown.
 #define STATUS_REFRESH_MS  250
 // The screen saver (saverTask, ui_saver.cpp): with the car silent, a gauge

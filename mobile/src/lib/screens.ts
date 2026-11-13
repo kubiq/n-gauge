@@ -5,21 +5,25 @@
 
 import { N_ } from '../i18n/index.ts';
 
-export const WIFI = '6';
+export const WIFI = '9';
 
-/** Every screen, in the gauge's default order (config.h VIEW_ORDER_DEFAULT). Names shown through t(). */
+/**
+ * Every screen, by its id - the gauge's natural order, renumbered 2026-11-13
+ * (an order set before then points at other screens until set again).
+ * Names shown through t().
+ */
 export const SCREENS: { id: string; name: string }[] = [
-  { id: '0', name: N_('Oil & coolant') },
+  { id: '0', name: N_('Overview') },
+  { id: '1', name: N_('Oil & coolant') },
   { id: '2', name: N_('Boost') },
-  { id: '4', name: N_('Tyres') },
-  { id: '5', name: N_('GPS') },
-  { id: '7', name: N_('Track') },
-  { id: '3', name: N_('G-meter') },
-  { id: WIFI, name: N_('WiFi') },
-  // Not in the gauge's default order: hidden until switched on (2026-11-09).
+  { id: '3', name: N_('Tyres') },
+  { id: '4', name: N_('GPS') },
+  { id: '5', name: N_('Track') },
+  { id: '6', name: N_('G-meter') },
+  // Not in the gauge's default order: hidden until switched on.
+  { id: '7', name: N_('Clock') },
   { id: '8', name: N_('Upload status') },
-  // Slot 1, the old coolant screen's (ui.h) - firmware from 2026-11-13 on.
-  { id: '1', name: N_('Clock') },
+  { id: WIFI, name: N_('WiFi') },
 ];
 
 export type ScreenItem = { id: string; name: string; on: boolean };

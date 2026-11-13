@@ -390,6 +390,47 @@ static void gaugesTask(uint32_t now) {
     tyreTempC[i] = obd.tyreTempC[i];
   }
   ui_update_tpms(haveTyre, tyreBar, tyreTempC);
+
+  // The overview (ui_overview.cpp). The drive's fuel: litres and km summed
+  // since this wake, from the car's fuel rate and speed - kept every pass;
+  // the screen itself only built while it shows, a few times a second.
+  {
+    static float driveL = 0, driveKm = 0;
+    static uint32_t sumAt = 0;
+    const uint32_t ms = millis();
+    if (sumAt && obd_fuel_lh_fresh() && obd_speed_fresh()) {
+      const float h = (ms - sumAt) / 3600000.0f;
+      driveL += obd.fuelLh * h;
+      driveKm += obd.speedKmh * h;
+    }
+    sumAt = ms;
+    static uint32_t shownAt = 0;
+    if (ui_current_view() == VIEW_OVERVIEW && ms - shownAt >= OVERVIEW_REFRESH_MS) {
+      shownAt = ms;
+      Overview o = {};
+      o.haveOil = obd_oil_fresh();       o.oilC = obd.oilTempC;
+      o.oilState = tempOverOil ? 2 : tempCold ? 0 : 1;
+      o.haveCool = obd_coolant_fresh();  o.coolC = obd.coolantC;  o.coolHot = tempOverCool;
+      o.haveBoost = obd_boost_fresh();   o.boostBar = obd.boostBar;
+      // The average from a kilometre on: a short hop's reads absurd (trips.ts).
+      o.haveAvg = driveKm >= 1.0f;       o.avgL100 = o.haveAvg ? driveL / driveKm * 100.0f : 0;
+      // Instant: per 100 km rolling; per hour standing, where per 100 km is
+      // infinite.
+      if (obd_fuel_lh_fresh()) {
+        o.haveNow = true;
+        o.nowPerHour = !(obd_speed_fresh() && obd.speedKmh >= OVERVIEW_ROLLING_KMH);
+        o.now = o.nowPerHour ? obd.fuelLh : obd.fuelLh / obd.speedKmh * 100.0f;
+      }
+      o.haveTank = obd_fuel_pct_fresh(); o.tankPct = (int)(obd.fuelPct + 0.5f);
+      for (int i = 0; i < WHEEL_COUNT; i++) {
+        const int axle = i < 2 ? 0 : 1;
+        o.haveTyre[i] = haveTyre[i];
+        o.tyreBar[i] = tyreBar[i];
+        o.tyreBad[i] = tyreBar[i] < settings.tpmsLowBar[axle] || tyreBar[i] > settings.tpmsHighBar[axle];
+      }
+      ui_update_overview(o);
+    }
+  }
   // GPS is real even on the bench - it's our own UART, not the car's bus.
   ui_update_gps(gps.linkUp, gps.haveFix, gps.sats, gps.speedKmh, logger_trip_km());
 

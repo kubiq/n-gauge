@@ -5,24 +5,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// All views that exist. Which of them are actually reachable, and in what
-// order, is settings.views (set from the app; default VIEW_ORDER_DEFAULT).
-// VIEW_OIL shows oil AND coolant together (concentric arcs). Slot 1 was a
-// coolant screen of its own; since 2026-11-13 it is the analog clock: the
-// order is stored as one digit per view, and 1 was the last free digit - no
-// stored order or last view could hold it (settings_set_views dropped it).
-// VIEW_WIFI is appended rather than inserted, so a lastView already stored in
-// NVS keeps meaning the same screen.
-enum GaugeView { VIEW_OIL = 0, VIEW_CLOCK, VIEW_BOOST, VIEW_GMETER, VIEW_TPMS,
-                 VIEW_GPS, VIEW_WIFI, VIEW_TRACK, VIEW_STATUS, VIEW_SYNC, VIEW_SAVER, VIEW_COUNT };
-// VIEW_TRACK appended for the same reason as VIEW_WIFI: lastView is stored in
-// NVS as a number, so inserting would silently change what old values mean.
-// VIEW_STATUS (2026-11-09), the upload's status, likewise - and not in
-// VIEW_ORDER_DEFAULT: hidden until the app's screen order shows it.
-// VIEW_SYNC (2026-11-09): "Syncing with the phone", shown by itself while
-// the phone pulls the logs (syncTask in the sketch) - never in the cycle,
-// never saved as the last view. VIEW_SAVER (2026-11-12) likewise: the
-// screen saver (saverTask), in place of gauges with nothing to show.
+// All views that exist. Which of them are reachable, and in what order, is
+// settings.views - one digit per view (set from the app; default
+// VIEW_ORDER_DEFAULT) - so the ones that can be ordered are 0-9. Numbered in
+// their natural order (renumbered 2026-11-13; an order or last view stored
+// before then points elsewhere until set again from the app).
+// VIEW_OIL shows oil AND coolant together (concentric arcs).
+// After the digits, the two never ordered in nor stored as the last view:
+// VIEW_SYNC, "Syncing with the phone" while the phone pulls the logs
+// (syncTask), and VIEW_SAVER, the screen saver (saverTask).
+enum GaugeView { VIEW_OVERVIEW = 0, VIEW_OIL, VIEW_BOOST, VIEW_TPMS, VIEW_GPS,
+                 VIEW_TRACK, VIEW_GMETER, VIEW_CLOCK, VIEW_STATUS, VIEW_WIFI,
+                 VIEW_SYNC, VIEW_SAVER, VIEW_COUNT };
 
 // Wheel order matches the TPMS payload's four-byte-per-wheel slots (pressure at
 // 4 + i*4, temperature at 5 + i*4). Front vs rear is confirmed; left vs right
@@ -140,6 +134,18 @@ void ui_update_status(uint8_t tone, const char *head, const char *detail,
                       const char *last, const char *fw);
 // Its top line: the car's link. tone 0 silent, 1 talking, 2 no CAN bus (red).
 void ui_update_status_car(uint8_t tone, const char *text);
+
+// The overview (ui_overview.cpp): everything on one screen.
+struct Overview {
+  bool  haveOil;  int oilC;  uint8_t oilState;   // 0 cold, 1 ready, 2 too hot
+  bool  haveCool; int coolC; bool coolHot;
+  bool  haveBoost; float boostBar;
+  bool  haveAvg;  float avgL100;                  // this drive's average
+  bool  haveNow;  float now; bool nowPerHour;     // instant: l/100, or l/h standing
+  bool  haveTank; int tankPct;
+  bool  haveTyre[WHEEL_COUNT]; float tyreBar[WHEEL_COUNT]; bool tyreBad[WHEEL_COUNT];
+};
+void ui_update_overview(const Overview &o);
 
 // The analog clock (ui_clock.cpp), local time. valid false: no clock yet -
 // the hands hidden. date: "Thu 13 Nov". seconds: the second hand shown.

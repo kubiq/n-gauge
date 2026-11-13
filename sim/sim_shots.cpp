@@ -47,7 +47,7 @@ static const Shot SHOTS[] = {
     {"gps", VIEW_GPS, notSliding, 30000},    {"track", VIEW_TRACK, anytime, 30000},
     // Before the hot oil: its warning rim stays from then on.
     {"status", VIEW_STATUS, anytime, 30000}, {"sync", VIEW_SYNC, anytime, 30000},
-    {"clock", VIEW_CLOCK, anytime, 30000},
+    {"clock", VIEW_CLOCK, anytime, 30000},   {"overview", VIEW_OVERVIEW, anytime, 30000},
     {"oilhot", VIEW_TRACK, oilHot, 300000},
 };
 static const uint32_t SETTLE_MS = 1500;    // after switching: values, the g-meter's trail

@@ -324,7 +324,8 @@ void settings_set_views(const char *ids) {
   // saver, which come and go by themselves.
   static const char valid[] = { '0' + VIEW_OIL, '0' + VIEW_BOOST, '0' + VIEW_GMETER,
                                 '0' + VIEW_TPMS, '0' + VIEW_GPS, '0' + VIEW_WIFI,
-                                '0' + VIEW_TRACK, '0' + VIEW_STATUS, '0' + VIEW_CLOCK, '\0' };
+                                '0' + VIEW_TRACK, '0' + VIEW_STATUS, '0' + VIEW_CLOCK,
+                                '0' + VIEW_OVERVIEW, '\0' };
   calc_view_order(ids ? ids : "", valid, '0' + VIEW_WIFI, settings.views, sizeof(settings.views));
 }
 
