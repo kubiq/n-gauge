@@ -4,10 +4,22 @@
 #   ./scripts/build-apk.sh install    # build, install over adb, start it
 #
 # A release build carries its own JS bundle, so the app runs in the car with
-# no computer. Signed with the debug key, which is fine for one's own phone.
+# no computer. Signed with the app's own key (plugins/with-release-signing.js)
+# - ~/.config/n-gauge/app-signing.jks and .pass, as CI signs from its secrets
+# - so this build and CI's install over each other. Without that keystore it
+# falls back to the debug key, and says so: a phone with the other signature
+# refuses it (INSTALL_FAILED_UPDATE_INCOMPATIBLE, 2026-11-13).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+KEYDIR="$HOME/.config/n-gauge"
+if [ -z "${APP_KEYSTORE:-}" ] && [ -f "$KEYDIR/app-signing.jks" ] && [ -f "$KEYDIR/app-signing.pass" ]; then
+  export APP_KEYSTORE="$KEYDIR/app-signing.jks"
+  APP_KEYSTORE_PASSWORD="$(cat "$KEYDIR/app-signing.pass")"
+  export APP_KEYSTORE_PASSWORD
+fi
+[ -n "${APP_KEYSTORE:-}" ] || echo "!!! no $KEYDIR/app-signing.jks - signed with the DEBUG key" >&2
 
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 # Gradle needs JDK 17+; this machine's default java is 8.
@@ -54,6 +66,9 @@ fi
 
 APK=android/app/build/outputs/apk/release/app-release.apk
 echo "==> $APK"
+# Which key it carries - a debug-signed one will not update the app on a phone.
+BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | tail -1)
+[ -n "$BT" ] && "$BT/apksigner" verify --print-certs "$APK" 2>/dev/null | grep -m2 -E "DN|SHA-256" || true
 
 if [ "${1:-}" = install ]; then
   adb install -r "$APK"
