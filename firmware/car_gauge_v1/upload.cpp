@@ -684,7 +684,7 @@ static int askPlan(const UpConfig &c, const char *plan, size_t len, String &todo
 // Upload card's "Automatic updates" is on (the
 // default) and the build has a signing key (ota_sign_pub): the server's
 // /fw/latest says which firmware it holds ("<app hash> <size> <build time> <commit>",
-// from scripts/release-fw.py). One built after this one (no downgrade to an
+// the latest GitHub release's, passed through by the server). One built after this one (no downgrade to an
 // older signed release), not tried before, is downloaded to OTA_SD_NEW,
 // checked against its signature and only then renamed to OTA_SD_PATH -
 // where ota_check_sd() installs it, before the next sleep (power.cpp) or at

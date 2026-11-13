@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Release the gauge's car firmware to the upload server, signed.
+"""The gauge's firmware signing key, and the signing of a release.
 
-The gauge looks for a new firmware there before each upload (upload.cpp),
-downloads it to its card, checks the signature against the public key built
-into it (FW_SIGN_PUB, from scripts/build.sh) and installs it before it next
-sleeps. Only an image signed with the private key here is ever installed, and
-only one built later than the firmware it replaces.
+A release is a v* tag: CI builds the firmware, signs it here (--sign-into)
+and puts it in a GitHub release. The upload server passes the latest one on
+(server/upload_server.py, FW_GITHUB_REPO); the gauge looks there before each
+upload (upload.cpp), downloads it to its card, checks the signature against
+the public key built into it (FW_SIGN_PUB, from scripts/build.sh) and
+installs it before it next sleeps. The app can install one from GitHub too.
+Only an image signed with the private key is ever installed, and only one
+built later than the firmware it replaces.
 
   scripts/release-fw.py --init
       Once: makes the signing key - FW_KEY, default
@@ -14,14 +17,9 @@ only one built later than the firmware it replaces.
       firmware as FW_SIGN_PUB. Each builder their own key; the repo has none.
   scripts/release-fw.py --pub
       Writes the .pub again from the key (wherever it is - see below).
-  scripts/release-fw.py --to server:/path/to/data/firmware
-      Builds the car firmware (scripts/build.sh), signs it, and copies the
-      image, its signature and "latest" there with scp - "latest" last, so
-      the gauge never sees it before the image.
-
   scripts/release-fw.py --sign-into DIR
       CI (.github/workflows/ci.yml): signs the last car build into DIR,
-      without building or copying - a GitHub release carries those files.
+      without building - the files a GitHub release carries.
 
 The key is FW_SIGN_KEY (64 hex digits) when that is set - CI's, from a
 GitHub secret. Otherwise it is looked for in the keyring (the Secret Service - GNOME
@@ -45,7 +43,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import tempfile
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -144,31 +141,10 @@ def build_name() -> str:
     return m.group(1) if m else "unknown"
 
 
-def release(dest: str) -> None:
-    key = load_key()
-    pub = pub_hex(key)
-    # What the build embeds: a .pub from another key would make a firmware
-    # that refuses every update signed here. A missing one (the key moved
-    # to the keyring, the folder cleared with it) is made again from the key.
-    if "FW_SIGN_PUB" not in os.environ and not os.path.exists(PUB):
-        print(f"no {PUB} - made again from the key")
-        write_pub(key)
-    on_file = open(PUB).read().strip() if os.path.exists(PUB) else ""
-    if os.environ.get("FW_SIGN_PUB", on_file) != pub:
-        sys.exit(f"the build's public key is not this key's ({pub}) - run --pub, or fix FW_SIGN_PUB")
-    subprocess.run([os.path.join(REPO, "scripts", "build.sh"), "gauge"], check=True)
-    with tempfile.TemporaryDirectory() as tmp:
-        name, size = sign_into(key, tmp)
-        files = [os.path.join(tmp, n) for n in ("car_gauge_v1.bin", "car_gauge_v1.bin.sig")]
-        subprocess.run(["scp", "-q", *files, dest + "/"], check=True)
-        subprocess.run(["scp", "-q", os.path.join(tmp, "latest"), dest + "/"], check=True)
-    print(f"released {name} ({size} bytes) to {dest}")
-
-
 def sign_into(key: Ed25519PrivateKey, out: str) -> tuple[str, int]:
     """The last car build (IMAGE, and its build_info.h) signed into `out`:
-    car_gauge_v1.bin, car_gauge_v1.bin.sig and latest - what the server
-    serves, and what a GitHub release carries (.github/workflows/ci.yml).
+    car_gauge_v1.bin, car_gauge_v1.bin.sig and latest - what a GitHub
+    release carries (.github/workflows/ci.yml), and the server passes on.
     Returns the build's name (its commit) and size."""
     with open(IMAGE, "rb") as f:
         image = f.read()
@@ -207,16 +183,13 @@ def main() -> None:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--init", action="store_true", help="make the signing key")
     p.add_argument("--pub", action="store_true", help="write the .pub again from the key")
-    p.add_argument("--to", help="scp destination folder, e.g. server:/path/to/data/firmware")
     p.add_argument("--sign-into", metavar="DIR",
-                   help="CI: sign the last car build into DIR (no build, no copy)")
+                   help="CI: sign the last car build into DIR (no build)")
     a = p.parse_args()
     if a.init:
         init()
     elif a.pub:
         print(f"{PUB}: {write_pub(load_key())}")
-    elif a.to:
-        release(a.to)
     elif a.sign_into:
         sign_existing(a.sign_into)
     else:

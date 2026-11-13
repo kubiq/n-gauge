@@ -1,7 +1,6 @@
 // A firmware release, checked before it goes to the gauge (asked 2026-11-11):
 // the image, its signature and `latest` ("<app hash> <size> <build time> <commit>"),
-// as scripts/release-fw.py makes them for the home server and CI for a GitHub
-// release. The signature is standard Ed25519 over the image's SHA-256 and its
+// as scripts/release-fw.py makes them in CI for a GitHub release. The signature is standard Ed25519 over the image's SHA-256 and its
 // build time (8 bytes, little-endian) - what the gauge checks for its own
 // downloads (upload.cpp). Here against the key the gauge itself trusts (its
 // /api/live fw.pub), since an upload from the phone is not checked there.

@@ -26,10 +26,12 @@ server sync) - so they reach it without a trip to the gauge's WiFi:
   GET  /files           one "name size" per line, what is held.
   GET  /f/<name>        the file; with "Range: bytes=a-b" just those bytes
                         (206), as the gauge's own /dl, for a log that grew.
-  GET  /fw/latest       the gauge's latest firmware: "<app hash> <size>"
+  GET  /fw/latest       the gauge's latest firmware: "<app hash> <size>
+                        <build time> <commit>"
   GET  /fw/bin          that image (Range as /f/), and /fw/sig its Ed25519
-                        signature - scripts/release-fw.sh puts them in
-                        UPLOAD_DIR/firmware; 404 while there is none.
+                        signature - the latest GitHub release of
+                        FW_GITHUB_REPO, passed through; 404 while there is
+                        none, 502 while GitHub is not reached.
   DELETE /f/<name>      a drive deleted in the app: the file goes, and its
                         name is kept (TOMBSTONES) - never asked of the gauge
                         again nor listed, or the gauge's next upload and the
@@ -43,13 +45,18 @@ Standard library only. Settings from the environment:
   UPLOAD_PORT   port (default 8650)
   UPLOAD_BIND   address (default 0.0.0.0)
   UPLOAD_TOKEN  the shared token (default: none, no check)
+  FW_GITHUB_REPO  "owner/name" whose latest release is the gauge's firmware
+                (default: none, no firmware served)
 """
 
 import hmac
+import json
 import os
 import re
 import sys
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -62,16 +69,38 @@ CHUNK = 64 * 1024
 # leading dot: no file name can be that (NAME_RE), so it is never listed.
 TOMBSTONES = ".deleted"
 RANGE_RE = re.compile(r"^bytes=(\d+)-(\d*)$")
-# The gauge's firmware updates, in UPLOAD_DIR/firmware (not a log: a folder,
-# so never listed), put there by scripts/release-fw.sh: the image, its
-# signature, and "latest" - the image's app hash and size, for the gauge to
-# tell whether it is new. Served as they are; the gauge checks the signature.
-FW_DIR = "firmware"
-FW_FILES = {
+# The gauge's firmware updates: the latest GitHub release of FW_GITHUB_REPO,
+# passed through as asked (2026-11-13) - the image, its signature, and
+# "latest" (the image's app hash, size, build time and commit, for the gauge
+# to tell whether it is new). The server speaks HTTPS to GitHub, the gauge
+# plain HTTP in the tunnel: it checks the signature, so it needs no TLS of
+# its own. Nothing kept here; a Range goes on to GitHub, so a download
+# still resumes. A release out between two requests: a mixed image, which
+# the signature turns away.
+FW_ASSETS = {
     "/fw/latest": "latest",
     "/fw/bin": "car_gauge_v1.bin",
     "/fw/sig": "car_gauge_v1.bin.sig",
 }
+GITHUB_API = "https://api.github.com"
+GITHUB_S = 20               # seconds GitHub has to answer
+
+
+def github(url: str, range_: str = ""):
+    """A GitHub URL opened - HTTPS, redirects followed (release assets live
+    on another host, which takes the Range too). Raises HTTPError."""
+    headers = {"User-Agent": "n-gauge-upload"}     # an Accept for files: the API says 415
+    if range_:
+        headers["Range"] = range_
+    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=GITHUB_S)
+
+
+def release_asset(repo: str, name: str, open_=github):
+    """The download URL of `name` in `repo`'s latest release, or None."""
+    req_url = f"{GITHUB_API}/repos/{repo}/releases/latest"
+    with open_(req_url) as r:
+        rel = json.loads(r.read())
+    return next((a["browser_download_url"] for a in rel.get("assets", []) if a.get("name") == name), None)
 
 
 def plan(held: dict, offered: str, buried: frozenset = frozenset()) -> str:
@@ -98,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
     # Set by serve().
     root = "data"
     token = ""
+    fw_repo = ""                   # "" - no firmware: 404
+    fw_open = staticmethod(github)
     bury_lock = threading.Lock()
 
     def _reply(self, code: int, text: str = "") -> None:
@@ -151,12 +182,42 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/files":
             held = self._held()
             return self._reply(200, "".join(f"{n} {s}\n" for n, s in sorted(held.items())))
-        if url.path in FW_FILES:                   # the gauge's own updates
-            return self._send_file(os.path.join(self.root, FW_DIR, FW_FILES[url.path]))
+        if url.path in FW_ASSETS:                  # the gauge's own updates
+            return self._send_release(FW_ASSETS[url.path])
         name = self._name(url.path)
         if name is None:
             return self._reply(404, "not found\n")
         return self._send_file(os.path.join(self.root, name))
+
+    def _send_release(self, asset: str):
+        """The latest release's `asset` from GitHub, its status, length and
+        Content-Range as GitHub gave them (the gauge reads all three)."""
+        if not self.fw_repo:
+            return self._reply(404, "no firmware\n")
+        try:
+            where = release_asset(self.fw_repo, asset, self.fw_open)
+            if where is None:
+                return self._reply(404, "not in the release\n")
+            r = self.fw_open(where, self.headers.get("Range", ""))
+        except urllib.error.HTTPError as e:        # 404: no release yet; 416: past its end
+            self.log_message("firmware %s: GitHub said %d", asset, e.code)
+            return self._reply(404 if e.code == 404 else e.code, f"GitHub said {e.code}\n")
+        except (OSError, ValueError) as e:         # offline, timed out, junk
+            self.log_message("firmware %s: GitHub not reached (%s)", asset, e)
+            return self._reply(502, "GitHub not reached\n")
+        with r:
+            self.send_response(r.status)
+            self.send_header("Content-Type", "application/octet-stream")
+            for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                if r.headers.get(h):
+                    self.send_header(h, r.headers[h])
+            self.end_headers()
+            try:
+                while chunk := r.read(CHUNK):
+                    self.wfile.write(chunk)
+            except OSError as e:                   # either end gone: the gauge resumes
+                self.log_message("firmware %s cut off: %s", asset, e)
+        return None
 
     def _send_file(self, path: str):
         """The file, or "Range: bytes=a-b" of it (206); 404 if it is not there."""
@@ -274,9 +335,9 @@ class Handler(BaseHTTPRequestHandler):
         self._reply(200, f"{offset + n}\n")
 
 
-def serve(root: str, port: int, bind: str, token: str) -> ThreadingHTTPServer:
+def serve(root: str, port: int, bind: str, token: str, fw_repo: str = "") -> ThreadingHTTPServer:
     os.makedirs(root, exist_ok=True)
-    Handler.root, Handler.token = root, token
+    Handler.root, Handler.token, Handler.fw_repo = root, token, fw_repo
     return ThreadingHTTPServer((bind, port), Handler)
 
 
@@ -285,9 +346,10 @@ def main() -> None:
     port = int(os.environ.get("UPLOAD_PORT", "8650"))
     bind = os.environ.get("UPLOAD_BIND", "0.0.0.0")
     token = os.environ.get("UPLOAD_TOKEN", "")
-    srv = serve(root, port, bind, token)
-    print(f"n-gauge upload: {root} on {bind}:{port}, token {'on' if token else 'OFF'}",
-          file=sys.stderr, flush=True)
+    repo = os.environ.get("FW_GITHUB_REPO", "")
+    srv = serve(root, port, bind, token, repo)
+    print(f"n-gauge upload: {root} on {bind}:{port}, token {'on' if token else 'OFF'}, "
+          f"firmware {'from ' + repo if repo else 'OFF'}", file=sys.stderr, flush=True)
     srv.serve_forever()
 
 

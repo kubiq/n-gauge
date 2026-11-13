@@ -185,12 +185,12 @@ cd server && echo "UPLOAD_TOKEN=$(openssl rand -hex 16)" > .env
 docker compose up -d --build
 ```
 
-A firmware release to it, for the gauge to update itself
-([details](server/README.md#firmware-updates)):
+With `FW_GITHUB_REPO=owner/name` in its `.env` it also passes that
+repository's latest signed release on to the gauge, which then updates itself
+([details](server/README.md#firmware-updates)). The signing key, once:
 
 ```sh
-scripts/release-fw.py --init                 # once: your signing key
-scripts/release-fw.py --to server:/path/to/data/firmware
+scripts/release-fw.py --init                 # then FW_SIGN_KEY and FW_SIGN_PUB on GitHub
 ```
 
 The gauge on a PC ([details](sim/README.md)) - needs SDL2 and CMake:

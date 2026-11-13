@@ -11,9 +11,9 @@
 #
 # The firmware carries the update signing key's public half from the
 # repository variable FW_SIGN_PUB (scripts/build.sh) - public, not a secret.
-# Unset, the builds simply never update themselves from a server. The
-# private half, the secret FW_SIGN_KEY, signs the images (release-fw.py
-# --sign-into), as the home server's are signed.
+# Unset, the builds simply never update themselves. The private half, the
+# secret FW_SIGN_KEY, signs the images (release-fw.py --sign-into); the
+# upload server passes the latest release on to the gauge.
 name: CI
 
 on:
@@ -83,8 +83,7 @@ jobs:
             0xe000 "$BOOTAPP" \
             0x10000 "$OUT/car_gauge_v1.ino.bin"
           echo "car image: $(grep -ao "[0-9-]* [0-9:]* $(git rev-parse --short HEAD)[^\"[:cntrl:]]*" dist/car_gauge_v1.bin | head -1)"
-      # Signed as release-fw.py signs for the home server: the image's
-      # SHA-256 and build time, by the private key in the secret FW_SIGN_KEY
+      # Signed by release-fw.py: the image's SHA-256 and build time, by the private key in the secret FW_SIGN_KEY
       # - so the app (and a gauge) can check a release came from it. A fork
       # without the secret gets unsigned images.
       - name: Sign

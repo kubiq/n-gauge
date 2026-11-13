@@ -1,10 +1,12 @@
 """Tests for upload_server.py: python3 -m unittest server/test_upload_server.py"""
 
 import http.client
+import json
 import os
 import tempfile
 import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import upload_server as us
 
@@ -18,6 +20,57 @@ class PlanTest(unittest.TestCase):
     def test_junk_lines_and_names_are_ignored(self):
         offered = "../etc/passwd 5\n.hidden 1\nok.csv x\n\nok.csv 2 extra\nfine.csv 4\n"
         self.assertEqual(us.plan({}, offered), "fine.csv 0\n")
+
+
+class FakeGitHub:
+    """The releases API and, behind a redirect as on GitHub, the assets -
+    Range and all."""
+
+    def __init__(self, assets: dict):
+        outer = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if self.path == "/repos/o/r/releases/latest":
+                    body = json.dumps({"tag_name": "v1", "assets": [
+                        {"name": n, "browser_download_url": f"{outer.url}/dl/{n}"} for n in assets]}).encode()
+                    self.send_response(200)
+                elif self.path.startswith("/dl/"):
+                    self.send_response(302)
+                    self.send_header("Location", f"{outer.url}/blob/{self.path[4:]}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                elif self.path[6:] in assets:
+                    body = assets[self.path[6:]]
+                    m = us.RANGE_RE.match(self.headers.get("Range", ""))
+                    if m:
+                        first = int(m.group(1))
+                        self.send_response(206)
+                        self.send_header("Content-Range", f"bytes {first}-{len(body) - 1}/{len(body)}")
+                        body = body[first:]
+                    else:
+                        self.send_response(200)
+                else:
+                    body = b""
+                    self.send_response(404)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.open = True
+
+    def close(self):
+        if self.open:
+            self.srv.shutdown()
+            self.srv.server_close()
+            self.open = False
 
 
 class ServerTest(unittest.TestCase):
@@ -93,20 +146,29 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.req("POST", "/plan", b"never.csv 5\n"), (200, ""))
         self.assertEqual(self.req("DELETE", "/f/x.csv", token="wrong")[0], 401)
 
-    def test_firmware_is_served_from_its_folder(self):
-        self.assertEqual(self.req("GET", "/fw/latest")[0], 404)   # none yet
-        fw = os.path.join(self.dir.name, "firmware")
-        os.makedirs(fw)
-        with open(os.path.join(fw, "latest"), "w") as f:
-            f.write("ab12 5\n")
-        with open(os.path.join(fw, "car_gauge_v1.bin"), "wb") as f:
-            f.write(b"image")
+    def test_no_repo_no_firmware(self):
+        self.assertEqual(self.req("GET", "/fw/latest")[0], 404)
+
+    def test_firmware_is_passed_through_from_github(self):
+        gh = FakeGitHub({"latest": b"ab12 5\n", "car_gauge_v1.bin": b"image"})
+        self.addCleanup(gh.close)
+        old_api = us.GITHUB_API
+        us.GITHUB_API = gh.url
+        us.Handler.fw_repo = "o/r"
+        self.addCleanup(lambda: (setattr(us, "GITHUB_API", old_api), setattr(us.Handler, "fw_repo", "")))
         self.assertEqual(self.req("GET", "/fw/latest"), (200, "ab12 5\n"))
         self.assertEqual(self.req("GET", "/fw/bin"), (200, "image"))
-        self.assertEqual(self.req("GET", "/fw/sig")[0], 404)
+        # A resumed download: the Range reaches the asset host, past a redirect.
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/fw/bin", headers={"Authorization": "Bearer tok", "Range": "bytes=2-"})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.read(), r.getheader("Content-Length"), r.getheader("Content-Range")),
+                         (206, b"age", "3", "bytes 2-4/5"))
+        c.close()
+        self.assertEqual(self.req("GET", "/fw/sig")[0], 404)       # not in the release
         self.assertEqual(self.req("GET", "/fw/latest", token="wrong")[0], 401)
-        # A folder, not a log: never in the list.
-        self.assertEqual(self.req("GET", "/files"), (200, ""))
+        gh.close()                                                  # GitHub gone
+        self.assertEqual(self.req("GET", "/fw/latest")[0], 502)
 
     def test_no_way_out_of_the_folder(self):
         self.assertEqual(self.req("PUT", "/f/..%2Fx?offset=0", b"x")[0], 400)

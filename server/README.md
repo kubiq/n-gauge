@@ -25,7 +25,8 @@ service's address as seen from inside the tunnel, such as
 `http://gauge.example.org` behind a proxy or `http://192.168.1.10:8650`.
 
 Without Docker: `UPLOAD_TOKEN=... python3 upload_server.py` (standard library
-only; `UPLOAD_DIR`, `UPLOAD_PORT` and `UPLOAD_BIND` set the rest).
+only; `UPLOAD_DIR`, `UPLOAD_PORT`, `UPLOAD_BIND` and `FW_GITHUB_REPO` set the
+rest).
 
 ## The protocol
 
@@ -42,8 +43,8 @@ size, as the phone's sync does:
 | `GET /files` | | `name size` per line - for the phone, which pulls from here too |
 | `GET /f/<name>` | | the file; with `Range: bytes=a-b` those bytes (206) |
 | `DELETE /f/<name>` | | `deleted` - a drive deleted in the app: the file goes and its name is buried in `.deleted`, never asked of the gauge again (410 if sent) nor listed |
-| `GET /fw/latest` | | `<app hash> <size> <build time> <commit>` of the firmware held, 404 if none |
-| `GET /fw/bin`, `GET /fw/sig` | | the firmware image; its 64-byte signature |
+| `GET /fw/latest` | | `<app hash> <size> <build time> <commit>` of the latest release, 404 if none, 502 if GitHub is not reached |
+| `GET /fw/bin`, `GET /fw/sig` | | the firmware image (`Range` too); its 64-byte signature |
 
 Every request but `/health` needs `Authorization: Bearer <token>`. An upload
 is written to a side file and renamed into place once complete, so a
@@ -56,12 +57,15 @@ logs the gauge asks `/fw/latest`, and one newer than its own it downloads,
 checks and installs once the car is parked, with the usual rollback if it
 misbehaves. A download cut off - mobile data in a garage - goes on from where
 it stopped next time (`Range`).
-The files sit in `firmware/` in the data folder, put there by the release
-script on the PC that builds the firmware:
+
+The firmware is the latest GitHub release of `FW_GITHUB_REPO` (`owner/name`,
+in `.env`; unset, `/fw/*` answers 404). Nothing is kept here: each request
+is passed on to GitHub over HTTPS, a `Range` with it, so the gauge needs no
+TLS of its own - it speaks plain HTTP inside the tunnel. A release is a `v*`
+tag: CI builds the firmware and signs it with the key made once by
 
 ```sh
-scripts/release-fw.py --init                             # once: the signing key
-scripts/release-fw.py --to server:/path/to/data/firmware # build, sign, copy (scp)
+scripts/release-fw.py --init       # then its halves as FW_SIGN_KEY and FW_SIGN_PUB on GitHub
 ```
 
 Only a firmware signed with that key is installed - so the service, or
@@ -75,4 +79,4 @@ and a firmware built without one never updates itself. The first firmware
 with the key goes on as before, over USB or from the app; the app's Home
 server card turns the updates off.
 
-Tests: `python3 -m unittest server/test_upload_server.py`.
+Tests: `cd server && python3 -m unittest test_upload_server.py`.

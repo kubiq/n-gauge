@@ -80,10 +80,10 @@ crash or a watchdog before it confirms itself boots the previous one again.
 
 ```mermaid
 flowchart TD
-  rel["release-fw.py --to the home server<br/>or a v* tag: CI builds and signs"] --> signed[Image + Ed25519 signature<br/>over SHA-256 + build time]
-  signed --> srv[(Home server /fw)]
+  rel["A v* tag: CI builds and signs"] --> signed[Image + Ed25519 signature<br/>over SHA-256 + build time]
   signed --> gh[(GitHub release)]
-  srv -->|"after the logs upload,<br/>newer only, resumable"| check1[Gauge checks the signature<br/>against its own key]
+  gh -->|"HTTPS, passed through"| srv[(Home server /fw)]
+  srv -->|"plain HTTP in the tunnel, after the logs upload,<br/>newer only, resumable"| check1[Gauge checks the signature<br/>against its own key]
   gh -->|"app open with internet,<br/>once a day or its button"| check2[App checks the signature<br/>against the gauge's key]
   check1 --> staged[/firmware.bin on the card/]
   staged -->|"car parked, before sleep"| install

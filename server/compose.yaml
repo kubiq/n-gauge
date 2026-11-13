@@ -6,6 +6,8 @@
 #                               It must exist and be writable by uid 1000 (the
 #                               container's user): a folder Docker creates for
 #                               a missing path is root's, and the uploads fail.
+#   FW_GITHUB_REPO=owner/name   whose latest release the gauge updates to
+#                               (default: none, no firmware)
 services:
   n-gauge-upload:
     build: .
@@ -14,5 +16,6 @@ services:
       - "8650:8650"
     environment:
       UPLOAD_TOKEN: ${UPLOAD_TOKEN:?set UPLOAD_TOKEN in .env}
+      FW_GITHUB_REPO: ${FW_GITHUB_REPO:-}
     volumes:
       - ${UPLOAD_DATA:-./data}:/data
