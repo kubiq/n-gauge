@@ -15,6 +15,7 @@
 export const BACKUP_FILES = [
   'names.json',             // your places, renamed drives (names.ts)
   'fuels.json',             // the fuel at each fill-up (fuel-grade.ts)
+  'finished.json',          // drives marked as finished (store.ts)
   'list-facts.json',        // which figures the trip list shows
   'theme.txt',
   'language.txt',

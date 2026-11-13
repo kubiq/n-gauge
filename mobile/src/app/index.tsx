@@ -14,7 +14,7 @@ import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
-import { type ListFacts, loadFuels, loadListFacts, saveFuel } from '@/lib/store';
+import { type ListFacts, loadFinished, loadFuels, loadListFacts, saveFuel } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
@@ -56,6 +56,8 @@ export default function TripsScreen() {
   // The fuel picked at each fill-up (fuel-grade.ts).
   const [fuels, setFuels] = useState<Fuels>(loadFuels);
   const pickFuel = (id: string, fuel: Fuel | null) => setFuels(saveFuel(id, fuel));
+  // Drives marked as finished on their screen: no "cut off" note.
+  const [finished, setFinished] = useState<ReadonlySet<string>>(loadFinished);
   const [sums, setSums] = useState<Sums>({});
   // Why a file could not be read - an encrypted log without the right key.
   const [problems, setProblems] = useState<Record<string, string>>({});
@@ -100,6 +102,7 @@ export default function TripsScreen() {
       }
       setTrips(list);
       setFacts(loadListFacts());
+      setFinished(loadFinished());
       setNames(forgetStaleTitles(list));
       setSums(have);
       setProblems({});
@@ -335,6 +338,7 @@ export default function TripsScreen() {
                     onFuel={pickFuel}
                     names={names}
                     latest={r.t.key === trips[0]?.key}
+                    markedFinished={[r.t.gpx, r.t.csv].some((n) => n && finished.has(n))}
                   />
                 ))}
               {waiting && monday !== null ? (
@@ -380,6 +384,7 @@ function TripRow({
   onFuel,
   names,
   latest,
+  markedFinished,
 }: {
   t: TripFiles;
   g?: GpxStats;
@@ -395,6 +400,8 @@ function TripRow({
   names: Names;
   /** The newest drive: unfinished, it is most likely still coming. */
   latest: boolean;
+  /** Marked as finished on its screen: no note, whatever its logs say. */
+  markedFinished: boolean;
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
@@ -441,7 +448,7 @@ function TripRow({
         />
       ))}
       {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
-      {unfinished(g, c) ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
+      {!markedFinished && unfinished(g, c) ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );

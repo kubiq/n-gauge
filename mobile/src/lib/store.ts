@@ -183,6 +183,32 @@ export function saveFuel(id: string, fuel: Fuel | null): Fuels {
   return all;
 }
 
+// Drives you marked as finished (asked 2026-11-13): their logs did not end
+// (trips.ts unfinished()), and you said that is all there is - the note goes.
+// By file name, the GPX's and the CSV's: a drive's key moves from its CSV to
+// its GPX when that arrives, its files' names do not.
+const finishedFile = new File(Paths.document, 'finished.json');
+
+export function loadFinished(): Set<string> {
+  try {
+    const raw = finishedFile.exists ? JSON.parse(finishedFile.textSync()) : [];
+    return new Set(Array.isArray(raw) ? raw.filter((n): n is string => typeof n === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** The drive's files marked finished, or not; returns them all, as saved. */
+export function saveFinished(files: string[], finished: boolean): Set<string> {
+  const all = loadFinished();
+  for (const n of files) {
+    if (finished) all.add(n);
+    else all.delete(n);
+  }
+  finishedFile.write(JSON.stringify([...all]));
+  return all;
+}
+
 function ensureDir() {
   if (!inboxDir.exists) inboxDir.create({ intermediates: true });
 }

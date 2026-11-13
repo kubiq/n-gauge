@@ -31,6 +31,9 @@ export const trips: Record<string, string> = {
     'Tahle jízda tu ještě není celá - zbytek přijde s dalším nahráním nebo synchronizací.',
   'This drive is cut off - the gauge lost power or restarted before it ended.':
     'Jízda je useknutá - budík ztratil napájení nebo se restartoval, než skončila.',
+  // app/trip/[key].tsx's menu, for such a drive
+  'Mark as finished': 'Označit jako dokončenou',
+  'Mark as not finished': 'Označit jako nedokončenou',
   'Filled up': 'Natankováno',
   'which fuel?': 'jaké palivo?',
   'Consumption by fuel': 'Spotřeba podle paliva',

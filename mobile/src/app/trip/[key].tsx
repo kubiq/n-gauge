@@ -15,6 +15,7 @@ import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, seriesOf, summarise, 
 import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
+import { loadFinished, saveFinished } from '@/lib/store';
 import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
 import { type CsvSummary, litresPer100, pointAt, type TrackPoint, unfinished } from '@/lib/trips';
 
@@ -52,6 +53,8 @@ export default function TripScreen() {
     }
   };
   const [problem, setProblem] = useState<string | null>(null);
+  // Marked as finished here (store.ts): the note goes, in the list too.
+  const [finished, setFinished] = useState<ReadonlySet<string>>(loadFinished);
 
   useEffect(() => {
     if (!trip) return;
@@ -99,6 +102,18 @@ export default function TripScreen() {
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
   const per100 = c ? litresPer100(c) : null;
   const name = tripName(trip, g, names);
+  const files = [trip.gpx, trip.csv].filter((n): n is string => !!n);
+  const marked = files.some((n) => finished.has(n));
+  // A drive whose logs did not end (trips.ts): you can say it is all there
+  // is - the power went, and nothing more is coming - or take that back.
+  const finishItems =
+    ready && unfinished(g, c)
+      ? [
+          marked
+            ? { label: t('Mark as not finished'), onPress: () => setFinished(saveFinished(files, false)) }
+            : { label: t('Mark as finished'), onPress: () => setFinished(saveFinished(files, true)) },
+        ]
+      : [];
   // Naming, in the modal (name.tsx): the drive itself, or either end as a
   // place of yours - every drive from or to there is then called by it.
   const nameItems = [
@@ -129,6 +144,7 @@ export default function TripScreen() {
               compact
               items={[
                 ...nameItems,
+                ...finishItems,
                 ...(trip.gpx ? [{ label: t('Share the track (GPX)'), onPress: () => run('gpx', () => shareLog(trip.gpx!)) }] : []),
                 ...(trip.csv ? [{ label: t('Share the car data (CSV)'), onPress: () => run('csv', () => shareLog(trip.csv!)) }] : []),
                 {
@@ -173,7 +189,7 @@ export default function TripScreen() {
       {!ready ? trip.gpx ? <MapLoading /> : <Note>{t('Reading the logs…')}</Note> : null}
       {busy ? <Note>{busy === 'save' ? t('Saving…') : t('Preparing the file…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
-      {ready && unfinished(g, c) ? <Note tone="bad">{unfinishedText(tripFiles()[0]?.key === trip.key)}</Note> : null}
+      {ready && !marked && unfinished(g, c) ? <Note tone="bad">{unfinishedText(tripFiles()[0]?.key === trip.key)}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} mark={mark} /> : null}
 
       {/* The drive's shape first - where (the map), then how (the charts) -
