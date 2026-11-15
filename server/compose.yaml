@@ -8,6 +8,9 @@
 #                               a missing path is root's, and the uploads fail.
 #   FW_GITHUB_REPO=owner/name   whose latest release the gauge updates to
 #                               (default: none, no firmware)
+#   LOG_KEY=ngauge-log-key-v1:… the app's log key (Settings, Log key, from
+#                               KeePass): each upload is then decrypted into
+#                               plain/ beside it (default: none)
 services:
   n-gauge-upload:
     build: .
@@ -17,5 +20,6 @@ services:
     environment:
       UPLOAD_TOKEN: ${UPLOAD_TOKEN:?set UPLOAD_TOKEN in .env}
       FW_GITHUB_REPO: ${FW_GITHUB_REPO:-}
+      LOG_KEY: ${LOG_KEY:-}
     volumes:
       - ${UPLOAD_DATA:-./data}:/data

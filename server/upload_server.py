@@ -47,6 +47,9 @@ Standard library only. Settings from the environment:
   UPLOAD_TOKEN  the shared token (default: none, no check)
   FW_GITHUB_REPO  "owner/name" whose latest release is the gauge's firmware
                 (default: none, no firmware served)
+  LOG_KEY       the app's log key ("ngauge-log-key-v1:<hex>"): each .nge is
+                then decrypted after its upload into UPLOAD_DIR/plain (needs
+                the `cryptography` package; default: none, no plain copies)
 """
 
 import hmac
@@ -103,6 +106,80 @@ def release_asset(repo: str, name: str, open_=github):
     return next((a["browser_download_url"] for a in rel.get("assets", []) if a.get("name") == name), None)
 
 
+# Plain copies of the encrypted logs, in UPLOAD_DIR/plain (a folder: never
+# listed, the phone pulls the .nge as before), when LOG_KEY is set (asked
+# 2026-11-14: the car is the only dangerous place - the card stays
+# encrypted, the server may read). The .nge stays the upload's truth: the
+# gauge resumes by its size.
+PLAIN_DIR = "plain"
+
+
+class Decryptor:
+    """Decrypts each .nge after its upload, one at a time on a thread of its
+    own, so the gauge's PUT is answered at once. A file is done whole again
+    each time - it only grows, and a 17 MB GPX takes well under a second."""
+
+    def __init__(self, root: str, secret: bytes):
+        import logcrypt      # here: without LOG_KEY the server needs no `cryptography`
+        self.open_log, self.suffix = logcrypt.open_log, logcrypt.SUFFIX
+        self.root, self.secret = root, secret
+        self.out = os.path.join(root, PLAIN_DIR)
+        os.makedirs(self.out, exist_ok=True)
+        self.cv = threading.Condition()
+        self.todo: list[str] = []
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def plain_path(self, name: str) -> str:
+        return os.path.join(self.out, name[:-len(self.suffix)])
+
+    def want(self, name: str) -> None:
+        if not name.endswith(self.suffix):
+            return
+        with self.cv:
+            if name not in self.todo:
+                self.todo.append(name)
+            self.cv.notify()
+
+    def forget(self, name: str) -> None:
+        """A deleted drive's plain copy goes with it."""
+        if name.endswith(self.suffix):
+            try:
+                os.remove(self.plain_path(name))
+            except FileNotFoundError:
+                pass
+
+    def backfill(self) -> int:
+        """Every .nge without an up-to-date plain copy: the ones uploaded
+        before LOG_KEY was set, or while the server was down."""
+        n = 0
+        for e in sorted(os.scandir(self.root), key=lambda e: e.name):
+            if not (e.is_file() and e.name.endswith(self.suffix) and NAME_RE.match(e.name)):
+                continue
+            p = self.plain_path(e.name)
+            if not os.path.exists(p) or os.path.getmtime(p) < e.stat().st_mtime:
+                self.want(e.name)
+                n += 1
+        return n
+
+    def _run(self) -> None:
+        while True:
+            with self.cv:
+                while not self.todo:
+                    self.cv.wait()
+                name = self.todo.pop(0)
+            try:
+                with open(os.path.join(self.root, name), "rb") as f:
+                    plain = self.open_log(f.read(), self.secret)
+                dest = self.plain_path(name)
+                with open(dest + ".part", "wb") as f:
+                    f.write(plain)
+                os.replace(dest + ".part", dest)
+            except FileNotFoundError:          # deleted meanwhile
+                pass
+            except Exception as e:             # one bad file must not stop the rest
+                print(f"plain: {name}: {e}", file=sys.stderr, flush=True)
+
+
 def plan(held: dict, offered: str, buried: frozenset = frozenset()) -> str:
     """The "name offset" lines for what `offered` has beyond `held`.
     A buried name - deleted in the app - is never asked for."""
@@ -128,6 +205,7 @@ class Handler(BaseHTTPRequestHandler):
     root = "data"
     token = ""
     fw_repo = ""                   # "" - no firmware: 404
+    decryptor = None               # a Decryptor with LOG_KEY set
     fw_open = staticmethod(github)
     bury_lock = threading.Lock()
 
@@ -266,6 +344,8 @@ class Handler(BaseHTTPRequestHandler):
                 os.remove(os.path.join(self.root, name))
             except FileNotFoundError:
                 pass
+            if self.decryptor:
+                self.decryptor.forget(name)
         self.log_message("DELETE %s", name)
         self._reply(200, "deleted\n")
 
@@ -333,11 +413,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(500, "write failed\n")
         self.log_message("PUT %s +%d -> %d", name, n, offset + n)
         self._reply(200, f"{offset + n}\n")
+        if self.decryptor:
+            self.decryptor.want(name)
 
 
-def serve(root: str, port: int, bind: str, token: str, fw_repo: str = "") -> ThreadingHTTPServer:
+def serve(root: str, port: int, bind: str, token: str, fw_repo: str = "",
+          log_key: bytes | None = None) -> ThreadingHTTPServer:
     os.makedirs(root, exist_ok=True)
     Handler.root, Handler.token, Handler.fw_repo = root, token, fw_repo
+    Handler.decryptor = Decryptor(root, log_key) if log_key else None
     return ThreadingHTTPServer((bind, port), Handler)
 
 
@@ -347,9 +431,21 @@ def main() -> None:
     bind = os.environ.get("UPLOAD_BIND", "0.0.0.0")
     token = os.environ.get("UPLOAD_TOKEN", "")
     repo = os.environ.get("FW_GITHUB_REPO", "")
-    srv = serve(root, port, bind, token, repo)
+    key_text = os.environ.get("LOG_KEY", "")
+    log_key = None
+    if key_text:
+        from logcrypt import key_from_text
+        log_key = key_from_text(key_text)
+        if not log_key:
+            sys.exit('LOG_KEY is not a log key - the app\'s "ngauge-log-key-v1:..." line, or 64 hex digits')
+    srv = serve(root, port, bind, token, repo, log_key)
     print(f"n-gauge upload: {root} on {bind}:{port}, token {'on' if token else 'OFF'}, "
-          f"firmware {'from ' + repo if repo else 'OFF'}", file=sys.stderr, flush=True)
+          f"firmware {'from ' + repo if repo else 'OFF'}, "
+          f"plain copies {'on' if log_key else 'OFF'}", file=sys.stderr, flush=True)
+    if Handler.decryptor:
+        n = Handler.decryptor.backfill()
+        if n:
+            print(f"plain: {n} logs to decrypt", file=sys.stderr, flush=True)
     srv.serve_forever()
 
 

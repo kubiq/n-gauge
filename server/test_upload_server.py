@@ -5,9 +5,11 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import logcrypt
 import upload_server as us
 
 
@@ -20,6 +22,32 @@ class PlanTest(unittest.TestCase):
     def test_junk_lines_and_names_are_ignored(self):
         offered = "../etc/passwd 5\n.hidden 1\nok.csv x\n\nok.csv 2 extra\nfine.csv 4\n"
         self.assertEqual(us.plan({}, offered), "fine.csv 0\n")
+
+
+# The log format's shared test vector (logcrypt.h, the app's logcrypt.ts).
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "vectors", "logcrypt-v1.json")) as _f:
+    VECTOR = json.load(_f)
+
+
+class LogcryptTest(unittest.TestCase):
+    def test_the_shared_vector(self):
+        got = logcrypt.open_log(bytes.fromhex(VECTOR["file"]), bytes.fromhex(VECTOR["recipientSecret"]))
+        self.assertEqual(got.decode(), VECTOR["plaintext"])
+
+    def test_cut_short_keeps_what_is_whole(self):
+        f = bytes.fromhex(VECTOR["file"])
+        got = logcrypt.open_log(f[:-3], bytes.fromhex(VECTOR["recipientSecret"]))
+        self.assertTrue(VECTOR["plaintext"].startswith(got.decode()))
+        self.assertLess(len(got), len(VECTOR["plaintext"]))
+
+    def test_the_wrong_key_reads_nothing(self):
+        self.assertEqual(logcrypt.open_log(bytes.fromhex(VECTOR["file"]), bytes(range(32))), b"")
+
+    def test_key_text(self):
+        hexkey = VECTOR["recipientSecret"]
+        self.assertEqual(logcrypt.key_from_text(f"ngauge-log-key-v1:{hexkey}\n"), bytes.fromhex(hexkey))
+        self.assertEqual(logcrypt.key_from_text(hexkey), bytes.fromhex(hexkey))
+        self.assertIsNone(logcrypt.key_from_text("ngauge-log-key-v1:abc"))
 
 
 class FakeGitHub:
@@ -169,6 +197,29 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.req("GET", "/fw/latest", token="wrong")[0], 401)
         gh.close()                                                  # GitHub gone
         self.assertEqual(self.req("GET", "/fw/latest")[0], 502)
+
+    def test_plain_copies_of_encrypted_logs(self):
+        # Its own server, with the shared vector's key.
+        srv = us.serve(self.dir.name, 0, "127.0.0.1", "tok", log_key=bytes.fromhex(VECTOR["recipientSecret"]))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        self.addCleanup(lambda: setattr(us.Handler, "decryptor", None))
+        port, self.port = self.port, srv.server_address[1]
+        self.addCleanup(lambda: setattr(self, "port", port))
+        cipher = bytes.fromhex(VECTOR["file"])
+        self.assertEqual(self.req("PUT", "/f/drive_x.csv.nge?offset=0", cipher)[0], 200)
+        plain = os.path.join(self.dir.name, "plain", "drive_x.csv")
+        for _ in range(50):
+            if os.path.exists(plain):
+                break
+            time.sleep(0.05)
+        with open(plain) as f:
+            self.assertEqual(f.read(), VECTOR["plaintext"])
+        # The phone sees the .nge alone; a deleted drive takes its copy along.
+        self.assertEqual(self.req("GET", "/files"), (200, f"drive_x.csv.nge {len(cipher)}\n"))
+        self.req("DELETE", "/f/drive_x.csv.nge")
+        self.assertFalse(os.path.exists(plain))
 
     def test_no_way_out_of_the_folder(self):
         self.assertEqual(self.req("PUT", "/f/..%2Fx?offset=0", b"x")[0], 400)

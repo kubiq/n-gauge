@@ -25,8 +25,23 @@ service's address as seen from inside the tunnel, such as
 `http://gauge.example.org` behind a proxy or `http://192.168.1.10:8650`.
 
 Without Docker: `UPLOAD_TOKEN=... python3 upload_server.py` (standard library
-only; `UPLOAD_DIR`, `UPLOAD_PORT`, `UPLOAD_BIND` and `FW_GITHUB_REPO` set the
-rest).
+only - but `cryptography` for `LOG_KEY`; `UPLOAD_DIR`, `UPLOAD_PORT`,
+`UPLOAD_BIND`, `FW_GITHUB_REPO` and `LOG_KEY` set the rest).
+
+## Plain copies
+
+The card in the car is the place the logs need protecting; the server may
+read them. With `LOG_KEY` in `.env` - the app's log key, the
+`ngauge-log-key-v1:…` line from Settings, Log key (or from KeePass) - each
+encrypted log is decrypted after its upload into `plain/` in the data folder,
+under its plain name (`plain/drive_….csv`), and once at the start for the logs
+already there. The `.nge` files stay as they are: the gauge resumes by their
+size and the phone pulls them as before; `plain/` is a folder, never listed.
+A drive deleted in the app loses its plain copy too. Without `LOG_KEY`,
+nothing changes.
+
+The key in `.env` reads every log the gauge ever wrote with it - keep the
+file as private as the key itself (`chmod 600 .env`).
 
 ## The protocol
 

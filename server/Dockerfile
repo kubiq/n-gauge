@@ -1,7 +1,9 @@
 # The gauge's log upload service - see README.md.
 FROM python:3.13-alpine
 WORKDIR /app
-COPY upload_server.py .
+# For LOG_KEY's plain copies (logcrypt.py): X25519 and ChaCha20-Poly1305.
+RUN pip install --no-cache-dir cryptography
+COPY upload_server.py logcrypt.py ./
 # Not root: it only writes UPLOAD_DIR.
 RUN adduser -D -u 1000 gauge && mkdir /data && chown gauge /data
 USER gauge
