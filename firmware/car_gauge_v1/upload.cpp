@@ -354,6 +354,10 @@ static bool isLog(const char *n) {
 }
 
 // "name size" per line, into plan; its length, 0 if the card was not there.
+// Not a log the logger has open - the drive still being recorded (asked
+// 2026-11-15): uploaded part-way, it showed on the server and the phone as
+// a whole drive, 2.3 km of a 2 h one, and a part that failed later stayed
+// that way. Closed at the next sleep, it goes whole with the next upload.
 static size_t listCard(char *plan, size_t cap, uint16_t *count) {
   size_t n = 0;
   *count = 0;
@@ -376,7 +380,8 @@ static size_t listCard(char *plan, size_t cap, uint16_t *count) {
       File e = root.openNextFile();
       if (e) {
         more = true;
-        if (!e.isDirectory() && isLog(e.name()) && n + 120 < cap) {
+        // logger_is_open: read under the lock, as it wants.
+        if (!e.isDirectory() && isLog(e.name()) && !logger_is_open(e.name()) && n + 120 < cap) {
           n += snprintf(plan + n, cap - n, "%s %lu\n", e.name(), (unsigned long)e.size());
           (*count)++;
         }
