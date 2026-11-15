@@ -1007,6 +1007,7 @@ static void uploadTask(void *arg) {
   char *plan = (char *)heap_caps_malloc(UP_PLAN_MAX, MALLOC_CAP_SPIRAM);
   WireGuard wg;
   bool wgUp = false;
+  bool reached = false;                 // the server answered: worth asking for firmware
   size_t planLen = 0;
   uint16_t onCard = 0;
   String todo;
@@ -1098,18 +1099,28 @@ static void uploadTask(void *arg) {
                                    : wg.is_peer_up() ? "tunnel up, server not reached"
                                                      : "no handshake from the router", code);
       finish(r, t0, false, line);
-      goto out;
+      // Answered, if not with a plan: the firmware may still be there.
+      reached = code > 0 && code != 401;
+      goto firmware;
     }
+    reached = true;
   }
 
   // "name offset" per line: each file's missing part, several at once.
   // Out of time only with files still to go - the next upload sends them.
   sendAll(c, todo, t0, r);
 
+firmware:
   // Then a new firmware, with the time the logs left (2026-11-11 - first
   // until then): a download the garage's mobile signal cut off took the
   // logs with it. Cut off now, it goes on from there next time.
-  if (r.ok && !giveWay) {
+  //
+  // Whenever the server answered, the logs' outcome aside (asked
+  // 2026-11-15): with only a whole upload, a server that could not take
+  // them (read-only, 2026-11-14..15) or a big GPX that failed on a weak
+  // signal kept the crash fix from the gauge, and the crash kept failing
+  // the uploads. A firmware already staged is not fetched again.
+  if (reached && !giveWay) {
     fwDeadlineMs = t0 + c.maxMin * 60000UL;
     fetchFirmware(c, buf, fwNote, sizeof(fwNote));
   }
