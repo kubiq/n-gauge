@@ -119,12 +119,14 @@ void ui_set_faults(uint8_t faults, int oilC, int coolantC);
 // only with a PC connected; while shared it reads as a status instead.
 void ui_update_usbdisk(bool pcConnected, bool shared);
 // The WiFi screen's countdown arc: remaining fraction 1..0 until it returns
-// to the gauges by itself; negative hides it.
-void ui_update_wifi_countdown(float remaining);
+// to the gauges by itself; negative hides it. Arming (WIFI_ASK_AFTER_MS, the
+// AP not asked for yet): the same ring filling up 0..1, in orange.
+void ui_update_wifi_countdown(float remaining, bool arming = false);
 bool ui_take_share_tap();      // true once per tap on it
 bool ui_take_wifi_touch();     // true once per press on the WiFi screen
+// armS: seconds until the AP is asked for (the screen arming), -1 once it is.
 void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
-                    const char *ip, uint8_t clients, bool radioBusy);
+                    const char *ip, uint8_t clients, bool radioBusy, int armS = -1);
 
 // The status screen (ui_status.cpp): the log upload and firmware update in
 // words - upload_status() fills them. tone: 0 waiting, 1 busy, 2 done,

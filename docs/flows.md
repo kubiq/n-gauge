@@ -62,7 +62,7 @@ asked for; without one, whenever the gauge is awake and the car not driving.
 
 ```mermaid
 flowchart TD
-  pass([Every loop pass]) --> asked{"WiFi screen shown, or a phone on it?<br/>Or within 3 min of the screen, no phone joined yet,<br/>or 15 s of a phone leaving?"}
+  pass([Every loop pass]) --> asked{"WiFi screen shown 10 s or more (its ring fills),<br/>or a phone on it? Or within 3 min of the screen,<br/>no phone joined yet, or 15 s of a phone leaving?"}
   asked -- yes --> giveway[The upload gives way:<br/>a running one stops, none starts]
   giveway --> up[AP up]
   asked -- no --> mode{"Only from its screen,<br/>and a server set up?"}

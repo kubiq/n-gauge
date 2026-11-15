@@ -359,6 +359,22 @@ static void faultsTask() {
   ui_set_faults(faults, obd.oilTempC, obd.coolantC);
 }
 
+// ---- the WiFi screen arming ----
+// The AP is asked for only once the WiFi screen has stayed WIFI_ASK_AFTER_MS
+// (asked 2026-11-15) - swiping past it does nothing. Since when it has been
+// showing (0 = not), and how long until it asks: for apTask, for the ring
+// (wifiViewTask) and for the screen's text (gaugesTask).
+static uint32_t wifiScreenFrom = 0;
+static void wifiScreenTrack(uint32_t now) {
+  if (ui_current_view() != VIEW_WIFI) wifiScreenFrom = 0;
+  else if (!wifiScreenFrom) wifiScreenFrom = now ? now : 1;
+}
+// Ms until the screen asks for the AP; 0 once it does, or off the screen.
+static uint32_t wifiArmLeftMs(uint32_t now) {
+  if (!wifiScreenFrom || calc_elapsed(now, wifiScreenFrom, WIFI_ASK_AFTER_MS)) return 0;
+  return WIFI_ASK_AFTER_MS - (now - wifiScreenFrom);
+}
+
 // ---- push to UI ----
 // Every value through obd_*_fresh: stale data presents as no data.
 static void gaugesTask(uint32_t now) {
@@ -442,8 +458,13 @@ static void gaugesTask(uint32_t now) {
     laps_info(&li);
     ui_update_track(&li);
   }
-  ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
-                 web_clients(), upload_holds_radio());
+  {
+    // Arming only while the AP is still to be asked for: with a phone on it,
+    // or the AP up anyway (no server set up), there is nothing to wait for.
+    const uint32_t arm = web_is_up() ? 0 : wifiArmLeftMs(now);
+    ui_update_wifi(settings.apSsid, settings.apPass, web_is_up(), web_ip(),
+                   web_clients(), upload_holds_radio(), arm ? (int)((arm + 999) / 1000) : -1);
+  }
   // The clock (ui_clock.cpp): only while it shows - once a second with the
   // second hand, once a minute without (settings.clockSeconds).
   if (ui_current_view() == VIEW_CLOCK) {
@@ -602,6 +623,16 @@ static void viewTask(uint32_t now) {
   const bool holdWifi = usbdisk_state() == USBDISK_SHARED;
   // A touch on the screen restarts the countdown too.
   const bool touched = ui_take_wifi_touch();
+  wifiScreenTrack(now);
+  // Arming first (WIFI_ASK_AFTER_MS): the ring fills, orange, and the
+  // countdown back to the gauges waits until it is full - unless the AP is
+  // up already (a phone on it, no server set up): then there is no wait.
+  const uint32_t arm = web_is_up() ? 0 : wifiArmLeftMs(now);
+  if (v == VIEW_WIFI && arm && !holdWifi) {
+    ui_update_wifi_countdown(1.0f - (float)arm / (float)WIFI_ASK_AFTER_MS, true);
+    wifiShownAt = 0;                       // the minute starts once it asks
+    return;
+  }
   if (v == VIEW_WIFI && (holdWifi || touched)) wifiShownAt = now ? now : 1;
   // The arc round the screen counts down to the switch back (-1 = hidden).
   ui_update_wifi_countdown(v != VIEW_WIFI || holdWifi || wifiShownAt == 0 ? -1.0f
@@ -663,9 +694,15 @@ static void apTask(uint32_t now) {
   // still waited minutes): AP_LINGER_MS after the screen - time to join from
   // the QR - but only until a phone has joined; once one has, AP_PHONE_GONE_MS
   // after it leaves. Its job is done; nobody is coming to join.
+  //
+  // And the screen asks only once it has stayed WIFI_ASK_AFTER_MS (asked
+  // 2026-11-15, wifiArmLeftMs): swiping past it on the way to another
+  // screen held the upload - and the AP up - for the whole linger.
   static uint32_t screenAt = 0, phoneAt = 0;   // last seen; 0 = not this wake
   const bool phoneOn = web_clients() > 0;
-  if (ui_current_view() == VIEW_WIFI) screenAt = now ? now : 1;
+  wifiScreenTrack(now);
+  const bool screenAsks = wifiScreenFrom && !wifiArmLeftMs(now);
+  if (screenAsks) screenAt = now ? now : 1;
   if (phoneOn) phoneAt = now ? now : 1;
   // A phone seen at or after the screen's last moment ends the screen's wait.
   const bool joined = phoneAt && screenAt && (int32_t)(phoneAt - screenAt) >= 0;
@@ -680,7 +717,7 @@ static void apTask(uint32_t now) {
   char why[48] = "";
   if (phoneOn) {
     strlcpy(why, "a phone is on the gauge's WiFi", sizeof(why));
-  } else if (ui_current_view() == VIEW_WIFI) {
+  } else if (screenAsks) {
     strlcpy(why, "the WiFi screen is showing", sizeof(why));
   } else if (asked) {
     const uint32_t from = forScreen ? screenAt : phoneAt;

@@ -102,14 +102,20 @@ lv_obj_t *ui_build_wifi() {
   return s;
 }
 
-void ui_update_wifi_countdown(float remaining) {
+void ui_update_wifi_countdown(float remaining, bool arming) {
   // A redraw every frame: nothing else moves on this screen, so the sweep
   // can have the frame budget.
   static int last = -2;   // matches neither hidden (-1) nor any step
+  static int lastArming = -1;
   int v = -1;
   if (remaining >= 0) {
     v = (int)ceilf(remaining * WIFI_ARC_STEPS);
     if (v > WIFI_ARC_STEPS) v = WIFI_ARC_STEPS;
+  }
+  // Orange while it fills towards the AP, blue as the countdown back.
+  if ((int)arming != lastArming) {
+    lastArming = arming;
+    set_arc_color(wifiArc, arming ? COL_OIL : COL_BLUE);
   }
   if (v == last) return;
   // Show or hide only on a change. Clearing HIDDEN invalidates the whole
@@ -159,7 +165,7 @@ bool ui_take_wifi_touch() {
 }
 
 void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
-                    const char *ip, uint8_t clients, bool radioBusy) {
+                    const char *ip, uint8_t clients, bool radioBusy, int armS) {
   // Guarded like the rest. The passphrase changes at most once in a session,
   // but the client count changes whenever a phone comes and goes, so it is
   // part of the comparison - otherwise the count would never refresh.
@@ -168,16 +174,18 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
   static bool lastUp = false;
   static bool lastBusy = false;
   static int  lastClients = -1;
+  static int  lastArm = -2;
   const bool passChanged =
       strncmp(lastPass, pass ? pass : "", sizeof(lastPass) - 1) != 0;
   const bool ssidChanged =
       strncmp(lastSsid, ssid ? ssid : "", sizeof(lastSsid) - 1) != 0;
   if (lastUp == apUp && lastBusy == radioBusy && lastClients == (int)clients &&
-      !passChanged && !ssidChanged)
+      lastArm == armS && !passChanged && !ssidChanged)
     return;
   lastUp = apUp;
   lastBusy = radioBusy;
   lastClients = (int)clients;
+  lastArm = armS;
   strncpy(lastPass, pass ? pass : "", sizeof(lastPass) - 1);
   lastPass[sizeof(lastPass) - 1] = '\0';
   strncpy(lastSsid, ssid ? ssid : "", sizeof(lastSsid) - 1);
@@ -193,6 +201,10 @@ void ui_update_wifi(const char *ssid, const char *pass, bool apUp,
   if (apUp && ip && ip[0]) {
     lv_label_set_text_fmt(wifiIp, "http://%s/", ip);
     lv_obj_set_style_text_color(wifiIp, COL_BLUE, 0);
+  } else if (armS >= 0) {
+    // Not asked for yet (WIFI_ASK_AFTER_MS): the ring fills meanwhile.
+    lv_label_set_text_fmt(wifiIp, "WiFi in %d s", armS);
+    lv_obj_set_style_text_color(wifiIp, COL_OIL, 0);
   } else {
     // The radio is the log upload's (upload.h): the AP comes once it is done
     // - minutes, not the seconds "starting" promised (2026-11-09).
