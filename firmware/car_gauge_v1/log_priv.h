@@ -39,7 +39,19 @@ struct LogFile {
   LogcryptSeg seg;
   // Runs after each batch goes out, before any flush (the GPX's closing tags).
   void      (*afterDrain)(LogFile &) = nullptr;
+  char        kind = '-';       // 'c' drive CSV, 'g' GPX, 'v' .vbo - for logstep
 };
+
+// ---- where the logger is (logger.cpp) --------------------------------------
+// The card operation under way, kept in RTC memory across a reset: after the
+// logger's watchdog (2026-11-15 10:17, mid-drive, no upload running - stuck
+// 8 s in something on the card) the boot line says which step and file
+// (logger_last_step, logger.h). Set before each step, LS_IDLE between passes.
+enum LogStep : uint8_t {
+  LS_IDLE = 0, LS_GPX, LS_VBO, LS_CSV,          // a writer's pass
+  LS_OPEN, LS_RENAME, LS_WRITE, LS_FLUSH, LS_STAT, LS_CLOSE,   // a card operation
+};
+void logstep(LogStep s, char kind = '-');
 
 // The batch, in PSRAM. False without it - and then nothing may be logged.
 bool logfile_alloc(LogFile &lf, size_t cap);

@@ -60,6 +60,7 @@ static void gpxWriteTail(LogFile &lf) {
 }
 
 bool gpxlog_init() {
+  gpx.kind = 'g';
   gpx.afterDrain = gpxWriteTail;
   return logfile_alloc(gpx, GPX_BUF_N);
 }
@@ -118,6 +119,7 @@ static void tripNoteTime(bool recentThisWake) {
 float logger_trip_km() { return tripMetres / 1000.0f; }
 
 static void gpxOpen() {
+  logstep(LS_OPEN, 'g');
   if (lognames_new("trip_", ".gpx", &nextTripN, gpx.path, sizeof(gpx.path)) != LOG_NAME_NONE &&
       (gpx.f = SD_MMC.open(gpx.path, FILE_WRITE))) {
 
@@ -177,6 +179,7 @@ static uint32_t  gpxLost = 0;          // fixes the queue could not keep for us
 uint32_t gpxlog_fixes_lost() { return gpxLost; }
 
 void gpxlog_task() {
+  logstep(LS_GPX, 'g');
   // The time half of "commit on size or on time", up here, before anything
   // can return. Down by the point it only ran when a point was accepted: a
   // fix lost in a tunnel or a garage left up to 2 s of points (12 KB) in RAM
@@ -337,6 +340,7 @@ void gpxlog_close() {
     gpx.f.seek(gpxTailPos);
     logfile_check_write(gpx, gpx.f.print(GPX_TAIL), sizeof(GPX_TAIL) - 1);
   }
+  logstep(LS_CLOSE, 'g');
   gpx.f.flush();
   gpx.f.close();
   logfile_end(gpx);

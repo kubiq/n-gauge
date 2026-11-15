@@ -88,6 +88,7 @@ static void vboSampleHook(GpsSample *s) {
 }
 
 bool vbolog_init() {
+  vbo.kind = 'v';
   gps_set_sample_hook(vboSampleHook);
   return logfile_alloc(vbo, VBO_BUF_N);
 }
@@ -104,6 +105,7 @@ void logger_note_g(float lateral, float longitudinal) {
 void vbolog_close() {
   if (!vbo.open) return;
   logfile_commit(vbo);
+  logstep(LS_CLOSE, 'v');
   vbo.f.close();
   logfile_end(vbo);
   vbo.open = false;
@@ -114,6 +116,7 @@ static void vboOpen() {
   int32_t gLat, gLon;
   float dx, dy;
   if (!laps_gate(&gLat, &gLon, &dx, &dy)) return;
+  logstep(LS_OPEN, 'v');
   if (lognames_new("track_", ".vbo", &nextTrackN, vbo.path, sizeof(vbo.path)) == LOG_NAME_NONE ||
       !(vbo.f = SD_MMC.open(vbo.path, FILE_WRITE))) {
     Serial.println(F("[ERR] could not open a track log - VBO disabled for this session"));
@@ -183,6 +186,7 @@ static void vboOpen() {
 }
 
 void vbolog_task() {
+  logstep(LS_VBO, 'v');
   LapInfo li;
   laps_info(&li);
   if (li.state < LAP_OUT_LAP) {         // no session, or the line not found yet

@@ -333,6 +333,7 @@ static void loggerTaskLoop(void *) {
         loggerTask();
         csvlog_note_pass_us(micros() - t0);
       }
+      logstep(LS_IDLE);
     }
     vTaskDelay(pdMS_TO_TICKS(LOGGER_PASS_MS));
   }
@@ -432,6 +433,32 @@ void logger_close() {
 // refusing it (as this did, by the last path each writer had) answered a
 // delete from the app with 409 until the next wake. Read under LoggerSdLock:
 // the paths change only while it is held.
+// ---- where the logger is (log_priv.h LogStep) ------------------------------
+// Magic in the top half, the step and the file's kind below: RTC memory a
+// reset keeps but a power-on fills with noise, which the magic tells apart.
+#define LOGSTEP_MAGIC 0x4C530000u          // "LS"
+RTC_NOINIT_ATTR static volatile uint32_t logStepRtc;
+static char lastStep[24] = "";
+static bool lastStepTaken = false;
+
+void logstep(LogStep s, char kind) {
+  logStepRtc = LOGSTEP_MAGIC | ((uint32_t)s << 8) | (uint8_t)kind;
+}
+
+const char *logger_last_step() {
+  if (lastStepTaken) return lastStep;
+  lastStepTaken = true;
+  const uint32_t v = logStepRtc;
+  if ((v & 0xFFFF0000u) != LOGSTEP_MAGIC) return lastStep;
+  static const char *const steps[] = {"idle", "gpx pass", "vbo pass", "csv pass", "open",
+                                      "rename", "write", "flush", "stat", "close"};
+  const uint8_t s = (uint8_t)(v >> 8);
+  const char k = (char)(v & 0xFF);
+  const char *kind = k == 'c' ? " csv" : k == 'g' ? " gpx" : k == 'v' ? " vbo" : "";
+  snprintf(lastStep, sizeof(lastStep), "%s%s", s < sizeof(steps) / sizeof(steps[0]) ? steps[s] : "?", kind);
+  return lastStep;
+}
+
 bool logger_is_open(const char *name) {
   for (const char *p : {csvlog_path(), gpxlog_path(), vbolog_path()})
     if (p[0] == '/' && strcmp(p + 1, name) == 0) return true;

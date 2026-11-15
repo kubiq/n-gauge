@@ -138,3 +138,8 @@ bool logger_card_shared();
 // Is this card file (a plain name, no slash) open for writing right now?
 // The app's delete (/api/delete) refuses those. Under LoggerSdLock.
 bool logger_is_open(const char *name);
+
+// The step the logger was in when this boot's reset came ("flush gpx",
+// "write csv", "idle"), "" if not known - for the boot line after its
+// watchdog (log_priv.h LogStep). Once per boot: read, then forgotten.
+const char *logger_last_step();

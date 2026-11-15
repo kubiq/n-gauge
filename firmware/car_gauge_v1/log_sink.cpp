@@ -147,6 +147,7 @@ void logfile_drain(LogFile &lf) {
     size_t len = k;
     if (lf.enc) len = logcrypt_seal(&lf.seg, p, k, ioBuf);
     else        memcpy(ioBuf, p, k);
+    logstep(LS_WRITE, lf.kind);
     logfile_check_write(lf, lf.f.write(ioBuf, len), len);
     p += k;
     n -= k;
@@ -163,7 +164,9 @@ void logfile_drain(LogFile &lf) {
 // "writing" for minutes). size() is a stat() of the path, ~1 ms.
 void logfile_commit(LogFile &lf) {
   logfile_drain(lf);
+  logstep(LS_FLUSH, lf.kind);
   lf.f.flush();
+  logstep(LS_STAT, lf.kind);
   const size_t pos = lf.f.position(), size = lf.f.size();
   if (size < pos) logfile_check_write(lf, size, pos);
 }

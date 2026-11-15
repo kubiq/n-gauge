@@ -60,8 +60,15 @@ void bootlog_task(uint32_t now) {
   // After a watchdog reset, which task it was (taskwdt.cpp).
   const char *wdt = taskwdt_last_culprit();
   if (*wdt) {
-    const size_t n = strlen(line);
+    size_t n = strlen(line);
     snprintf(line + n, sizeof(line) - n, " | wdt:%s", wdt);
+    // And where the logger was (logger.h): its watchdog of 2026-11-15
+    // 10:17, mid-drive, said only that it had stopped.
+    const char *step = logger_last_step();
+    if (*step) {
+      n = strlen(line);
+      snprintf(line + n, sizeof(line) - n, " | logstep: %s", step);
+    }
   }
   // After a crash, where (crashrec.cpp) - and how far the upload's tunnel
   // close got, if it was in one (upload.cpp): both crashes of 2026-11-12

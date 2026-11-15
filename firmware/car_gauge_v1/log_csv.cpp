@@ -29,7 +29,7 @@ static uint32_t lastFlushMs  = 0;
 static bool     csvFailed = false;   // gave up on the file - see log_priv.h
 RTC_DATA_ATTR static int nextDriveN = 0;
 
-bool csvlog_init() { return logfile_alloc(csv, CSV_BUF_N); }
+bool csvlog_init() { csv.kind = 'c'; return logfile_alloc(csv, CSV_BUF_N); }
 bool csvlog_failed() { return csvFailed; }
 void csvlog_card_back() { csvFailed = false; }
 
@@ -237,6 +237,7 @@ static bool driveOpen() {
   const LogName name = lognames_new("drive_", ".csv", &nextDriveN, csv.path, sizeof(csv.path));
   pathDated = name == LOG_NAME_DATED;
   driveOpenMs = millis();
+  logstep(LS_OPEN, 'c');
   if (name == LOG_NAME_NONE || !(csv.f = SD_MMC.open(csv.path, FILE_WRITE))) {
     Serial.println(F("[ERR] could not open a drive log file"));
     csvFailed = true;          // don't retry every pass once it's hopeless
@@ -271,10 +272,13 @@ static void driveRenameDated() {
   // but the name must follow the contents whatever happens.
   if (!lognames_dated("drive_", csv.enc ? ".csv" LOGCRYPT_SUFFIX : ".csv", start, dated, sizeof(dated))) return;
   logfile_commit(csv);
+  logstep(LS_CLOSE, 'c');
   csv.f.close();
   logfile_end(csv);
+  logstep(LS_RENAME, 'c');
   const bool renamed = SD_MMC.rename(csv.path, dated);
   if (renamed) strlcpy(csv.path, dated, sizeof(csv.path));
+  logstep(LS_OPEN, 'c');
   csv.f = SD_MMC.open(csv.path, FILE_APPEND);
   if (!csv.f) {
     Serial.printf("[ERR] could not reopen drive log %s - logging stopped\n", csv.path);
@@ -298,6 +302,7 @@ static void stampUtc(char *out, size_t n) {
 }
 
 void csvlog_task() {
+  logstep(LS_CSV, 'c');
   const uint32_t now = millis();
   if (now - lastSampleMs < (log_idle() ? LOG_IDLE_INTERVAL_MS : LOG_INTERVAL_MS)) return;
   lastSampleMs = now;
@@ -358,6 +363,7 @@ void csvlog_close() {
   }
   logfile_puts(csv, "\r\n");
   logfile_commit(csv);
+  logstep(LS_CLOSE, 'c');
   csv.f.close();
   logfile_end(csv);
   csv.open = false;
