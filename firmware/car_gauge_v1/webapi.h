@@ -37,6 +37,12 @@ bool web_download_active();
 // boot - the caller counts from where a sync started. Not the file list: a
 // sync with nothing new is only that, and needs no screen.
 void web_sync_stats(uint32_t *lastAtMs, uint16_t *files, uint32_t *bytes);
+// The phone's own plan, as it says with each download (/dl?f=..&sync=a,b,c,d,
+// since 2026-11-15): file `at` of `of`, `done` of `total` bytes - its
+// figures, with the bytes of the file being sent counted in as they go.
+// False from an app that does not say (of = 0): the counts above alone.
+struct WebSyncPlan { uint16_t at, of; uint32_t done, total; };
+bool web_sync_plan(WebSyncPlan *p);
 // The AP's beacons carry the last drive's fingerprint (logcrypt_beacon), for
 // the phone to see new drives without joining. Call when the last drive or
 // the log key changes; a no-op while the AP is down (it is set on start).

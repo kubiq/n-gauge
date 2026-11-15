@@ -965,6 +965,33 @@ void web_sync_stats(uint32_t *lastAtMs, uint16_t *files, uint32_t *bytes) {
   *bytes = syncBytes;
 }
 
+// The phone's plan (web_sync_plan): set per download from its "sync" arg,
+// cleared by one without it; planLive is this file's bytes sent so far.
+static volatile uint16_t planAt = 0, planOf = 0;
+static volatile uint32_t planBefore = 0, planTotal = 0, planLive = 0;
+static void notePlan(const char *s) {
+  unsigned a = 0, o = 0;
+  unsigned long b = 0, t = 0;
+  if (!s || sscanf(s, "%u,%u,%lu,%lu", &a, &o, &b, &t) != 4 || !o || a > o || b > t) {
+    planOf = 0;
+    return;
+  }
+  planAt = (uint16_t)a;
+  planBefore = (uint32_t)b;
+  planTotal = (uint32_t)t;
+  planLive = 0;
+  planOf = (uint16_t)o;
+}
+bool web_sync_plan(WebSyncPlan *p) {
+  p->of = planOf;
+  if (!p->of) return false;
+  p->at = planAt;
+  p->total = planTotal;
+  const uint32_t done = planBefore + planLive;
+  p->done = done < p->total ? done : p->total;
+  return true;
+}
+
 static bool sendRaw(httpd_req_t *r, const char *p, size_t n) {
   while (n) {
     const int k = httpd_send(r, p, n);
@@ -1025,6 +1052,7 @@ static esp_err_t handleDownload(httpd_req_t *r) {
 
   dlBusy = true;
   noteSync();
+  notePlan(arg("sync"));
   const uint32_t t0 = millis(), deadline = t0 + DL_MAX_MS, total = left;
   // Internal RAM: the card reads into it by DMA.
   static uint8_t buf[2048];
@@ -1040,6 +1068,7 @@ static esp_err_t handleDownload(httpd_req_t *r) {
     if (!got) break;
     if (!sendRaw(r, (const char *)buf, got)) break;      // stalled or gone: give up
     left -= got;
+    planLive = total - left;                             // the sync screen's progress
     // A fast client never makes a send wait: let lower priorities run.
     if ((sinceYield += got) >= 16384) { sinceYield = 0; vTaskDelay(1); }
   }

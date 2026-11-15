@@ -158,8 +158,11 @@ bool ui_take_saver_touch();
 // How long since the panel was last touched, ms (LVGL's own count).
 uint32_t ui_idle_ms();
 
-// The sync screen (ui_sync.cpp): what this sync has sent so far.
-void ui_update_sync(uint16_t files, uint32_t bytes);
+// The sync screen (ui_sync.cpp): what this sync has sent so far - and, when
+// the phone says its plan (webapi.h web_sync_plan), its "file 3 of 12, 3.4 of
+// 17 MB", the outer ring filling as the progress. Null: the counts alone.
+struct UiSyncPlan { uint16_t at, of; uint32_t done, total; };
+void ui_update_sync(uint16_t files, uint32_t bytes, const UiSyncPlan *plan = nullptr);
 bool ui_take_sync_touch();     // true once per press on the sync screen
 
 // Boot splash: the gauge arcs sweep up and the name fades in, then it hands

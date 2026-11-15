@@ -562,7 +562,14 @@ static void syncTask(uint32_t now) {
     if (ui_current_view() == VIEW_SYNC) ui_set_view(back);
     if (ui_current_view() == VIEW_SYNC) ui_set_view(ui_home_view());
   }
-  if (shown) ui_update_sync((uint16_t)(files - files0), bytes - bytes0);
+  if (shown) {
+    // The phone's own plan when it says it (an app from 2026-11-15 on).
+    WebSyncPlan wp;
+    UiSyncPlan up;
+    const bool planned = web_sync_plan(&wp);
+    if (planned) up = {wp.at, wp.of, wp.done, wp.total};
+    ui_update_sync((uint16_t)(files - files0), bytes - bytes0, planned ? &up : nullptr);
+  }
 }
 
 // ---- the screen saver ----
