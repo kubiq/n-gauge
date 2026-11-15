@@ -979,7 +979,7 @@
 // 2026-11-15): swiping past it to another screen started the AP and held the
 // log upload for minutes. The countdown ring fills up meanwhile, in orange,
 // and the WIFI_VIEW_MAX_MS countdown starts after it.
-#define WIFI_ASK_AFTER_MS  10000
+#define WIFI_ASK_AFTER_MS  5000
 // The overview (ui_overview.cpp): its values set this often while shown; the
 // instant fuel per 100 km from this speed, per hour below it.
 #define OVERVIEW_REFRESH_MS   250
