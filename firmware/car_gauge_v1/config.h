@@ -867,6 +867,11 @@
 // long after both are gone. Long enough to join from the QR - the screen
 // itself returns to the gauges after WIFI_VIEW_MAX_MS - or to come back.
 #define AP_LINGER_MS       180000
+// ... but once a phone has joined, only this long after it leaves (asked
+// 2026-11-15: a sync done, the phone off the AP, and the upload still waited
+// out the minutes meant for joining). Long enough for a phone that only
+// dropped for a moment to come back.
+#define AP_PHONE_GONE_MS   15000
 
 // 1 = take the AP down while the car is being driven, and bring it back once
 // stopped. A 2.4 GHz transmitter a few centimetres from the GNSS antenna is

@@ -51,8 +51,9 @@ uint8_t upload_last_close_step();
 // The gauge's own WiFi is asked for (apTask: its screen shown, a phone on
 // it): a running upload stops at once, and none starts while this holds -
 // the WiFi screen always brings the AP up (asked 2026-11-12). From loop(),
-// every pass.
-void upload_give_way(bool yes);
+// every pass. `why`: what holds it, for the status screen ("a phone is on
+// the gauge's WiFi", "the WiFi screen, 2:40 left").
+void upload_give_way(bool yes, const char *why = nullptr);
 
 // The status screen (ui_update_status): where the upload is, in words.
 // From loop(); the task's step and counts are read as they are - a number

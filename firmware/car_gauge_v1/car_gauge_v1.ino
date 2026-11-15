@@ -654,19 +654,42 @@ static void apTask(uint32_t now) {
 #endif
 #if WIFI_AP_ALWAYS
   // Only while asked for (settings.apOnScreen, 2026-11-09): the WiFi screen
-  // shown, or a phone on the AP, and AP_LINGER_MS after the last of them -
-  // time for the phone to join from the QR, or to come back. Then the radio
-  // is free for the log upload, and not transmitting by the GNSS antenna.
-  // Always up, as before, while no upload server is set up: then the AP is
-  // the only way the logs leave the gauge.
-  static uint32_t askedAt = 0;          // 0 = not asked for this wake
-  if (ui_current_view() == VIEW_WIFI || web_clients() > 0) askedAt = now ? now : 1;
+  // shown, or a phone on the AP, and a while after. Then the radio is free
+  // for the log upload, and not transmitting by the GNSS antenna. Always up,
+  // as before, while no upload server is set up: then the AP is the only
+  // way the logs leave the gauge.
+  //
+  // How long after (2026-11-15: a sync done, the phone gone, and the upload
+  // still waited minutes): AP_LINGER_MS after the screen - time to join from
+  // the QR - but only until a phone has joined; once one has, AP_PHONE_GONE_MS
+  // after it leaves. Its job is done; nobody is coming to join.
+  static uint32_t screenAt = 0, phoneAt = 0;   // last seen; 0 = not this wake
+  const bool phoneOn = web_clients() > 0;
+  if (ui_current_view() == VIEW_WIFI) screenAt = now ? now : 1;
+  if (phoneOn) phoneAt = now ? now : 1;
+  // A phone seen at or after the screen's last moment ends the screen's wait.
+  const bool joined = phoneAt && screenAt && (int32_t)(phoneAt - screenAt) >= 0;
+  const bool forScreen = screenAt && !joined && !calc_elapsed(now, screenAt, AP_LINGER_MS);
+  const bool forPhone = phoneAt && !calc_elapsed(now, phoneAt, AP_PHONE_GONE_MS);
   const bool onlyAsked = settings.apOnScreen && upload_configured();
-  const bool asked = askedAt && !calc_elapsed(now, askedAt, AP_LINGER_MS);
+  const bool asked = forScreen || forPhone;
   // Asked for, the WiFi wins over the log upload, whatever the setting: a
   // running one stops, none starts meanwhile (asked 2026-11-12 - the WiFi
   // screen sat on "after the upload..." through a garage's failed tries).
-  upload_give_way(asked);
+  // Saying why, and for how long (the status screen).
+  char why[48] = "";
+  if (phoneOn) {
+    strlcpy(why, "a phone is on the gauge's WiFi", sizeof(why));
+  } else if (ui_current_view() == VIEW_WIFI) {
+    strlcpy(why, "the WiFi screen is showing", sizeof(why));
+  } else if (asked) {
+    const uint32_t from = forScreen ? screenAt : phoneAt;
+    const uint32_t len = forScreen ? AP_LINGER_MS : AP_PHONE_GONE_MS;
+    const uint32_t left = (len - (now - from) + 999) / 1000;
+    snprintf(why, sizeof(why), "%s, %lu:%02lu left", forScreen ? "for a phone to join" : "the phone just left",
+             (unsigned long)(left / 60), (unsigned long)(left % 60));
+  }
+  upload_give_way(asked, why);
 #if AP_DRIVE_OFF
   // The gauge's state (podstate.h): down while driving, by the car's own
   // speed - the GPS's only when the car is silent. By the GPS alone it

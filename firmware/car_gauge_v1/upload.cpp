@@ -1142,7 +1142,12 @@ void upload_now() {
 
 uint8_t upload_last_close_step() { return endStepSeen; }
 
-void upload_give_way(bool yes) { giveWay = yes; }
+// Written and read from loop() alone (apTask, upload_status).
+static char giveWhy[48] = "";
+void upload_give_way(bool yes, const char *why) {
+  giveWay = yes;
+  strlcpy(giveWhy, yes && why ? why : "", sizeof(giveWhy));
+}
 
 bool upload_holds_radio() { return state != UP_IDLE; }
 bool upload_busy() { return state != UP_IDLE; }
@@ -1175,7 +1180,7 @@ void upload_status(UpStatus *s) {
   };
   if (!configured()) return say(0, "Not set up", "the app's Home server card");
   if (afterCrash) return say(3, "Off", "this wake began with a crash");
-  if (giveWay && state == UP_IDLE) return say(0, "Waiting", "the gauge's WiFi is in use");
+  if (giveWay && state == UP_IDLE) return say(0, "Waiting", giveWhy[0] ? giveWhy : "the gauge's WiFi is in use");
   if (state == UP_WAIT_AP) return say(1, "Starting", "the gauge's WiFi goes off for it");
   if (state == UP_RUNNING) {
     char d[64];

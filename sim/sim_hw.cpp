@@ -151,7 +151,7 @@ void upload_task(uint32_t) {}
 bool upload_holds_radio() { return false; }
 bool upload_busy() { return false; }
 bool upload_configured() { return false; }      // the AP up as before, always
-void upload_give_way(bool) {}
+void upload_give_way(bool, const char *) {}
 uint8_t upload_last_close_step() { return 0; }
 // No panics to record on a PC.
 void crashrec_init() {}
