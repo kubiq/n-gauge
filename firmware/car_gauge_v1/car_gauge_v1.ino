@@ -577,15 +577,22 @@ static void syncTask(uint32_t now) {
 // parked wake, no answer yet) the gauges have nothing to show and read "--".
 // After SAVER_AFTER_MS untouched a gauge screen gives way to the screen
 // saver (ui_saver.cpp): the N badge, dimmed and still (asked 2026-11-12). A
-// touch brings the gauges back - empty - for as long again; the car talking
-// takes it away at once. Not over the WiFi, status or sync screens, nor
+// touch brings the gauges back - empty - for as long again; a reading from
+// the car takes it away at once. Not over the WiFi, status or sync screens, nor
 // while the boot splash holds (it waits for the car itself), nor on the
 // bench (a PC on USB: the gauges are what is being looked at).
+//
+// "Silent" includes the car on with nothing to say (asked 2026-11-15): the
+// ignition on and the engine not started sends no oil, coolant, boost, rpm
+// or speed - 2026-11-14 07:24 a minute of gauges all "--" while waiting to
+// start. The first reading brings the gauges back, as the car waking does.
 static void saverTask(uint32_t now) {
   (void)now;
   static GaugeView back = VIEW_OIL;
   const GaugeView v = ui_current_view();
-  const bool silent = podstate().car == PS_CAR_OFF;
+  const bool reading = obd_oil_fresh() || obd_coolant_fresh() || obd_boost_fresh() ||
+                       obd_rpm_fresh() || obd_speed_fresh();
+  const bool silent = podstate().car == PS_CAR_OFF || (podstate().car == PS_CAR_ON && !reading);
   if (v == VIEW_SAVER) {
     if (ui_take_saver_touch() || !silent) {
       ui_set_view(back);
