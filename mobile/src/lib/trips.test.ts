@@ -7,6 +7,7 @@ import {
   distM,
   GPX_END,
   isStub,
+  likelyStub,
   litresPer100,
   pairTrips,
   parseCsv,
@@ -314,6 +315,15 @@ test('ended: the end row and the end mark, or a cut-off', () => {
   assert.equal(unfinished(parseGpx(track), { ended: null }), false);   // old logs: no telling
   assert.equal(unfinished({}, closed), false);                   // a summary cached before the mark
   assert.equal(unfinished(undefined, cut), true);                // car data only
+});
+
+test('likelyStub: small files are guessed blips, a real drive is not', () => {
+  assert.equal(likelyStub({ gpx: 196_000, csv: 17_000 }), true);      // a minute at the pump
+  assert.equal(likelyStub({ gpx: 11_000_000, csv: 960_000 }), false); // a drive
+  assert.equal(likelyStub({ gpx: 300_000, csv: 180_000 }), false);    // long car data, short track
+  assert.equal(likelyStub({ csv: 12_000 }), true);
+  assert.equal(likelyStub({ csv: 140_000 }), false);
+  assert.equal(likelyStub({}), false);
 });
 
 test('csv: the real drive_0181.csv parses', { skip: !existsSync('../data/drive_0181.csv') }, () => {

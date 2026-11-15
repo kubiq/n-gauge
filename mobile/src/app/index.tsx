@@ -14,7 +14,7 @@ import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
-import { type ListFacts, loadFinished, loadFuels, loadListFacts, saveFuel } from '@/lib/store';
+import { type Inbox, type ListFacts, loadFinished, loadFuels, loadInbox, loadListFacts, saveFuel } from '@/lib/store';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
@@ -22,6 +22,7 @@ import {
   isEncryptedName,
   isGpxName,
   isStub,
+  likelyStub,
   litresPer100,
   type Refuel,
   type TripFiles,
@@ -51,6 +52,8 @@ const TANK_L = 50;
 // read the cache itself stayed unread after its summary had landed.
 export default function TripsScreen() {
   const [trips, setTrips] = useState<TripFiles[]>([]);
+  // The files' sizes (store.ts), for guessing a stub before it is read.
+  const [inbox, setInbox] = useState<Inbox>({});
   // Settings, "Trip list" - read again on each focus, so a change shows on return.
   const [facts, setFacts] = useState(loadListFacts);
   // The fuel picked at each fill-up (fuel-grade.ts).
@@ -101,6 +104,7 @@ export default function TripsScreen() {
         }
       }
       setTrips(list);
+      setInbox(loadInbox());
       setFacts(loadListFacts());
       setFinished(loadFinished());
       setNames(forgetStaleTitles(list));
@@ -114,27 +118,20 @@ export default function TripsScreen() {
       setStatus(null);
       if (!todo.length || syncing) return;   // after the sync: this runs again then
       working.current = true;
-      const together = Object.keys(have).length > 0;
       (async () => {
-        const got: Sums = {};
-        const bad: Record<string, string> = {};
+        // Each into its row as it is read: the rows are there already
+        // (placeholders, below), so a summary landing fills one in place.
         for (const [i, name] of todo.entries()) {
           // Only while there is something to wait for; nothing once done.
           setStatus(t('Reading new drives… {i} of {n}', { i: i + 1, n: todo.length }));
           try {
             await summarise(name);
             const s = isGpxName(name) ? cachedGpx(name) : cachedCsv(name);
-            if (s && together) got[name] = s;
-            else if (s) setSums((prev) => ({ ...prev, [name]: s }));
+            if (s) setSums((prev) => ({ ...prev, [name]: s }));
           } catch (e) {
             const msg = e instanceof LogKeyError ? e.message : t('Could not read it: {error}', { error: String(e) });
-            if (together) bad[name] = msg;
-            else setProblems((prev) => ({ ...prev, [name]: msg }));
+            setProblems((prev) => ({ ...prev, [name]: msg }));
           }
-        }
-        if (together) {
-          setSums((prev) => ({ ...prev, ...got }));
-          setProblems((prev) => ({ ...prev, ...bad }));
         }
         setStatus(null);
         working.current = false;
@@ -199,12 +196,12 @@ export default function TripsScreen() {
   // Rows with their summaries; restart fragments and blips hidden (isStub),
   // with a line saying how many - nothing just disappears.
   //
-  // A drive is listed once it has been read (or failed to be), not before:
-  // shown unread, a blip vanished when its summary landed and the rows below
-  // jumped up, and a row's week and title moved from the file name's stamp
-  // to the track's - a list that looked shuffled while it filled. The files
-  // are read top to bottom, so it now grows in order, with one "Reading new
-  // drives…" pill over it.
+  // Every recent drive is listed at once, read or not (asked 2026-11-15:
+  // drives appearing one by one made the list jump): unread, a row is its
+  // date from the file name and "Reading…", and fills in place as its files
+  // are read, top to bottom. Not a drive that will most likely turn out a
+  // blip (likelyStub, by its files' sizes): shown, it would vanish once read
+  // and the rows below jump up - so that one appears once read, if at all.
   const rows = trips.map((t) => {
     const g = t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined;
     const c = t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined;
@@ -253,7 +250,11 @@ export default function TripsScreen() {
   // A hop to the pump is short, but not hidden with the blips.
   const longOnes = readOnes.filter((r) => r.problem || fills[r.t.key] || !isStub(r.g, r.c));
   const hidden = readOnes.length - longOnes.length;
-  const shownSet = new Set(showShort ? readOnes : longOnes);
+  // Recent drives still being read, as placeholders in their places.
+  const placeholders = rows.filter(
+    (r) => !r.read && !isOld(r.t.start) && !likelyStub({ gpx: r.t.gpx ? inbox[r.t.gpx]?.bytes : undefined, csv: r.t.csv ? inbox[r.t.csv]?.bytes : undefined }),
+  );
+  const shownSet = new Set([...(showShort ? readOnes : longOnes), ...placeholders]);
   // Older drives not read yet stay in their week, counted, until it is opened
   // - and while it is being read, so the week does not vanish and come back.
   // (Recent ones are being read anyway: listed once read, as above.)
@@ -307,6 +308,8 @@ export default function TripsScreen() {
       {trips.length === 0 ? null : (
         weeks.map((w) => {
           const waiting = w.items.filter(unread).length;
+          // Totals only of a week whose drives are all read, placeholders too.
+          const whole = !w.items.some((r) => !r.read);
           const monday = w.monday;
           const isOpened = monday !== null && opened.has(monday);
           return (
@@ -317,8 +320,8 @@ export default function TripsScreen() {
                   {`  ·  ${tn(w.drives, '1 drive', '{n} drives')}`}
                   {/* Totals only of a whole week: with drives unread they
                       would be a part passed off as the sum. */}
-                  {!waiting && w.distanceM > 0 ? `  ·  ${distance(w.distanceM)}` : ''}
-                  {!waiting && w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
+                  {whole && w.distanceM > 0 ? `  ·  ${distance(w.distanceM)}` : ''}
+                  {whole && w.secs > 0 ? `  ·  ${duration(w.secs)}` : ''}
                 </Text>
               </Text>
               {w.items
@@ -338,6 +341,7 @@ export default function TripsScreen() {
                     onFuel={pickFuel}
                     names={names}
                     latest={r.t.key === trips[0]?.key}
+                    reading={!r.read}
                     markedFinished={[r.t.gpx, r.t.csv].some((n) => n && finished.has(n))}
                   />
                 ))}
@@ -385,6 +389,7 @@ function TripRow({
   names,
   latest,
   markedFinished,
+  reading,
 }: {
   t: TripFiles;
   g?: GpxStats;
@@ -402,6 +407,8 @@ function TripRow({
   latest: boolean;
   /** Marked as finished on its screen: no note, whatever its logs say. */
   markedFinished: boolean;
+  /** Not read yet (a placeholder): its date, and the figures to come. */
+  reading: boolean;
 }) {
   const start = g?.start ?? trip.start;
   const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
@@ -447,7 +454,8 @@ function TripRow({
           onFuel={(v) => onFuel(fillId(f), v)}
         />
       ))}
-      {!trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
+      {reading ? <Note>{t('Reading…')}</Note> : null}
+      {!reading && !trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
       {!markedFinished && unfinished(g, c) ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>

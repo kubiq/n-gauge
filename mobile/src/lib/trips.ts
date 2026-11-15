@@ -478,6 +478,20 @@ export function isStub(g?: { distanceM: number; start: number | null; end: numbe
 }
 
 /**
+ * A drive not read yet that will most likely turn out a stub, by its files'
+ * sizes alone - so the list does not show it as a row only to hide it a
+ * moment later (asked 2026-11-15: rows first, details after, nothing moving).
+ * A stub's track is under 3 minutes: at 25 Hz a GPX writes ~5 KB a second,
+ * so under ~0.9 MB; car data alone under a minute is ~120 rows, ~25 KB. A
+ * guess, on the small side: a real short drive guessed wrong just appears
+ * once read, as every drive did before.
+ */
+export function likelyStub(bytes: { gpx?: number; csv?: number }): boolean {
+  if (bytes.gpx !== undefined) return bytes.gpx < 600_000 && (bytes.csv ?? 0) < 60_000;
+  return bytes.csv !== undefined && bytes.csv < 25_000;
+}
+
+/**
  * One entry per drive, newest first: each GPX with the CSV of its session,
  * and every CSV left over on its own. A session can hold more than one of
  * each (a card share or a key change starts new files): they pair in order.
