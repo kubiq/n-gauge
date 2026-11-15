@@ -43,8 +43,9 @@ flowchart TD
   join --> tunnel[WireGuard tunnel home<br/>resolve the server through it]
   tunnel -- "no handshake / no name" --> fail
   tunnel --> plan["POST /plan: what the server lacks"]
-  plan --> send[Send the files, 3 at once<br/>until done or the time limit]
-  send --> fw{Time left?}
+  plan --> send[Send the finished files, 3 at once<br/>until done or the time limit<br/>- not the drive still being recorded]
+  plan -- "answered with an error" --> fw
+  send --> fw{"Time left?<br/>(whatever came of the logs)"}
   fw -- yes --> getfw["/fw/latest: newer than this?<br/>download - resumes a cut-off one -<br/>check the signature, stage it"]
   fw -- no --> done
   getfw --> done([Done this wake])
