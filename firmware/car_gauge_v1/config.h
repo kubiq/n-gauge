@@ -864,9 +864,10 @@
 // Since 2026-11-09 "awake" is narrowed by a setting, on by default once an
 // upload server is set up (settings.apOnScreen, apTask): the AP comes up when
 // the WiFi screen is swiped to, stays while a phone is on it, and goes this
-// long after both are gone. Long enough to join from the QR - the screen
-// itself returns to the gauges after WIFI_VIEW_MAX_MS - or to come back.
-#define AP_LINGER_MS       180000
+// long after both are gone. Long enough for a phone still joining from the QR
+// when the screen was left - it joins in seconds; 3 minutes until 2026-11-15
+// held the log upload for nothing.
+#define AP_LINGER_MS       30000
 // ... but once a phone has joined, only this long after it leaves (asked
 // 2026-11-15: a sync done, the phone off the AP, and the upload still waited
 // out the minutes meant for joining). Long enough for a phone that only
