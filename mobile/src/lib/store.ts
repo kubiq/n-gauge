@@ -12,7 +12,7 @@ import * as SecureStore from 'expo-secure-store';
 import { t } from '../i18n/index.ts';
 import { asFuel, type Fuel, type Fuels } from './fuel-grade';
 import { GPX_TAIL } from './gpx-share';
-import { type Downloader, downloadRange, type PodUpload } from './pod';
+import { type Downloader, downloadRange, type PodUpload, type SyncPlanNote } from './pod';
 import type { PodSettings } from './settings-schema';
 import { isPodLog, type Known, type Pull } from './sync-plan';
 import type { WifiCreds } from './wifi-qr';
@@ -255,6 +255,8 @@ export async function pull(
   onProgress?: (bytes: number) => void,
   signal?: AbortSignal,
   download: Downloader = downloadRange,
+  /** Where the sync is, for the gauge's sync screen (pod.ts SyncPlanNote). */
+  plan?: SyncPlanNote,
 ): Promise<void> {
   ensureDir();
   const state = loadInbox();
@@ -278,7 +280,7 @@ export async function pull(
   const tmp = new File(partsDir, `${Date.now()}.part`);
   // A cancelled or failed download rejects here, before the inbox is
   // touched: the file stays as it was and the next sync plans it again.
-  const { whole } = await download(p.name, from, p.size, tmp, onProgress, signal);
+  const { whole } = await download(p.name, from, p.size, tmp, onProgress, signal, plan);
   const skip = whole ? from : 0;
   const got = tmp.size - skip;
 

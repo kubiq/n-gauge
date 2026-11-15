@@ -163,6 +163,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             setProgress({ at: i + 1, of: todo.length, got: before + b, total });
           },
           ctl.signal,
+          undefined,
+          // Told to the gauge too, for its sync screen.
+          { at: i + 1, of: todo.length, before, total },
         );
         before += p.size - p.from;
         done++;

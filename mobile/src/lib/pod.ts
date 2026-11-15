@@ -215,8 +215,22 @@ export function downloadRange(
   dest: File,
   onProgress?: (bytes: number) => void,
   signal?: AbortSignal,
+  plan?: SyncPlanNote,
 ): Promise<{ whole: boolean }> {
-  return downloadUrlRange(`${POD_BASE}/dl?f=${encodeURIComponent(name)}`, {}, from, to, dest, onProgress, signal);
+  const sync = plan ? `&sync=${syncArg(plan)}` : '';
+  return downloadUrlRange(`${POD_BASE}/dl?f=${encodeURIComponent(name)}${sync}`, {}, from, to, dest, onProgress, signal);
+}
+
+/**
+ * Where a sync is, told to the gauge with each download (asked 2026-11-15):
+ * its sync screen then shows "file 3 of 12, 3.4 of 17 MB" as the phone does,
+ * and fills its ring (webapi.cpp notePlan). A gauge from before ignores it.
+ */
+export type SyncPlanNote = { at: number; of: number; before: number; total: number };
+
+/** The `sync` argument: file at,of then bytes before this file,total. */
+export function syncArg(p: SyncPlanNote): string {
+  return [p.at, p.of, p.before, p.total].map((n) => Math.max(0, Math.round(n))).join(',');
 }
 
 /** A file's download, from wherever: the gauge's /dl, or the home server (home.ts). */
