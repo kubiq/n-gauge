@@ -14,7 +14,7 @@ import { asFuel, type Fuel, type Fuels } from './fuel-grade';
 import { GPX_TAIL } from './gpx-share';
 import { type Downloader, downloadRange, type PodUpload, type SyncPlanNote } from './pod';
 import type { PodSettings } from './settings-schema';
-import { isPodLog, type Known, type Pull } from './sync-plan';
+import { isPodLog, type Known, type PodFile, type Pull } from './sync-plan';
 import type { WifiCreds } from './wifi-qr';
 
 const CREDS_KEY = 'podWifi';
@@ -181,6 +181,24 @@ export function saveFuel(id: string, fuel: Fuel | null): Fuels {
   else delete all[id];
   fuelsFile.write(JSON.stringify(all));
   return all;
+}
+
+// The gauge's last file listing (pod.ts listFiles), names, sizes and which
+// were still being written - for passing finished drives on to the home
+// server once the phone has internet again (home-sync.ts, planRelay).
+const gaugeFilesFile = new File(Paths.document, 'gauge-files.json');
+
+export function loadGaugeFiles(): PodFile[] {
+  try {
+    const raw = gaugeFilesFile.exists ? JSON.parse(gaugeFilesFile.textSync()) : [];
+    return Array.isArray(raw) ? raw.filter((f) => f && typeof f.name === 'string' && typeof f.size === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveGaugeFiles(files: PodFile[]): void {
+  gaugeFilesFile.write(JSON.stringify(files));
 }
 
 // Drives merged into one (merge.ts): groups of file names.

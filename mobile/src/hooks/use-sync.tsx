@@ -32,6 +32,7 @@ import {
   loadLastSync,
   pull,
   saveDeleted,
+  saveGaugeFiles,
   saveGaugeFw,
   saveLastSync,
 } from '@/lib/store';
@@ -123,6 +124,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setPhase('checking');
     setStatus(null);
     const listed = await listFiles();
+    // Kept: which of them are finished, to pass on to the home server once
+    // the phone has internet again (home-sync.ts).
+    saveGaugeFiles(listed);
     // Drives deleted on the phone go from the gauge too, before planning: a
     // name the gauge no longer has, or has just deleted, leaves the list; one
     // it cannot delete yet (still being written) stays, and is not pulled.

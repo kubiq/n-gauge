@@ -194,8 +194,11 @@ export async function deletePodFile(name: string): Promise<'done' | 'later'> {
 export async function listFiles(): Promise<PodFile[]> {
   const out: PodFile[] = [];
   for (let page = 0; page < 100; page++) {
-    const r: { files: PodFile[]; pages: number } = await (await call(`/api/files?p=${page}`, {}, 15000)).json();
-    out.push(...r.files);
+    const r: { files: (Omit<PodFile, 'open'> & { open?: number })[]; pages: number } = await (
+      await call(`/api/files?p=${page}`, {}, 15000)
+    ).json();
+    // "open" 0/1 from firmware of 2026-11-16 on; absent before.
+    out.push(...r.files.map(({ open, ...f }) => (open === undefined ? f : { ...f, open: open === 1 })));
     if (page + 1 >= r.pages) break;
   }
   return out;

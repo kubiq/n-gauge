@@ -2,7 +2,38 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { planPull, pullBytes } from './sync-plan.ts';
+import { planPull, planRelay, pullBytes } from './sync-plan.ts';
+
+test('relay: closed drives the phone holds whole and the server lacks, from its size on', () => {
+  const D = 'drive_2026-11-16_19-35_527346.csv.nge', G = 'trip_2026-11-16_19-35_527346.gpx.nge';
+  const OPEN = 'drive_2026-11-16_22-15_41dfcd.csv.nge';
+  const gauge = [
+    { name: D, size: 500, open: false },
+    { name: G, size: 9000, open: false },
+    { name: OPEN, size: 100, open: true },          // still being recorded: never
+  ];
+  const phone = { [D]: 500, [G]: 9000, [OPEN]: 100 };
+  assert.deepEqual(planRelay(gauge, phone, [{ name: G, size: 4000 }]), [
+    { name: D, from: 0, size: 500 },
+    { name: G, from: 4000, size: 9000 },
+  ]);
+  // The server has it whole, or more: nothing - never a shorter copy over it.
+  assert.deepEqual(planRelay(gauge, phone, [{ name: D, size: 500 }, { name: G, size: 9500 }]), []);
+});
+
+test('from the server, a shorter copy is behind - never swapped in for the phone\'s', () => {
+  const G = 'trip_2026-11-14_09-09_89dd61.gpx.nge';
+  assert.deepEqual(planPull([{ name: G, size: 1_851_413 }], { [G]: 42_825_062 }, new Set(), true), []);
+  // From the gauge it is another file (a card wiped), and replaces it.
+  assert.equal(planPull([{ name: G, size: 100 }], { [G]: 500 })[0].restart, true);
+});
+
+test('relay: not a part the phone holds, nor from a gauge that does not say what is open', () => {
+  const D = 'drive_2026-11-16_19-35_527346.csv.nge';
+  assert.deepEqual(planRelay([{ name: D, size: 500, open: false }], { [D]: 300 }, []), []);
+  assert.deepEqual(planRelay([{ name: D, size: 500 }], { [D]: 500 }, []), []);
+  assert.deepEqual(planRelay([{ name: D, size: 500, open: false }], { [D]: 500 }, [], new Set([D])), []);
+});
 
 test('new files are fetched whole', () => {
   assert.deepEqual(planPull([{ name: 'drive_0001.csv', size: 100 }], {}), [

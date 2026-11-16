@@ -9,6 +9,7 @@
 // VPN up (gauge.necum.eu points to a LAN address). Anywhere else the check
 // in reachable() fails quietly.
 
+import { type File, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { t } from '../i18n/index.ts';
@@ -82,6 +83,24 @@ export async function listHome(h: HomeServer): Promise<PodFile[]> {
 export function homeDownloader(h: HomeServer): Downloader {
   return (name, from, to, dest, onProgress, signal) =>
     downloadUrlRange(`${h.url}/f/${encodeURIComponent(name)}`, auth(h), from, to, dest, onProgress, signal);
+}
+
+/**
+ * Bytes of a log the phone holds, onto the server's copy at `offset` - the
+ * gauge's own PUT (upload_server.py): 409 if the server holds another size,
+ * 410 for a name deleted in the app. The new size it holds.
+ */
+export async function putHome(h: HomeServer, name: string, offset: number, piece: File): Promise<number> {
+  // Native (expo-file-system's upload), the piece as the body as it is: not
+  // through JS, which would hold megabytes as a string on the way.
+  const r = await piece.upload(`${h.url}/f/${encodeURIComponent(name)}?offset=${offset}`, {
+    httpMethod: 'PUT',
+    uploadType: UploadType.BINARY_CONTENT,
+    headers: { ...auth(h), 'Content-Type': 'application/octet-stream' },
+  });
+  if (r.status === 401) throw new Error(t('the home server refused the token'));
+  if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}`);
+  return Number(r.body.trim());
 }
 
 /** A drive deleted in the app goes from the server too - and stays gone (its tombstone). */

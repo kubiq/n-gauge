@@ -14,17 +14,22 @@ holds the real rules.
 
 ## Where the logs go
 
-Every drive is written to the gauge's SD card, encrypted to the phone's key,
-and leaves it two ways: by itself to the home server as the car starts, and to
-the phone over the gauge's WiFi. The phone reads them from either.
+Every drive is written to the gauge's SD card, encrypted to the phone's key.
+The home server is where the logs are kept: the gauge sends its finished
+drives there as the next drive starts, and the phone reads them from there.
+A sync from the phone on the gauge's WiFi is by hand - for a drive just
+parked, or with no server - and the phone then passes the finished drives on
+to the server itself. A drive still being recorded goes to neither server
+path.
 
 ```mermaid
 flowchart LR
   car[Car - CAN] --> gauge
   gps[GNSS 25 Hz] --> gauge
   gauge[Gauge] -->|"drive CSV, GPX, .vbo<br/>encrypted .nge"| card[(SD card)]
-  card -->|"as the car starts:<br/>phone's hotspot + WireGuard"| server[(Home server)]
-  card -->|"phone on the gauge's WiFi<br/>(sync screen)"| phone[Phone app]
+  card -->|"finished drives, as the next starts:<br/>phone's hotspot + WireGuard"| server[(Home server<br/>plain copies)]
+  card -->|"by hand: phone on the gauge's WiFi<br/>(sync screen)"| phone[Phone app]
+  phone -->|"finished drives the server lacks,<br/>once back on the internet"| server
   server -->|"app open, or hourly in the<br/>background - not at night"| phone
   phone -->|"decrypted, with the log key"| folder[(Logs folder<br/>Syncthing)]
 ```
