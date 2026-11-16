@@ -892,10 +892,13 @@ static esp_err_t handleFilesJson(httpd_req_t *r) {
     if (!safeName(name)) continue;
     const long size = cardFileSize(name);
     if (size < 0) continue;
-    char row[96];
-    // safeName() admits no character JSON needs escaped.
-    const int len = snprintf(row, sizeof(row), "%s{\"name\":\"%s\",\"size\":%ld}",
-                             firstRow ? "" : ",", name, size);
+    char row[112];
+    // safeName() admits no character JSON needs escaped. "open": the logger
+    // is still writing it (the drive being recorded) - the phone passes only
+    // the closed ones on to the home server (asked 2026-11-16: the server
+    // holds whole drives). Under the card lock, as logger_is_open wants.
+    const int len = snprintf(row, sizeof(row), "%s{\"name\":\"%s\",\"size\":%ld,\"open\":%d}",
+                             firstRow ? "" : ",", name, size, logger_is_open(name) ? 1 : 0);
     chunk(r, row, (size_t)len);
     firstRow = false;
   }
