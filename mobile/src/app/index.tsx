@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-na
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
 import { useSync } from '@/hooks/use-sync';
-import { Card, Note, Pill, Row, Screen, useUi } from '@/components/ui';
+import { Button, Card, Note, Pill, Row, Screen, useUi } from '@/components/ui';
 import { t, tn } from '@/i18n';
 import { duration, mb, unfinishedText, when } from '@/lib/format';
 import { distance, speed } from '@/lib/units';
@@ -14,7 +14,8 @@ import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
-import { type Inbox, type ListFacts, loadFinished, loadFuels, loadInbox, loadListFacts, saveFuel } from '@/lib/store';
+import { type Inbox, type ListFacts, loadFinished, loadFuels, loadInbox, loadListFacts, loadMerges, saveFuel, saveMerges } from '@/lib/store';
+import { entriesOf, mergeCsv, mergeGpx, type MergeGroups, withMerged } from '@/lib/merge';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
@@ -61,6 +62,9 @@ export default function TripsScreen() {
   const pickFuel = (id: string, fuel: Fuel | null) => setFuels(saveFuel(id, fuel));
   // Drives marked as finished on their screen: no "cut off" note.
   const [finished, setFinished] = useState<ReadonlySet<string>>(loadFinished);
+  // Drives merged into one (merge.ts), and the ones being chosen to merge.
+  const [merges, setMerges] = useState<MergeGroups>(loadMerges);
+  const [selected, setSelected] = useState<ReadonlySet<string> | null>(null);
   const [sums, setSums] = useState<Sums>({});
   // Why a file could not be read - an encrypted log without the right key.
   const [problems, setProblems] = useState<Record<string, string>>({});
@@ -107,6 +111,7 @@ export default function TripsScreen() {
       setInbox(loadInbox());
       setFacts(loadListFacts());
       setFinished(loadFinished());
+      setMerges(loadMerges());
       setNames(forgetStaleTitles(list));
       setSums(have);
       setProblems({});
@@ -202,16 +207,41 @@ export default function TripsScreen() {
   // are read, top to bottom. Not a drive that will most likely turn out a
   // blip (likelyStub, by its files' sizes): shown, it would vanish once read
   // and the rows below jump up - so that one appears once read, if at all.
-  const rows = trips.map((t) => {
+  //
+  // Drives merged (merge.ts, asked 2026-11-15) are one row: their figures
+  // combined once every part is read, keyed and placed by the oldest part.
+  const one = (t: TripFiles) => {
     const g = t.gpx ? (sums[t.gpx] as GpxStats | undefined) : undefined;
     const c = t.csv ? (sums[t.csv] as CsvSummary | undefined) : undefined;
     const problem = (t.gpx && problems[t.gpx]) || (t.csv && problems[t.csv]) || undefined;
+    const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+    return { g, c, problem, secs, read: !!problem || ((!t.gpx || !!g) && (!t.csv || !!c)) };
+  };
+  const rows = entriesOf(trips, merges).map((e) => {
+    const ps = e.parts.map(one);
+    const merged = e.parts.length > 1;
+    const read = ps.every((p) => p.read);
+    const gs = ps.map((p) => p.g).filter((g): g is GpxStats => !!g);
+    const cs = ps.map((p) => p.c).filter((c): c is CsvSummary => !!c);
+    // A merged row stands for its oldest part: its key, the date it shows.
+    const t: TripFiles = merged
+      ? { key: e.key, gpx: e.parts.find((p) => p.gpx)?.gpx, csv: e.parts.find((p) => p.csv)?.csv, start: e.parts[0].start }
+      : e.parts[0];
+    const g = merged ? (read && gs.length ? mergeGpx(gs) : undefined) : ps[0].g;
+    // Each part's end, for a fill-up between parts (the gauge asleep at the pump).
+    const ends = ps.filter((p) => p.c).map((p) => ({ at: p.g?.end ?? null, pt: p.g?.to ?? null, place: p.g?.toPlace ?? null }));
+    const c = merged ? (read && cs.length ? mergeCsv(cs, ends) : undefined) : ps[0].c;
     return {
       t,
       g,
       c,
-      problem,
-      read: !!problem || ((!t.gpx || !!g) && (!t.csv || !!c)),
+      parts: e.parts,
+      // Whether it ended: its last part's logs.
+      last: ps[ps.length - 1],
+      problem: ps.find((p) => p.problem)?.problem,
+      read,
+      // Driving time: the parts' summed, the stops between them not.
+      secs: merged ? ps.reduce<number | null>((s, p) => (p.secs === null ? s : (s ?? 0) + p.secs), null) : ps[0].secs,
       name: tripName(t, g, names),
     };
   });
@@ -252,7 +282,10 @@ export default function TripsScreen() {
   const hidden = readOnes.length - longOnes.length;
   // Recent drives still being read, as placeholders in their places.
   const placeholders = rows.filter(
-    (r) => !r.read && !isOld(r.t.start) && !likelyStub({ gpx: r.t.gpx ? inbox[r.t.gpx]?.bytes : undefined, csv: r.t.csv ? inbox[r.t.csv]?.bytes : undefined }),
+    (r) =>
+      !r.read &&
+      !isOld(r.t.start) &&
+      (r.parts.length > 1 || !likelyStub({ gpx: r.t.gpx ? inbox[r.t.gpx]?.bytes : undefined, csv: r.t.csv ? inbox[r.t.csv]?.bytes : undefined })),
   );
   const shownSet = new Set([...(showShort ? readOnes : longOnes), ...placeholders]);
   // Older drives not read yet stay in their week, counted, until it is opened
@@ -266,9 +299,27 @@ export default function TripsScreen() {
     (r) => ({
       start: r.g?.start ?? r.t.start,
       distanceM: r.g?.distanceM ?? null,
-      secs: r.g?.start && r.g.end ? (r.g.end - r.g.start) / 1000 : (r.c?.durationS ?? null),
+      secs: r.secs,
     }),
   );
+
+  // Choosing drives to merge (asked 2026-11-15): a long press starts it with
+  // that drive, a tap adds or takes away one more, and the bar at the top
+  // merges them - merged rows included, all into one - or ends it.
+  const pick = (key: string) =>
+    setSelected((s) => {
+      const n = new Set(s ?? []);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n.size ? n : null;
+    });
+  const mergeSelected = () => {
+    const parts = rows.filter((r) => selected?.has(r.t.key)).flatMap((r) => r.parts);
+    const groups = withMerged(merges, parts);
+    saveMerges(groups);
+    setMerges(groups);
+    setSelected(null);
+  };
 
   return (
     // Progress (a sync's, reading new drives, saving to the folder) floats
@@ -291,6 +342,13 @@ export default function TripsScreen() {
       {trips.length === 0 ? (
         <Card>
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>
+        </Card>
+      ) : null}
+      {selected ? (
+        <Card title={tn(selected.size, '1 drive chosen', '{n} drives chosen')}>
+          <Note>{t('Tap more drives to merge them into one - a split later gives them back as they were.')}</Note>
+          <Button title={t('Merge')} onPress={mergeSelected} disabled={selected.size < 2} />
+          <Button title={t('Cancel')} kind="plain" onPress={() => setSelected(null)} />
         </Card>
       ) : null}
       {byFuel.length ? (
@@ -340,9 +398,16 @@ export default function TripsScreen() {
                     fuels={fuels}
                     onFuel={pickFuel}
                     names={names}
-                    latest={r.t.key === trips[0]?.key}
+                    latest={r === rows[0]}
                     reading={!r.read}
-                    markedFinished={[r.t.gpx, r.t.csv].some((n) => n && finished.has(n))}
+                    cutOff={
+                      unfinished(r.last.g, r.last.c) &&
+                      !r.parts.some((p) => [p.gpx, p.csv].some((n) => n && finished.has(n)))
+                    }
+                    secs={r.secs}
+                    parts={r.parts.length}
+                    chosen={selected?.has(r.t.key) ?? null}
+                    onChoose={() => pick(r.t.key)}
                   />
                 ))}
               {waiting && monday !== null ? (
@@ -388,8 +453,12 @@ function TripRow({
   onFuel,
   names,
   latest,
-  markedFinished,
+  cutOff,
   reading,
+  secs,
+  parts,
+  chosen,
+  onChoose,
 }: {
   t: TripFiles;
   g?: GpxStats;
@@ -405,21 +474,29 @@ function TripRow({
   names: Names;
   /** The newest drive: unfinished, it is most likely still coming. */
   latest: boolean;
-  /** Marked as finished on its screen: no note, whatever its logs say. */
-  markedFinished: boolean;
+  /** Its logs did not end (its last part's, merged), and not marked finished. */
+  cutOff: boolean;
   /** Not read yet (a placeholder): its date, and the figures to come. */
   reading: boolean;
+  /** Driving time: merged, the parts' summed without the stops. */
+  secs: number | null;
+  /** How many drives it is: more than one when merged (merge.ts). */
+  parts: number;
+  /** Choosing drives to merge: whether this one is chosen; null when not choosing. */
+  chosen: boolean | null;
+  /** A long press starts choosing with it; while choosing, a tap. */
+  onChoose: () => void;
 }) {
   const start = g?.start ?? trip.start;
-  const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
   const per100 = c ? litresPer100(c) : null;
   const encrypted = [trip.gpx, trip.csv].some((n) => n && isEncryptedName(n));
   const ui = useUi();
   const styles = useStyles();
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/trip/[key]', params: { key: trip.key } })}
-      style={({ pressed }) => [ui.card, pressed && { opacity: 0.7 }]}>
+      onPress={() => (chosen !== null ? onChoose() : router.push({ pathname: '/trip/[key]', params: { key: trip.key } }))}
+      onLongPress={onChoose}
+      style={({ pressed }) => [ui.card, chosen && styles.chosen, pressed && { opacity: 0.7 }]}>
       <View style={styles.head}>
         {/* Where it went (names.ts), the date under it; without a track the
             date is the title. No time anywhere in it (a numbered log, no
@@ -454,9 +531,10 @@ function TripRow({
           onFuel={(v) => onFuel(fillId(f), v)}
         />
       ))}
+      {parts > 1 ? <Note>{tn(parts, 'Merged from 1 drive', 'Merged from {n} drives')}</Note> : null}
       {reading ? <Note>{t('Reading…')}</Note> : null}
       {!reading && !trip.gpx ? <Note>{t('No GPS track - car data only.')}</Note> : null}
-      {!markedFinished && unfinished(g, c) ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
+      {cutOff ? <Note tone="bad">{unfinishedText(latest)}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
     </Pressable>
   );
@@ -572,6 +650,8 @@ const useStyles = themed((C) =>
     chipOn: { borderColor: C.accent },
     chipText: { color: C.dim, fontSize: 14 },
     chipTextOn: { color: C.accent, fontWeight: '700' },
+    // A drive chosen to merge: the card ringed in the accent.
+    chosen: { borderWidth: 2, borderColor: C.accent },
     // A link, not a card: 48 dp tall to hit, styled like the app's other links.
     more: { minHeight: 48, justifyContent: 'center' },
     moreText: { color: C.link, fontSize: 14 },

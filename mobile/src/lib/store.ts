@@ -183,6 +183,24 @@ export function saveFuel(id: string, fuel: Fuel | null): Fuels {
   return all;
 }
 
+// Drives merged into one (merge.ts): groups of file names.
+const mergesFile = new File(Paths.document, 'merges.json');
+
+export function loadMerges(): string[][] {
+  try {
+    const raw = mergesFile.exists ? JSON.parse(mergesFile.textSync()) : [];
+    return Array.isArray(raw)
+      ? raw.filter((g): g is string[] => Array.isArray(g) && g.every((n) => typeof n === 'string'))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveMerges(groups: string[][]): void {
+  mergesFile.write(JSON.stringify(groups));
+}
+
 // Drives you marked as finished (asked 2026-11-13): their logs did not end
 // (trips.ts unfinished()), and you said that is all there is - the note goes.
 // By file name, the GPX's and the CSV's: a drive's key moves from its CSV to

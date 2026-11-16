@@ -28,6 +28,11 @@ export type Series = {
    * `car` column, or for older logs from the readings (carOf).
    */
   car: (0 | 1 | 2 | null)[];
+  /**
+   * Each bucket's own clock, epoch ms - only for drives merged (merge.ts),
+   * whose chart skips the stops: startUtc + t no longer finds the map.
+   */
+  utc?: (number | null)[];
 };
 
 // Without the `car` column: running at ENGINE_RUNNING_RPM (as the gauge),

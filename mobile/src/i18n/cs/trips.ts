@@ -19,6 +19,16 @@ export const trips: Record<string, string> = {
   'Show 1 very short drive (under 200 m)|Show {n} very short drives (under 200 m)':
     'Zobrazit {n} velmi krátkou jízdu (pod 200 m)|Zobrazit {n} velmi krátké jízdy (pod 200 m)|Zobrazit {n} velmi krátkých jízd (pod 200 m)',
   'Undated drive': 'Jízda bez data',
+  // Merging drives (merge.ts): the list's choosing, a merged row
+  '1 drive chosen|{n} drives chosen': '{n} vybraná jízda|{n} vybrané jízdy|{n} vybraných jízd',
+  'Tap more drives to merge them into one - a split later gives them back as they were.':
+    'Klepněte na další jízdy a spojte je do jedné - rozdělením se později vrátí, jak byly.',
+  'Merge': 'Spojit',
+  'Merged from 1 drive|Merged from {n} drives': 'Spojeno z {n} jízdy|Spojeno ze {n} jízd|Spojeno z {n} jízd',
+  // ...and its screen
+  'Split into its drives': 'Rozdělit na jednotlivé jízdy',
+  'Merged from {n} drives - its menu splits it again.': 'Spojeno z {n} jízd - v nabídce ji lze znovu rozdělit.',
+  'With the stops': 'Včetně zastávek',
   'time': 'čas',
   'top': 'max. rychlost',
   // "Boost" in Czech too - what drivers call it ("plnicí tlak" read oddly).

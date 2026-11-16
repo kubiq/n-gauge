@@ -150,7 +150,9 @@ export function DriveChart({ series, onCursor }: { series: Series; onCursor?: (u
     if (plotW <= 0) return;
     const i = Math.max(0, Math.min(n - 1, Math.round((Math.min(x, plotW) / plotW) * (n - 1))));
     setAt(i);
-    onCursor?.(series.startUtc !== null ? series.startUtc + series.t[i] * 1000 : null);
+    // Drives merged carry each bucket's clock (their chart skips the stops).
+    const utc = series.utc ? series.utc[i] : series.startUtc !== null ? series.startUtc + series.t[i] * 1000 : null;
+    onCursor?.(utc ?? null);
   };
   const responder = {
     onStartShouldSetResponder: () => true,

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { cleanGpx, GPX_TAIL } from './gpx-share.ts';
+import { cleanGpx, GPX_TAIL, joinGpx } from './gpx-share.ts';
 
 const HEAD = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1"><trk><name>x</name><trkseg>';
 const pt = (i: number) =>
@@ -29,6 +29,12 @@ test('segment breaks are kept between points, never empty or trailing', () => {
 
 test('a track without points is still valid', () => {
   assert.equal(cleanGpx(`${HEAD}\n${GPX_TAIL}`), `${HEAD}\n${GPX_TAIL}`);
+});
+
+test('drives merged: one head, a segment each, one tail', () => {
+  const a = `${HEAD}\n${pt(1)}\n${pt(2)}\n${GPX_TAIL}`;
+  const b = `${HEAD.replace('<name>x', '<name>y')}\n${pt(3)}\n`;   // encrypted: no tail of its own
+  assert.equal(joinGpx([a, b]), `${HEAD}\n${pt(1)}\n${pt(2)}\n</trkseg><trkseg>\n${pt(3)}\n${GPX_TAIL}`);
 });
 
 test('a file that is not the pod’s is left alone', () => {

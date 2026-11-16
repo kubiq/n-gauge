@@ -7,7 +7,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { t } from '../i18n/index.ts';
-import { cleanGpx } from './gpx-share';
+import { cleanGpx, joinGpx } from './gpx-share';
 import { readLogText } from './logtext';
 import { inboxFile, loadInbox, loadLogsFolder, saveLogsFolder } from './store';
 import { tripFiles } from './trip-cache';
@@ -69,6 +69,21 @@ export async function shareLog(name: string): Promise<void> {
     mimeType: mimeOf(name),
     dialogTitle: isGpxName(name) ? t('Share the track') : t('Share the car data'),
   });
+}
+
+/**
+ * Drives merged (merge.ts) as one track to another app: their GPX joined, a
+ * segment each (joinGpx), named after the first.
+ */
+export async function shareJoinedGpx(names: string[]): Promise<void> {
+  if (!(await Sharing.isAvailableAsync())) throw new Error(t('Sharing is not available on this device'));
+  if (!dir.exists) dir.create({ intermediates: true });
+  for (const old of dir.list()) old.delete();
+  const texts: string[] = [];
+  for (const n of names) texts.push(await readLogText(n));
+  const out = new File(dir, plainName(names[0]));
+  out.write(joinGpx(texts));
+  await Sharing.shareAsync(out.uri, { mimeType: 'application/gpx+xml', dialogTitle: t('Share the track') });
 }
 
 export type SaveResult = { saved: number; skipped: number; failed: string[] };

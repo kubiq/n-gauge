@@ -14,6 +14,20 @@ export const GPX_TAIL = '</trkseg></trk></gpx>\n';
 const TRKPT = /^<trkpt .*<\/trkpt>$/;
 const SEGMENT_BREAK = '</trkseg><trkseg>';
 
+/**
+ * Drives merged (merge.ts) as one GPX: the first one's head, each one's
+ * points as a segment of its own - no line across the stop - and one tail.
+ * Each is cleaned first, so a broken copy cannot break the whole.
+ */
+export function joinGpx(texts: string[]): string {
+  const cleaned = texts.map(cleanGpx).filter((t) => t.includes('<trkseg>'));
+  if (!cleaned.length) return texts[0] ?? '';
+  const start = cleaned[0].indexOf('<trkseg>') + '<trkseg>'.length;
+  const body = (t: string) => t.slice(t.indexOf('<trkseg>') + '<trkseg>'.length, t.length - GPX_TAIL.length).trim();
+  const parts = cleaned.map(body).filter(Boolean);
+  return `${cleaned[0].slice(0, start)}\n${parts.join(`\n${SEGMENT_BREAK}\n`)}\n${GPX_TAIL}`;
+}
+
 export function cleanGpx(text: string): string {
   const start = text.indexOf('<trkseg>');
   if (start < 0) return text;   // not one of the pod's tracks: leave it be

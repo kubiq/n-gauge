@@ -15,18 +15,35 @@ import { cachedCsv, cachedGpx, deleteDrive, type GpxStats, seriesOf, summarise, 
 import type { Series } from '@/lib/series';
 import { LogKeyError } from '@/lib/logtext';
 import { endName, loadNames, type Names, tripName } from '@/lib/names';
-import { loadFinished, saveFinished } from '@/lib/store';
-import { saveLogsToFolder, savedText, shareLog } from '@/lib/share';
-import { type CsvSummary, litresPer100, pointAt, type TrackPoint, unfinished } from '@/lib/trips';
+import { loadFinished, loadMerges, saveFinished, saveMerges } from '@/lib/store';
+import { saveLogsToFolder, savedText, shareJoinedGpx, shareLog } from '@/lib/share';
+import { type CsvSummary, litresPer100, pointAt, type TrackPoint, type TripFiles, unfinished } from '@/lib/trips';
+import { entriesOf, mergeCsv, mergeGpx, mergeSeries, mergeTracks, type PartEnd, withoutMerge } from '@/lib/merge';
 
 export default function TripScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
-  const trip = tripFiles().find((x) => x.key === key);
+  // One drive, or several merged (merge.ts): found by any part's key. A
+  // merged one stands for its oldest part, as in the list.
+  const [merges, setMerges] = useState(loadMerges);
+  const entry = entriesOf(tripFiles(), merges).find((e) => e.parts.some((p) => p.key === key));
+  const parts = entry?.parts ?? [];
+  const merged = parts.length > 1;
+  const trip: TripFiles | undefined = !entry
+    ? undefined
+    : merged
+      ? { key: entry.key, gpx: parts.find((p) => p.gpx)?.gpx, csv: parts.find((p) => p.csv)?.csv, start: parts[0].start }
+      : parts[0];
+  const partKeys = parts.map((p) => `${p.gpx}|${p.csv}`).join(',');
   const [track, setTrack] = useState<TrackPoint[] | null>(null);
   const [ready, setReady] = useState(false);
   // In state, not read from the cache during render - see trips.tsx.
   const [g, setG] = useState<GpxStats | null>(null);
   const [c, setC] = useState<CsvSummary | null>(null);
+  // The last part's own: whether the drive ended (its logs').
+  const [endG, setEndG] = useState<GpxStats | null>(null);
+  const [endC, setEndC] = useState<CsvSummary | null>(null);
+  // Merged: the parts' own times summed - the driving, not the stops (as the list).
+  const [partsSecs, setPartsSecs] = useState<number | null>(null);
   const [series, setSeries] = useState<Series | null>(null);
   // Where the car was at the charts' cursor: a dot on the map. The chart
   // gives the moment in UTC, the track its seconds from the GPX's start.
@@ -57,7 +74,7 @@ export default function TripScreen() {
   const [finished, setFinished] = useState<ReadonlySet<string>>(loadFinished);
 
   useEffect(() => {
-    if (!trip) return;
+    if (!parts.length) return;
     let live = true;
     (async () => {
       // Opened before the list got to it: work it out here. Each file on its
@@ -71,16 +88,41 @@ export default function TripScreen() {
           issues.push(e instanceof LogKeyError ? e.message : `${name}: ${String(e)}`);
         }
       };
-      await attempt(trip.gpx);
-      await attempt(trip.csv);
-      const tr = trip.gpx && cachedGpx(trip.gpx) ? await trackOf(trip.gpx) : null;
-      // Cached with the summary; a log from before the charts gets it now, once.
-      const se = trip.csv && cachedCsv(trip.csv) ? await seriesOf(trip.csv).catch(() => null) : null;
+      const gs: GpxStats[] = [], cs: CsvSummary[] = [], tracks: { track: TrackPoint[]; start: number | null }[] = [], ses: Series[] = [];
+      const ends: PartEnd[] = [];   // each CSV part's end, for a fill-up between parts
+      let lastG: GpxStats | null = null, lastC: CsvSummary | null = null;
+      let sumSecs: number | null = null;
+      for (const p of parts) {
+        await attempt(p.gpx);
+        await attempt(p.csv);
+        const pg = p.gpx ? cachedGpx(p.gpx) : null;
+        const pc = p.csv ? cachedCsv(p.csv) : null;
+        const ps = pg?.start && pg.end ? (pg.end - pg.start) / 1000 : (pc?.durationS ?? null);
+        if (ps !== null) sumSecs = (sumSecs ?? 0) + ps;
+        if (pg) {
+          gs.push(pg);
+          const tr = await trackOf(p.gpx!);
+          if (tr) tracks.push({ track: tr, start: pg.start });
+        }
+        if (pc) {
+          cs.push(pc);
+          ends.push({ at: pg?.end ?? null, pt: pg?.to ?? null, place: pg?.toPlace ?? null });
+          // Cached with the summary; a log from before the charts gets it now, once.
+          const se = await seriesOf(p.csv!).catch(() => null);
+          if (se) ses.push(se);
+        }
+        lastG = pg;
+        lastC = pc;
+      }
       if (live) {
-        setG(trip.gpx ? cachedGpx(trip.gpx) : null);
-        setC(trip.csv ? cachedCsv(trip.csv) : null);
-        setTrack(tr);
-        setSeries(se);
+        // One drive as it is; merged, its parts combined (merge.ts).
+        setG(gs.length ? (merged ? mergeGpx(gs) : gs[0]) : null);
+        setC(cs.length ? (merged ? mergeCsv(cs, ends) : cs[0]) : null);
+        setTrack(tracks.length ? (merged ? mergeTracks(tracks) : tracks[0].track) : null);
+        setSeries(ses.length ? (merged ? mergeSeries(ses) : ses[0]) : null);
+        setEndG(lastG);
+        setEndC(lastC);
+        setPartsSecs(sumSecs);
         setProblem(issues.length ? [...new Set(issues)].join('\n') : null);
         setReady(true);
       }
@@ -88,7 +130,7 @@ export default function TripScreen() {
     return () => {
       live = false;
     };
-  }, [trip?.gpx, trip?.csv]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [partKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!trip) {
     return (
@@ -99,15 +141,22 @@ export default function TripScreen() {
   }
 
   const start = g?.start ?? trip.start;
-  const secs = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  // The whole span; merged, that is with the stops - the driving time is
+  // the parts' summed.
+  const span = g?.start && g.end ? (g.end - g.start) / 1000 : (c?.durationS ?? null);
+  const secs = merged ? partsSecs : span;
   const per100 = c ? litresPer100(c) : null;
   const name = tripName(trip, g, names);
-  const files = [trip.gpx, trip.csv].filter((n): n is string => !!n);
+  // Every file of it - all its parts' - and the last part's, which say whether it ended.
+  const allFiles = parts.flatMap((p) => [p.gpx, p.csv]).filter((n): n is string => !!n);
+  const last = parts[parts.length - 1];
+  const files = [last.gpx, last.csv].filter((n): n is string => !!n);
   const marked = files.some((n) => finished.has(n));
+  const cutOff = ready && unfinished(endG, endC);
   // A drive whose logs did not end (trips.ts): you can say it is all there
   // is - the power went, and nothing more is coming - or take that back.
   const finishItems =
-    ready && unfinished(g, c)
+    cutOff
       ? [
           marked
             ? { label: t('Mark as not finished'), onPress: () => setFinished(saveFinished(files, false)) }
@@ -145,13 +194,39 @@ export default function TripScreen() {
               items={[
                 ...nameItems,
                 ...finishItems,
-                ...(trip.gpx ? [{ label: t('Share the track (GPX)'), onPress: () => run('gpx', () => shareLog(trip.gpx!)) }] : []),
-                ...(trip.csv ? [{ label: t('Share the car data (CSV)'), onPress: () => run('csv', () => shareLog(trip.csv!)) }] : []),
+                // Merged: back into its drives, as they were.
+                ...(merged
+                  ? [
+                      {
+                        label: t('Split into its drives'),
+                        onPress: () => {
+                          const groups = withoutMerge(loadMerges(), parts);
+                          saveMerges(groups);
+                          setMerges(groups);
+                          router.back();
+                        },
+                      },
+                    ]
+                  : []),
+                // Merged, the track is the parts' joined, a segment each; the
+                // car data stays per part - in the folder.
+                ...(trip.gpx
+                  ? [
+                      {
+                        label: t('Share the track (GPX)'),
+                        onPress: () =>
+                          run('gpx', () =>
+                            merged ? shareJoinedGpx(parts.map((p) => p.gpx).filter((n): n is string => !!n)) : shareLog(trip.gpx!),
+                          ),
+                      },
+                    ]
+                  : []),
+                ...(trip.csv && !merged ? [{ label: t('Share the car data (CSV)'), onPress: () => run('csv', () => shareLog(trip.csv!)) }] : []),
                 {
                   label: t('Save to a folder'),
                   onPress: () =>
                     run('save', async () => {
-                      const r = await saveLogsToFolder([trip.gpx, trip.csv].filter((n): n is string => !!n));
+                      const r = await saveLogsToFolder(allFiles);
                       Alert.alert(t('Saved'), savedText(r));
                     }),
                 },
@@ -172,7 +247,9 @@ export default function TripScreen() {
                           text: t('Delete'),
                           style: 'destructive',
                           onPress: () => {
-                            deleteDrive(trip);
+                            // Merged: every part, and the merge with them.
+                            for (const p of parts) deleteDrive(p);
+                            if (merged) saveMerges(withoutMerge(loadMerges(), parts));
                             if (connected) sync.sync();
                             router.back();
                           },
@@ -189,7 +266,8 @@ export default function TripScreen() {
       {!ready ? trip.gpx ? <MapLoading /> : <Note>{t('Reading the logs…')}</Note> : null}
       {busy ? <Note>{busy === 'save' ? t('Saving…') : t('Preparing the file…')}</Note> : null}
       {problem ? <Note tone="bad">{problem}</Note> : null}
-      {ready && !marked && unfinished(g, c) ? <Note tone="bad">{unfinishedText(tripFiles()[0]?.key === trip.key)}</Note> : null}
+      {merged ? <Note>{t('Merged from {n} drives - its menu splits it again.', { n: parts.length })}</Note> : null}
+      {cutOff && !marked ? <Note tone="bad">{unfinishedText(tripFiles()[0]?.key === last.key)}</Note> : null}
       {track && track.length > 1 && g?.bbox ? <TrackMap track={track} bbox={g.bbox} mark={mark} /> : null}
 
       {/* The drive's shape first - where (the map), then how (the charts) -
@@ -202,6 +280,7 @@ export default function TripScreen() {
           {name && start ? <Row label={t('Started')} value={when(start)} /> : null}
           <Row label={t('Distance')} value={distance(g.distanceM)} />
           {secs !== null ? <Row label={t('Time')} value={duration(secs)} /> : null}
+          {merged && span !== null ? <Row label={t('With the stops')} value={duration(span)} /> : null}
           <Row label={t('Moving')} value={duration(g.movingS)} />
           <Row label={t('Top speed (GPS)')} value={speed(g.maxKmh)} />
           {g.movingS > 0 ? <Row label={t('Average moving')} value={speed((g.distanceM / g.movingS) * 3.6)} /> : null}
