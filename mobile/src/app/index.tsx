@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LockIcon } from '@/components/lock-icon';
 import { HeaderActions } from '@/components/pod-chip';
@@ -71,6 +72,7 @@ export default function TripsScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const styles = useStyles();
+  const insets = useSafeAreaInsets();   // the choosing bar clears the system's
   // Your places and renamed drives: read on every visit, so a name given on
   // a drive's screen shows on the way back.
   const [names, setNames] = useState<Names>({ places: [], titles: {} });
@@ -326,7 +328,20 @@ export default function TripsScreen() {
     // over the list: as a line above it, it pushed every row down and back up.
     <Screen
       overlay={
-        progress ? (
+        // Choosing drives to merge: a bar at the foot of the screen, over
+        // the list - in it, at the top, it was out of sight from a drive
+        // further down (2026-11-16: chosen, and nothing to do with them).
+        selected ? (
+          <View style={[styles.chooseBar, { bottom: S.md + insets.bottom }]}>
+            <Text style={styles.chooseText}>
+              {selected.size < 2
+                ? t('Tap more drives to merge them')
+                : tn(selected.size, '1 drive chosen', '{n} drives chosen')}
+            </Text>
+            <Button title={t('Cancel')} kind="plain" onPress={() => setSelected(null)} />
+            <Button title={t('Merge')} onPress={mergeSelected} disabled={selected.size < 2} />
+          </View>
+        ) : progress ? (
           <Pill>
             {t('Syncing {at} of {of}: {got} of {total}', {
               at: progress.at,
@@ -342,13 +357,6 @@ export default function TripsScreen() {
       {trips.length === 0 ? (
         <Card>
           <Note>{t('No drives on the phone yet. Tap the gauge at the top to connect - new drives come over by themselves.')}</Note>
-        </Card>
-      ) : null}
-      {selected ? (
-        <Card title={tn(selected.size, '1 drive chosen', '{n} drives chosen')}>
-          <Note>{t('Tap more drives to merge them into one - a split later gives them back as they were.')}</Note>
-          <Button title={t('Merge')} onPress={mergeSelected} disabled={selected.size < 2} />
-          <Button title={t('Cancel')} kind="plain" onPress={() => setSelected(null)} />
         </Card>
       ) : null}
       {byFuel.length ? (
@@ -652,6 +660,23 @@ const useStyles = themed((C) =>
     chipTextOn: { color: C.accent, fontWeight: '700' },
     // A drive chosen to merge: the card ringed in the accent.
     chosen: { borderWidth: 2, borderColor: C.accent },
+    // The bar while choosing: floats at the foot, above the list.
+    chooseBar: {
+      position: 'absolute',
+      left: S.md,
+      right: S.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: S.sm,
+      padding: S.sm,
+      paddingLeft: S.md,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: C.accent,
+      backgroundColor: C.card,
+      elevation: 6,
+    },
+    chooseText: { flex: 1, color: C.text, fontSize: 14, fontWeight: '600' },
     // A link, not a card: 48 dp tall to hit, styled like the app's other links.
     more: { minHeight: 48, justifyContent: 'center' },
     moreText: { color: C.link, fontSize: 14 },

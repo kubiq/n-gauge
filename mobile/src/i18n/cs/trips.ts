@@ -21,8 +21,7 @@ export const trips: Record<string, string> = {
   'Undated drive': 'Jízda bez data',
   // Merging drives (merge.ts): the list's choosing, a merged row
   '1 drive chosen|{n} drives chosen': '{n} vybraná jízda|{n} vybrané jízdy|{n} vybraných jízd',
-  'Tap more drives to merge them into one - a split later gives them back as they were.':
-    'Klepněte na další jízdy a spojte je do jedné - rozdělením se později vrátí, jak byly.',
+  'Tap more drives to merge them': 'Klepněte na další jízdy ke spojení',
   'Merge': 'Spojit',
   'Merged from 1 drive|Merged from {n} drives': 'Spojeno z {n} jízdy|Spojeno ze {n} jízd|Spojeno z {n} jízd',
   // ...and its screen
