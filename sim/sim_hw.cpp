@@ -163,7 +163,8 @@ void upload_status(UpStatus *s) {
   s->tone = 1;
   strlcpy(s->head, "Uploading", sizeof(s->head));
   strlcpy(s->detail, "logs 3 of 11, 4210 KB", sizeof(s->detail));
-  strlcpy(s->last, "last 12:30: 11 files, 12472 KB", sizeof(s->last));
+  // The longest kind there is (a failed file, by name), for the layout.
+  strlcpy(s->last, "last 12:30: trip_2026-11-15_10-28_e6bbd5.gpx.nge: PUT failed", sizeof(s->last));
   strlcpy(s->fw, "firmware e9a16e1a ready - installs when parked", sizeof(s->fw));
 }
 

@@ -11,8 +11,11 @@
 static lv_obj_t *stHead, *stDetail, *stLast, *stFw, *stCar;
 
 // A wrapped, centred line: the panel is round, so the lower ones are narrower.
+// 20 px, not the 14 of the names (asked 2026-11-16: too small to read from
+// the seat); a long line wraps to two, which the spacing below leaves room for.
 static lv_obj_t *make_line(lv_obj_t *s, int dy, int width, lv_color_t c) {
   lv_obj_t *l = make_name(s, "", dy);
+  lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
   lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(l, width);
   lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
@@ -23,18 +26,19 @@ static lv_obj_t *make_line(lv_obj_t *s, int dy, int width, lv_color_t c) {
 
 lv_obj_t *ui_build_status() {
   lv_obj_t *s = make_screen();
-  lv_obj_t *title = make_name(s, "HOME SERVER", -150);
+  lv_obj_t *title = make_name(s, "HOME SERVER", -165);
   lv_obj_set_style_text_color(title, COL_DIM, 0);
   // What it is doing, big; then the step or what it waits for.
-  stHead = make_tyre_val(s, 0, -85);
+  stHead = make_tyre_val(s, 0, -112);
+  lv_obj_set_style_text_font(stHead, &lv_font_montserrat_48, 0);
   lv_label_set_text(stHead, "");
-  stDetail = make_line(s, -35, 340, COL_INK);
+  stDetail = make_line(s, -45, 360, COL_INK);
   // The last upload, then a firmware waiting to install.
-  stLast = make_line(s, 30, 330, COL_DIM);
-  stFw = make_line(s, 95, 380, COL_OIL);
+  stLast = make_line(s, 30, 380, COL_DIM);
+  stFw = make_line(s, 100, 360, COL_OIL);
   // The car's link, low: "not connected to CAN bus" lives here since
   // 2026-11-12, not as a rim over every screen.
-  stCar = make_line(s, 150, 300, COL_DIM);
+  stCar = make_line(s, 160, 280, COL_DIM);
   return s;
 }
 
