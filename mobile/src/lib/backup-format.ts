@@ -22,6 +22,7 @@ export const BACKUP_FILES = [
   'language.txt',
   'units-mph.txt',
   'keep-connected.txt',     // "Disconnect after syncing" off
+  'home-background-off.txt', // "Sync with the home server in the background" off
   'auto-save.txt',          // "Save new logs after each sync" on
   'beacon.json',            // the beacon's switches and the sessions known
   'delete-on-gauge.json',   // drives deleted in the app, not yet on the gauge

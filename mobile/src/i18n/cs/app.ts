@@ -71,6 +71,9 @@ export const app: Record<string, string> = {
   // Gauge connection (connection-card.tsx)
   'Gauge connection': 'Připojení k budíku',
   'Disconnect after syncing': 'Po synchronizaci odpojit',
+  'Sync with the home server in the background': 'Synchronizovat s domácím serverem na pozadí',
+  'With the app closed, every 4 hours by day - a short look, and what is new. Off, the phone syncs only while the app is open.':
+    'Se zavřenou aplikací každé 4 hodiny přes den - krátký dotaz a to, co je nové. Vypnuto: telefon synchronizuje jen s otevřenou aplikací.',
   'Once the new logs are on the phone, it leaves the gauge’s WiFi and is back on the internet. Not while the gauge’s settings or the log key are open.':
     'Jakmile jsou nové záznamy v telefonu, odpojí se od WiFi budíku a je zase na internetu. Ne, dokud jsou otevřená nastavení budíku nebo klíč záznamů.',
   // The gauge's beacon (connection-card.tsx, beacon.ts)

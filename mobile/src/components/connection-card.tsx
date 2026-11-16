@@ -4,7 +4,8 @@ import { StyleSheet, Switch, Text, View } from 'react-native';
 import { Card, Note } from '@/components/ui';
 import { t } from '@/i18n';
 import { loadBeaconAutoSync, loadBeaconNotify, setBeaconAutoSync, setBeaconNotify } from '@/lib/beacon';
-import { loadDisconnectAfterSync, saveDisconnectAfterSync } from '@/lib/store';
+import { scheduleHomeTask } from '@/lib/home-task';
+import { loadDisconnectAfterSync, loadHomeBackground, saveDisconnectAfterSync, saveHomeBackground } from '@/lib/store';
 import { S, themed, useColors } from '@/theme';
 
 // Whether the phone leaves the gauge's WiFi once the new logs are on it
@@ -14,6 +15,7 @@ import { S, themed, useColors } from '@/theme';
 // need location.
 export function ConnectionCard() {
   const [on, setOn] = useState(loadDisconnectAfterSync);
+  const [background, setBackground] = useState(loadHomeBackground);
   const [notify, setNotify] = useState(loadBeaconNotify);
   const [autoSync, setAutoSync] = useState(loadBeaconAutoSync);
   const C = useColors();
@@ -34,6 +36,11 @@ export function ConnectionCard() {
     setBeaconAutoSync(v);
     setAutoSync(v);
   };
+  const changeBackground = (v: boolean) => {
+    saveHomeBackground(v);
+    setBackground(v);
+    scheduleHomeTask().catch((e) => console.warn('home task', e));
+  };
   return (
     <Card title={t('Gauge connection')}>
       <View style={styles.row}>
@@ -43,6 +50,15 @@ export function ConnectionCard() {
       <Note>
         {t(
           'Once the new logs are on the phone, it leaves the gauge’s WiFi and is back on the internet. Not while the gauge’s settings or the log key are open.',
+        )}
+      </Note>
+      <View style={styles.row}>
+        <Text style={styles.label}>{t('Sync with the home server in the background')}</Text>
+        <Switch value={background} onValueChange={changeBackground} trackColor={{ true: C.accent }} />
+      </View>
+      <Note>
+        {t(
+          'With the app closed, every 4 hours by day - a short look, and what is new. Off, the phone syncs only while the app is open.',
         )}
       </Note>
       <View style={styles.row}>

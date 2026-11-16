@@ -61,6 +61,36 @@ export function saveDisconnectAfterSync(on: boolean): void {
   } else keepConnectedFile.write('1');
 }
 
+// The home server sync in the background (home-task.ts) - on unless switched
+// off in Settings (asked 2026-11-16: for the battery, a way to have none).
+const homeBackgroundOffFile = new File(Paths.document, 'home-background-off.txt');
+
+export function loadHomeBackground(): boolean {
+  return !homeBackgroundOffFile.exists;
+}
+
+export function saveHomeBackground(on: boolean): void {
+  if (on) {
+    if (homeBackgroundOffFile.exists) homeBackgroundOffFile.delete();
+  } else homeBackgroundOffFile.write('1');
+}
+
+// The interval the background task was registered with: a new one (an app
+// update) registers it again - WorkManager keeps the old otherwise.
+const homeTaskEveryFile = new File(Paths.document, 'home-task-every.txt');
+
+export function loadHomeTaskEvery(): number {
+  try {
+    return homeTaskEveryFile.exists ? Number(homeTaskEveryFile.textSync()) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveHomeTaskEvery(min: number): void {
+  homeTaskEveryFile.write(String(min));
+}
+
 // Which optional figures a drive shows in the trips list (Settings, "Trip
 // list"). All on unless switched off; a missing or unreadable file is that,
 // and a figure added later is on for a phone that saved the rest.

@@ -1,5 +1,6 @@
 // The home server sync in the background (asked 2026-11-06): with the app
-// closed, about every hour but not at night, Android's WorkManager runs it (expo-background-
+// closed, every few hours (EVERY_MIN) but not at night - and not at all with
+// Settings' switch off - Android's WorkManager runs it (expo-background-
 // task; 15 minutes is the shortest it allows, and it waits for a network).
 // The same sync as the app's (home-sync.ts), into the same inbox - so a
 // drive the gauge uploaded as the car started is on the phone by the time
@@ -16,13 +17,16 @@ import { updateKnownBeacons } from './beacon';
 import { loadHome } from './home';
 import { syncFromHome } from './home-sync';
 import { saveNewLogs } from './share';
-import { loadAutoSave } from './store';
+import { loadAutoSave, loadHomeBackground, loadHomeTaskEvery, saveHomeTaskEvery } from './store';
 
 const TASK = 'home-server-sync';
-const EVERY_MIN = 60;
+// Every 4 hours (asked 2026-11-16, for the battery - was hourly): a drive
+// reaches the server only with the next drive's upload anyway, so sooner
+// gains little. Opening the app syncs at once besides.
+const EVERY_MIN = 240;
 // Not at night, phone time (asked 2026-11-06: no drives then, so nothing
 // new to pull). WorkManager has no time windows: it still wakes the task
-// each hour, and the task goes back to sleep at once - no network, no work.
+// at night, and the task goes back to sleep at once - no network, no work.
 const NIGHT_FROM_H = 23;
 const NIGHT_TO_H = 6;
 
@@ -47,10 +51,20 @@ TaskManager.defineTask(TASK, async () => {
   }
 });
 
-/** Hourly while a home server is set up (the gauge's Upload card); off without one. */
+/**
+ * Every EVERY_MIN while a home server is set up (the gauge's Upload card) and
+ * the Settings switch is on; off otherwise. Registered again when the
+ * interval changed (an app update): WorkManager keeps the one it was given.
+ */
 export async function scheduleHomeTask(): Promise<void> {
-  const on = !!(await loadHome());
+  const on = !!(await loadHome()) && loadHomeBackground();
   const registered = await TaskManager.isTaskRegisteredAsync(TASK);
-  if (on && !registered) await BackgroundTask.registerTaskAsync(TASK, { minimumInterval: EVERY_MIN });
-  else if (!on && registered) await BackgroundTask.unregisterTaskAsync(TASK);
+  if (!on) {
+    if (registered) await BackgroundTask.unregisterTaskAsync(TASK);
+    return;
+  }
+  if (registered && loadHomeTaskEvery() === EVERY_MIN) return;
+  if (registered) await BackgroundTask.unregisterTaskAsync(TASK);
+  await BackgroundTask.registerTaskAsync(TASK, { minimumInterval: EVERY_MIN });
+  saveHomeTaskEvery(EVERY_MIN);
 }
