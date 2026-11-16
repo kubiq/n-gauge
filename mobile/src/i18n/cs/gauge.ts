@@ -4,7 +4,10 @@ export const gauge: Record<string, string> = {
   'Not the gauge’s code': 'Toto není kód budíku',
   'Scan the QR on the gauge’s WiFi screen.': 'Načtěte QR kód na obrazovce Wi-Fi budíku.',
   'Gauge settings': 'Nastavení budíku',
-  'Scan a different gauge': 'Načíst jiný budík',
+  'Still not connecting?': 'Pořád se nepřipojuje?',
+  'If the gauge’s WiFi password has changed, scan its QR on the WiFi screen again.':
+    'Pokud se změnilo heslo WiFi budíku, načtěte znovu jeho QR kód z obrazovky WiFi.',
+  'Scan the gauge’s QR again': 'Znovu načíst QR kód budíku',
   // One word for "Set up" app-wide: the log key's button uses it too.
   'Set up': 'Nastavit',
   'Tap through the views on the gauge to the WiFi screen, then scan its QR code. The app keeps the password, so this is needed once.':

@@ -268,8 +268,16 @@ export default function GaugeSettingsScreen() {
     );
   }
 
-  // Scanning another gauge replaces the stored one: rare, so last and plain.
-  const another = <Button title={t('Scan a different gauge')} kind="plain" onPress={scan} />;
+  // Scanning again, for the one case it is needed: the gauge's WiFi password
+  // changed (its settings page, a reflash) and the stored one no longer
+  // joins. Only after a connect failed, and not as "a different gauge" - one
+  // person has one gauge (asked 2026-11-16: the old button confused).
+  const rescan = pod.error ? (
+    <Card title={t('Still not connecting?')}>
+      <Note>{t('If the gauge’s WiFi password has changed, scan its QR on the WiFi screen again.')}</Note>
+      <Button title={t('Scan the gauge’s QR again')} kind="plain" onPress={scan} />
+    </Card>
+  ) : null;
 
   if (!connected) {
     // The settings live on the gauge - but the last ones read are kept
@@ -321,7 +329,7 @@ export default function GaugeSettingsScreen() {
             {snap.upload ? <UploadSummary u={snap.upload} /> : null}
           </>
         ) : null}
-        {another}
+        {rescan}
       </Screen>
     );
   }
@@ -409,7 +417,6 @@ export default function GaugeSettingsScreen() {
         <Note>{t('Or pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>
-      {another}
     </Screen>
   );
 }
