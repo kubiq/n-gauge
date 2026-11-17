@@ -22,8 +22,8 @@ export const trips: Record<string, string> = {
   // app/fuel.tsx and its charts (fuel-charts.tsx); the list's way to it
   'Fuel': 'Palivo',
   'More about fuel': 'Víc o palivu',
-  '{n} drives are not read yet - the list reads them; then they count here too.':
-    '{n} jízd ještě není načteno - načte je seznam; pak se počítají i tady.',
+  'Reading the car data… {at} of {of}': 'Načítám data z auta… {at} z {of}',
+  '{n} drives could not be read.': '{n} jízd se nepodařilo načíst.',
   'Overall': 'Celkem',
   'Corrected by the pump': 'Opraveno podle pumpy',
   'No drive with the car’s fuel figure yet.': 'Zatím žádná jízda s údajem auta o palivu.',
@@ -40,7 +40,7 @@ export const trips: Record<string, string> = {
     'Jsou potřeba dvě tankování při stání a jízdy mezi nimi.',
   'car {car} l  ·  burned {burned}': 'auto {car} l  ·  spáleno {burned}',
   'Fill-ups': 'Tankování',
-  'pump l': 'l z pumpy',
+  'litres': 'litry',
   'Consumption per drive': 'Spotřeba po jízdách',
   '{n} drives, {v} l/100 overall': '{n} jízd, celkem {v} l/100',
   'average': 'průměr',

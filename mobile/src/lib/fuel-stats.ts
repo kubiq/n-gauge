@@ -49,6 +49,7 @@ export function fillsByDrive(drives: readonly FuelDrive[]): Record<string, Refue
         place: d.toPlace ?? null,
         fromPct: c.fuelEndPct,
         toPct: newer.c!.fuelStartPct!,
+        parked: true,
       });
     }
     if (c?.fuelStartPct != null) newer = d;
@@ -129,10 +130,10 @@ export function fillIntervals(
   type Mark = { fill: Refuel; at: number; parked: boolean };
   const marks: Mark[] = [];
   drives.forEach((d, i) => {
-    for (const f of fills[d.key] ?? []) {
-      const parked = f.fromPct === (drives[i - 1]?.c?.fuelEndPct ?? NaN) && f.toPct === d.c?.fuelStartPct;
-      marks.push({ fill: f, at: i, parked });
-    }
+    // Marked when found between two drives (fillsByDrive); by its levels it
+    // missed drives between with no tank level of their own (2026-11-17:
+    // seven fill-ups, no stretch).
+    for (const f of fills[d.key] ?? []) marks.push({ fill: f, at: i, parked: !!f.parked });
   });
   const out: FillInterval[] = [];
   for (let k = 0; k + 1 < marks.length; k++) {

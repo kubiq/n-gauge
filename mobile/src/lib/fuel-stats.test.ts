@@ -54,6 +54,21 @@ test('between two fill-ups: the car\'s figure against the tank, then the pump', 
   assert.equal(f.factor, pumped[0].burnedL! / 25);
 });
 
+test('a drive with no tank level between the fill-ups still counts in the stretch', () => {
+  // As the real list 2026-11-17: seven fill-ups, no stretch found.
+  const D2 = [
+    drive('a', 0, { fuelL: 4, fuelKm: 50, fuelStartPct: 80, fuelEndPct: 70 }),
+    drive('b', 24, { fuelL: 5, fuelKm: 60, fuelStartPct: 95, fuelEndPct: 85 }),   // filled before it
+    drive('x', 30, { fuelL: 1, fuelKm: 8 }),                                        // a hop, no level read
+    drive('c', 48, { fuelL: 20, fuelKm: 250, fuelStartPct: 80, fuelEndPct: 40 }),
+    drive('d', 96, { fuelL: 3, fuelKm: 30, fuelStartPct: 90, fuelEndPct: 85 }),   // filled before it
+  ];
+  const fills = fillsByDrive([...D2].reverse());
+  const s = fillIntervals(D2, fills, {});
+  assert.equal(s.length, 1);
+  assert.deepEqual([s[0].drives, s[0].carL], [3, 26]);
+});
+
 test('a fill-up during a drive splits it where the sum cannot: no stretch across it', () => {
   const during = [
     drive('a', 0, { fuelL: 4, fuelKm: 50, fuelStartPct: 30, fuelEndPct: 80, refuels: [{ at: H / 4, pt: null, fromPct: 25, toPct: 85 }] }),

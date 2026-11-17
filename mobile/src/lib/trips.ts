@@ -275,6 +275,12 @@ export type Refuel = {
   toPct: number;
   /** The place's name from the lists, filled in when cached (trip-cache.ts). */
   place?: string | null;
+  /**
+   * Made while parked - found between two drives (fuel-stats.ts
+   * fillsByDrive), not during one: a stretch between two such has whole
+   * drives in it, whose fuel adds up.
+   */
+  parked?: boolean;
 };
 
 // The tank level, for fill-ups. Read only with the engine running: with it off

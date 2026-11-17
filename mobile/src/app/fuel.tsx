@@ -26,7 +26,7 @@ import {
 } from '@/lib/fuel-stats';
 import { endName, loadNames } from '@/lib/names';
 import { loadFillLitres, loadFuels, saveFillLitres } from '@/lib/store';
-import { cachedCsv, cachedGpx, tripFiles } from '@/lib/trip-cache';
+import { cachedCsv, cachedGpx, summarise, tripFiles } from '@/lib/trip-cache';
 import type { Refuel } from '@/lib/trips';
 import { distance } from '@/lib/units';
 import { S, themed, useColors } from '@/theme';
@@ -53,8 +53,31 @@ function load(): Data {
 
 export default function FuelScreen() {
   const [data, setData] = useState<Data>(load);
-  // Back from the list, a drive read since counts too.
-  useFocusEffect(useCallback(() => setData(load()), []));
+  const [reading, setReading] = useState<{ at: number; of: number } | null>(null);
+  // Back from the list, a drive read since counts too - and the car data
+  // not read yet (older weeks the list has not opened) is read here: a
+  // stretch between fill-ups with an unread drive in it cannot be summed.
+  useFocusEffect(
+    useCallback(() => {
+      setData(load());
+      let live = true;
+      (async () => {
+        const todo = tripFiles()
+          .map((f) => f.csv)
+          .filter((n): n is string => !!n && !cachedCsv(n));
+        for (const [i, name] of todo.entries()) {
+          if (!live) return;
+          setReading({ at: i + 1, of: todo.length });
+          await summarise(name).catch(() => undefined);   // one that will not read is left out
+          if (live && (i % 5 === 4 || i === todo.length - 1)) setData(load());
+        }
+        if (live) setReading(null);
+      })();
+      return () => {
+        live = false;
+      };
+    }, []),
+  );
   const ui = useUi();
   const styles = useStyles();
   const C = useColors();
@@ -82,8 +105,10 @@ export default function FuelScreen() {
 
   return (
     <Screen>
-      {data.unread ? (
-        <Note>{t('{n} drives are not read yet - the list reads them; then they count here too.', { n: data.unread })}</Note>
+      {reading ? (
+        <Note>{t('Reading the car data… {at} of {of}', { at: reading.at, of: reading.of })}</Note>
+      ) : data.unread ? (
+        <Note>{t('{n} drives could not be read.', { n: data.unread })}</Note>
       ) : null}
 
       <Card title={t('Overall')}>
@@ -158,7 +183,7 @@ export default function FuelScreen() {
                   style={[ui.input, styles.litres]}
                   defaultValue={data.pump[id] != null ? String(data.pump[id]) : ''}
                   onEndEditing={(e) => setPump(f, e.nativeEvent.text)}
-                  placeholder={t('pump l')}
+                  placeholder={t('litres')}
                   placeholderTextColor={C.dim}
                   keyboardType="decimal-pad"
                 />
@@ -178,6 +203,6 @@ const useStyles = themed((C) =>
     stretchHead: { color: C.text, fontSize: 14, fontWeight: '600' },
     fill: { flexDirection: 'row', alignItems: 'center', gap: S.md },
     fillText: { flex: 1, gap: 2 },
-    litres: { width: 96, textAlign: 'right' },
+    litres: { width: 110, textAlign: 'right' },
   }),
 );
