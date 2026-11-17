@@ -63,6 +63,7 @@ function Screens() {
       <Stack.Screen name="gauge-settings" options={{ title: t('Gauge settings'), headerRight: () => <HeaderActions /> }} />
       <Stack.Screen name="scan" options={{ presentation: 'modal', title: t('Scan the gauge’s QR') }} />
       <Stack.Screen name="trip/[key]" options={{ title: t('Drive') }} />
+      <Stack.Screen name="fuel" options={{ title: t('Fuel') }} />
       <Stack.Screen name="name" options={{ presentation: 'modal', title: t('Name') }} />
       {/* The gauge in the header wherever a screen may ask to connect;
           not on the modals. */}

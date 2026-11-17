@@ -19,6 +19,36 @@ export const trips: Record<string, string> = {
   'Show 1 very short drive (under 200 m)|Show {n} very short drives (under 200 m)':
     'Zobrazit {n} velmi krátkou jízdu (pod 200 m)|Zobrazit {n} velmi krátké jízdy (pod 200 m)|Zobrazit {n} velmi krátkých jízd (pod 200 m)',
   'Undated drive': 'Jízda bez data',
+  // app/fuel.tsx and its charts (fuel-charts.tsx); the list's way to it
+  'Fuel': 'Palivo',
+  'More about fuel': 'Víc o palivu',
+  '{n} drives are not read yet - the list reads them; then they count here too.':
+    '{n} jízd ještě není načteno - načte je seznam; pak se počítají i tady.',
+  'Overall': 'Celkem',
+  'Corrected by the pump': 'Opraveno podle pumpy',
+  'No drive with the car’s fuel figure yet.': 'Zatím žádná jízda s údajem auta o palivu.',
+  'The car’s figure against the pump': 'Údaj auta proti pumpě',
+  'The car reports the fuel it uses; added up over the drives between two fill-ups, it should be what went in at the second. Type in the pump’s litres at each fill-up - the tank level alone is coarse.':
+    'Auto hlásí, kolik paliva spotřebuje; sečteno přes jízdy mezi dvěma tankováními by to mělo být, kolik se natankovalo podruhé. Zadejte u každého tankování litry z pumpy - samotná hladina v nádrži je hrubá.',
+  'The car’s figure is {pct} {dir}, over {n} stretches by the {by}.':
+    'Údaj auta je o {pct} {dir}, podle {by} z {n} úseků.',
+  'low': 'nižší',
+  'high': 'vyšší',
+  'pump': 'pumpy',
+  'tank level': 'hladiny v nádrži',
+  'Two fill-ups made while parked are needed, with drives between them.':
+    'Jsou potřeba dvě tankování při stání a jízdy mezi nimi.',
+  'car {car} l  ·  burned {burned}': 'auto {car} l  ·  spáleno {burned}',
+  'Fill-ups': 'Tankování',
+  'pump l': 'l z pumpy',
+  'Consumption per drive': 'Spotřeba po jízdách',
+  '{n} drives, {v} l/100 overall': '{n} jízd, celkem {v} l/100',
+  'average': 'průměr',
+  'a drive': 'jízda',
+  'the last 8 drives, by distance': 'posledních 8 jízd, podle vzdálenosti',
+  'Fuel per week': 'Palivo po týdnech',
+  '{l} l in {n} weeks': '{l} l za {n} týdnů',
+  'week of {d}': 'týden od {d}',
   // Merging drives (merge.ts): the list's choosing, a merged row
   '1 drive chosen|{n} drives chosen': '{n} vybraná jízda|{n} vybrané jízdy|{n} vybraných jízd',
   'Tap more drives to merge them': 'Klepněte na další jízdy ke spojení',

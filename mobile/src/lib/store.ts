@@ -231,6 +231,31 @@ export function saveGaugeFiles(files: PodFile[]): void {
   gaugeFilesFile.write(JSON.stringify(files));
 }
 
+// The litres from the pump at a fill-up, by its fillId (fuel-grade.ts) -
+// typed in on the fuel screen, the exact figure the car's is measured by
+// (fuel-stats.ts).
+const fillLitresFile = new File(Paths.document, 'fill-litres.json');
+
+export function loadFillLitres(): Record<string, number> {
+  try {
+    const raw = fillLitresFile.exists ? JSON.parse(fillLitresFile.textSync()) : {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw ?? {})) if (typeof v === 'number' && v > 0 && v < 200) out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** One fill-up's litres; null clears them. Returns them all, as saved. */
+export function saveFillLitres(id: string, litres: number | null): Record<string, number> {
+  const all = loadFillLitres();
+  if (litres != null && litres > 0) all[id] = litres;
+  else delete all[id];
+  fillLitresFile.write(JSON.stringify(all));
+  return all;
+}
+
 // Drives merged into one (merge.ts): groups of file names.
 const mergesFile = new File(Paths.document, 'merges.json');
 

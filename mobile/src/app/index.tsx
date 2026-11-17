@@ -17,10 +17,10 @@ import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
 import { type Inbox, type ListFacts, loadFinished, loadFuels, loadInbox, loadListFacts, loadMerges, saveFuel, saveMerges } from '@/lib/store';
 import { entriesOf, mergeCsv, mergeGpx, type MergeGroups, withMerged } from '@/lib/merge';
+import { fillsByDrive, TANK_L } from '@/lib/fuel-stats';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
-  FILL_MIN_PCT,
   isEncryptedName,
   isGpxName,
   isStub,
@@ -42,8 +42,6 @@ const RECENT_MS = 31 * 24 * 3600 * 1000;
 // Undated drives (no clock) are few, and have no week to open: read always.
 const isOld = (start: number | null) => start !== null && start < Date.now() - RECENT_MS;
 
-// The i30 N's tank, for the litres a fill-up's levels come to.
-const TANK_L = 50;
 
 // Every drive the phone holds. Summaries missing from the cache (new pulls)
 // are worked out here, one file at a time, and the list fills in as they land.
@@ -193,6 +191,7 @@ export default function TripsScreen() {
           items={[
             { label: t('Settings'), onPress: () => router.push('/settings') },
             { label: t('Gauge settings'), onPress: () => router.push('/gauge-settings') },
+            ...(hasTrips ? [{ label: t('Fuel'), onPress: () => router.push('/fuel') }] : []),
             ...(hasTrips ? [save] : []),
           ]}
         />
@@ -250,23 +249,10 @@ export default function TripsScreen() {
   // Fill-ups, on the drive they were on (asked 2026-10-22): during it (its
   // CSV's refuels), or before it - the tank fuller at its start than at the
   // end of the drive before, filled while the gauge slept. In time order.
-  const fills: Record<string, Refuel[]> = {};
-  let newer: (typeof rows)[number] | null = null;   // the drive after, with a start level
-  for (const r of rows) {
-    const c = r.c;
-    if (c?.refuels.length) fills[r.t.key] = [...c.refuels];
-    if (newer && c?.fuelEndPct != null && newer.c!.fuelStartPct! - c.fuelEndPct >= FILL_MIN_PCT) {
-      const end = r.g?.end ?? (r.t.start !== null && c.durationS ? r.t.start + c.durationS * 1000 : r.t.start);
-      (fills[newer.t.key] ??= []).unshift({
-        at: end,
-        pt: r.g?.to ?? null,
-        place: r.g?.toPlace ?? null,
-        fromPct: c.fuelEndPct,
-        toPct: newer.c!.fuelStartPct!,
-      });
-    }
-    if (c?.fuelStartPct != null) newer = r;
-  }
+  // (fuel-stats.ts, shared with the fuel screen.)
+  const fills = fillsByDrive(
+    rows.map((r) => ({ key: r.t.key, start: r.t.start, end: r.g?.end ?? null, to: r.g?.to, toPlace: r.g?.toPlace, c: r.c })),
+  );
   // The fuel each drive ran on - the rows are newest first - and the
   // consumption per fuel, of every drive read (the short ones too: what
   // counts is the litres over the km).
@@ -361,15 +347,19 @@ export default function TripsScreen() {
       ) : null}
       {byFuel.length ? (
         // Over the drives since a fill-up with its fuel picked (fuel-grade.ts).
-        <Card title={t('Consumption by fuel')}>
-          {byFuel.map((f) => (
-            <Row
-              key={fuelLabel(f.fuel)}
-              label={fuelLabel(f.fuel)}
-              value={`${((f.litres / f.km) * 100).toFixed(1)} l/100  ·  ${distance(f.km * 1000)}`}
-            />
-          ))}
-        </Card>
+        // A tap: the fuel screen, with its charts (fuel.tsx).
+        <Pressable onPress={() => router.push('/fuel')}>
+          <Card title={t('Consumption by fuel')}>
+            {byFuel.map((f) => (
+              <Row
+                key={fuelLabel(f.fuel)}
+                label={fuelLabel(f.fuel)}
+                value={`${((f.litres / f.km) * 100).toFixed(1)} l/100  ·  ${distance(f.km * 1000)}`}
+              />
+            ))}
+            <Text style={styles.moreText}>{t('More about fuel')}</Text>
+          </Card>
+        </Pressable>
       ) : null}
       {trips.length === 0 ? null : (
         weeks.map((w) => {
