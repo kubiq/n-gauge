@@ -195,9 +195,6 @@ export default function FuelScreen() {
             </Text>
           </View>
         ))}
-        {tank.fills ? (
-          <Note>{t('The tank holds {l} l from 0 to 100 % of its level, by {n} receipts.', { l: tank.litres.toFixed(1), n: tank.fills })}</Note>
-        ) : null}
       </Card>
 
       {allFills.length ? (
