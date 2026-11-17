@@ -375,6 +375,27 @@ static uint32_t wifiArmLeftMs(uint32_t now) {
   return WIFI_ASK_AFTER_MS - (now - wifiScreenFrom);
 }
 
+// The gear for the overview's centre (asked 2026-11-17: boost read 0.00 all
+// through town). Worked out from rpm over the car's speed, as the logs have
+// it (logger.cpp log_gear, calc_gear: the DCT's ratios - mechanical, the
+// same in every drive mode). Held OVERVIEW_GEAR_HOLD_MS through a shift,
+// where it matches no gear; 0 standing, under GEAR_MIN_KMH, or past the hold.
+static int overviewGear(uint32_t now) {
+  static const float ratios[] = GEAR_RPM_PER_KMH;
+  static int held = 0;
+  static uint32_t heldAt = 0;
+  if (!obd_rpm_fresh() || !obd_speed_fresh()) return held = 0;
+  const int g = calc_gear((float)obd.rpm, (float)obd.speedKmh, ratios,
+                          sizeof(ratios) / sizeof(ratios[0]), GEAR_TOL, GEAR_MIN_KMH);
+  if (g > 0) {
+    held = g;
+    heldAt = now;
+  } else if (obd.speedKmh < GEAR_MIN_KMH || now - heldAt >= OVERVIEW_GEAR_HOLD_MS) {
+    held = 0;
+  }
+  return held;
+}
+
 // ---- push to UI ----
 // Every value through obd_*_fresh: stale data presents as no data.
 static void gaugesTask(uint32_t now) {
@@ -428,6 +449,7 @@ static void gaugesTask(uint32_t now) {
       o.oilState = tempOverOil ? 2 : tempCold ? 0 : 1;
       o.haveCool = obd_coolant_fresh();  o.coolC = obd.coolantC;  o.coolHot = tempOverCool;
       o.haveBoost = obd_boost_fresh();   o.boostBar = obd.boostBar;
+      o.gear = overviewGear(ms);
       // The average from a kilometre on: a short hop's reads absurd (trips.ts).
       o.haveAvg = driveKm >= 1.0f;       o.avgL100 = o.haveAvg ? driveL / driveKm * 100.0f : 0;
       // Instant: per 100 km rolling; per hour standing, where per 100 km is

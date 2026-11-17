@@ -985,6 +985,10 @@
 // instant fuel per 100 km from this speed, per hour below it.
 #define OVERVIEW_REFRESH_MS   250
 #define OVERVIEW_ROLLING_KMH  5
+// The overview's gear held through a shift, where rpm / km/h matches none.
+#define OVERVIEW_GEAR_HOLD_MS 1500
+// Boost shown under the gear only from this (bar): in town it sat at 0.00.
+#define OVERVIEW_BOOST_FROM   0.10f
 // The status screen (ui_status.cpp): its words rebuilt this often while shown.
 #define STATUS_REFRESH_MS  250
 // The screen saver (saverTask, ui_saver.cpp): with the car silent, a gauge
