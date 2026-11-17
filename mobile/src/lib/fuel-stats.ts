@@ -68,7 +68,9 @@ export function tankFromPump(fills: readonly Refuel[], pump: Record<string, numb
   for (const f of fills) {
     const p = pump[fillId(f)];
     const r = (f.toPct - f.fromPct) / 100;
-    if (p == null || r < 0.2) continue;
+    // Not one from the gauge's bottom: driven into the reserve below its 0 %
+    // (asked 2026-11-17), the pump's litres are more than the level says.
+    if (p == null || r < 0.2 || f.fromPct <= 2) continue;
     litres += p;
     rise += r;
     n++;

@@ -98,6 +98,10 @@ test('the tank, from the pump: litres over the level\'s rise; the book\'s withou
   assert.equal(t.fills, 5);
   assert.ok(t.litres > 46 && t.litres < 47.5, String(t.litres));
   assert.deepEqual(tankFromPump(fills, {}), { litres: TANK_L, fills: 0 });
+  // One from the gauge's 0 % - into the reserve - does not count.
+  const t2 = tankFromPump([...fills, f(0, 100, 6)], { ...pump, '6': 49.5 });
+  assert.equal(t2.fills, 5);
+  assert.equal(t2.litres, t.litres);
 });
 
 test('fill-ups during drives - the gauge awake at the pump - split them by the fuel so far', () => {
