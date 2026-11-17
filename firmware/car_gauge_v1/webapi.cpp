@@ -16,6 +16,8 @@
 #include <dirent.h>         // readdir(): the card's names without a String each
 #include <WiFi.h>
 #include <esp_wifi.h>       // esp_wifi_set_vendor_ie: the beacon
+#include <lwip/netif.h>     // wifi_netifs_down: each interface down,
+#include <lwip/tcpip.h>     // ... under the TCPIP lock
 #include <esp_http_server.h>
 #include <DNSServer.h>   // captive portal; see the note on dns below
 #include <stdlib.h>
@@ -1437,6 +1439,18 @@ static bool startServer() {
   return true;
 }
 
+void wifi_netifs_down() {
+  LOCK_TCPIP_CORE();
+  struct netif *n;
+  NETIF_FOREACH(n) {
+    // The WiFi ones: ARP on them (not the loopback, not a tunnel's).
+    if (!(n->flags & NETIF_FLAG_ETHARP)) continue;
+    netif_set_link_down(n);
+    netif_set_down(n);              // clears its ARP entries (etharp_cleanup_netif)
+  }
+  UNLOCK_TCPIP_CORE();
+}
+
 void web_stop() {
   if (!up) return;
   // The server's handlers end first: a download (sleep unmounts the card
@@ -1450,6 +1464,7 @@ void web_stop() {
   dlBusy = false;
   apRestartAt = 0;
   dns.stop();
+  wifi_netifs_down();               // the phone's ARP entry goes with the AP
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
   up = false;
@@ -1575,6 +1590,7 @@ void web_start() {
   ipText = WiFi.softAPIP().toString();
   if (!startServer()) {
     Serial.println(F("[ERR] web server did not start"));
+    wifi_netifs_down();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
     return;

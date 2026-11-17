@@ -28,6 +28,13 @@
 
 void web_start();           // bring it up (no-op if already up)
 void web_stop();            // bring it down; called before deep sleep
+// Every WiFi interface down in lwIP - the AP's and the station's - and so
+// their ARP entries cleared, before the radio stops or changes mode. With an
+// entry left, lwIP's ARP timer re-asked through an interface whose driver
+// had gone, and the gauge crashed (InstrFetchProhibited, pc 0, etharp_tmr):
+// 2026-11-14 and twice more after the station alone was taken down
+// (2026-11-17) - the entry was the phone's, on the AP. Safe to call any time.
+void wifi_netifs_down();
 bool web_is_up();
 // A /dl transfer is running (on the web server's task), with a card file
 // open: the card is not to be unmounted or lent to the PC meanwhile.

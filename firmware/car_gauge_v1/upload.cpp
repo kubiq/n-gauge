@@ -14,9 +14,6 @@
 #include <esp_system.h>     // esp_reset_reason: no upload in a wake begun by a crash
 #include <lwip/dns.h>    // dns_setserver: the server's name by public resolvers
 #include <lwip/tcpip.h>  // LOCK_TCPIP_CORE around it
-#include <lwip/netif.h>  // netif_set_down: the hotspot's interface, before the radio goes
-#include <esp_netif.h>   // ... found by its key
-#include <esp_netif_net_stack.h>  // esp_netif_get_netif_impl: its lwIP netif
 #include <mbedtls/base64.h>
 #include <mbedtls/sha256.h>  // the downloaded firmware's, for its signature
 #include <time.h>
@@ -978,26 +975,6 @@ static void fetchFirmware(const UpConfig &c, uint8_t *buf, char *note, size_t n)
   Serial.printf("[..] upload: %s\n", note);
 }
 
-// The hotspot's interface down in lwIP, by hand, before the radio stops.
-// 2026-11-14 16:40 the gauge crashed ~30 s after an upload's close
-// (InstrFetchProhibited, pc 0): lwIP's ARP timer re-asked for the router
-// through the station interface (etharp_tmr -> etharp_request ->
-// low_level_output) whose WiFi driver was already gone. Stopped this
-// quickly, the driver can go before lwIP takes the interface down; an ARP
-// entry in use is re-asked shortly before it expires, so it strikes only
-// now and then. Down, the interface's ARP entries are cleared with it
-// (netif_set_down: etharp_cleanup_netif), and nothing is left to re-ask.
-// The station is brought up again by the next connect, as always.
-static void staNetifDown() {
-  esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-  struct netif *n = sta ? (struct netif *)esp_netif_get_netif_impl(sta) : nullptr;
-  if (!n) return;
-  LOCK_TCPIP_CORE();
-  netif_set_link_down(n);
-  netif_set_down(n);
-  UNLOCK_TCPIP_CORE();
-}
-
 static void uploadTask(void *arg) {
   UpConfig &c = *(UpConfig *)arg;
   UpResult r = {};
@@ -1020,6 +997,9 @@ static void uploadTask(void *arg) {
   // ESP32's "esp32s3-xxxxxx": DHCP sends it as it joins. Set before the
   // interface starts - after, it is not used until the next start.
   WiFi.setHostname(WIFI_STA_HOSTNAME);
+  // Every WiFi interface down in lwIP before the mode changes - the AP's
+  // phone among them (webapi.h wifi_netifs_down: the crash after uploads).
+  wifi_netifs_down();
   WiFi.mode(WIFI_STA);
   WiFi.begin(c.ssid, c.pass);
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < UP_JOIN_MS && !giveWay) delay(250);
@@ -1130,7 +1110,11 @@ out:
   Serial.printf("[..] upload: closing (%s)\n", r.ok ? "done" : r.msg);
   if (wgUp) wg.end();
   Serial.println(F("[..] upload: tunnel closed"));
-  staNetifDown();
+  // The hotspot's and the AP's interfaces down in lwIP before the radio
+  // stops: their ARP entries cleared, nothing for the timer to re-ask
+  // through a driver that has gone (webapi.h wifi_netifs_down). The station
+  // alone (6f0a7f0) was not enough: the gauge still crashed, 2026-11-17.
+  wifi_netifs_down();
   WiFi.disconnect(true);
   Serial.println(F("[..] upload: hotspot left"));
   WiFi.mode(WIFI_OFF);
