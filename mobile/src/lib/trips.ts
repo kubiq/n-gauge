@@ -281,6 +281,12 @@ export type Refuel = {
    * drives in it, whose fuel adds up.
    */
   parked?: boolean;
+  /**
+   * During a drive: the drive's fuel (the car's figure) up to the stop at
+   * the pump - so its fuel can be split there, before and after. Null
+   * without the fuel column; absent from summaries from before it.
+   */
+  fuelBeforeL?: number | null;
 };
 
 // The tank level, for fill-ups. Read only with the engine running: with it off
@@ -328,7 +334,9 @@ export function parseCsv(text: string): CsvSummary {
   };
   // Engine-running stretches, split where it was off STOP_MIN_MS or more:
   // their tank readings [ms, %], and when and where each ended.
-  type Run = { pts: [number, number][]; endMs: number; at: number | null; pt: [number, number] | null };
+  // fuelL: the drive's fuel so far when the stretch ended - at a fill-up,
+  // the car's figure up to the pump (fuel-stats.ts splits the drive there).
+  type Run = { pts: [number, number][]; endMs: number; at: number | null; pt: [number, number] | null; fuelL: number | null };
   const runs: Run[] = [];
   let run: Run | null = null;
   let lastPt: [number, number] | null = null;
@@ -381,13 +389,14 @@ export function parseCsv(text: string): CsvSummary {
     if (Number.isFinite(ms) && rpm >= RUNNING_RPM) {
       // A new stretch after a stop - or after a reboot, when ms starts again.
       if (!run || ms - run.endMs >= STOP_MIN_MS || ms < run.endMs) {
-        run = { pts: [], endMs: ms, at: null, pt: null };
+        run = { pts: [], endMs: ms, at: null, pt: null, fuelL: null };
         runs.push(run);
       }
       run.endMs = ms;
       const utc = iUtc >= 0 && f[iUtc] ? Date.parse(f[iUtc]) : NaN;
       run.at = Number.isFinite(utc) ? utc : null;
       run.pt = lastPt;
+      run.fuelL = s.fuelL;
       const pct = num(f, iPct);
       if (Number.isFinite(pct)) run.pts.push([ms, pct]);
     }
@@ -401,7 +410,7 @@ export function parseCsv(text: string): CsvSummary {
   let before: (typeof levels)[number] | null = null;
   for (const l of levels) {
     if (before && l.head !== null && l.head - before.tail! >= FILL_MIN_PCT) {
-      s.refuels.push({ at: before.r.at, pt: before.r.pt, fromPct: before.tail!, toPct: l.head });
+      s.refuels.push({ at: before.r.at, pt: before.r.pt, fromPct: before.tail!, toPct: l.head, fuelBeforeL: before.r.fuelL });
     }
     if (l.tail !== null) before = l;
   }

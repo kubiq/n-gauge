@@ -115,9 +115,9 @@ export type FillInterval = {
 };
 
 /**
- * Each stretch between two fill-ups made while parked (a fill-up during a
- * drive splits its fuel at a moment the CSV's sum cannot): the car's figure
- * over its drives, against what was burned - by the pump's litres at the
+ * Each stretch between two fill-ups - made while parked, or during a drive
+ * (that drive's fuel split at the stop at the pump, Refuel.fuelBeforeL): the
+ * car's figure over it, against what was burned - by the pump's litres at the
  * second fill-up if typed in (`pump`, by fillId), else by the level's fall.
  * `drives` oldest first, `fills` as fillsByDrive gives them.
  */
@@ -126,30 +126,53 @@ export function fillIntervals(
   fills: Record<string, Refuel[]>,
   pump: Record<string, number>,
 ): FillInterval[] {
-  // Each parked fill-up at the boundary before its drive; during one: a break.
-  type Mark = { fill: Refuel; at: number; parked: boolean };
+  // Where each fill-up falls in the drives' fuel: drive `at`, `off` litres
+  // into it - 0 for one made while parked (before the drive), the drive's
+  // fuel up to the stop at the pump for one made during it (most of them:
+  // the gauge stays awake through a few minutes at the pump - 2026-11-17,
+  // seven fill-ups and not one stretch). Null: cannot be placed.
+  type Mark = { fill: Refuel; at: number; off: number | null };
   const marks: Mark[] = [];
   drives.forEach((d, i) => {
-    // Marked when found between two drives (fillsByDrive); by its levels it
-    // missed drives between with no tank level of their own (2026-11-17:
-    // seven fill-ups, no stretch).
-    for (const f of fills[d.key] ?? []) marks.push({ fill: f, at: i, parked: !!f.parked });
+    for (const f of fills[d.key] ?? []) marks.push({ fill: f, at: i, off: f.parked ? 0 : (f.fuelBeforeL ?? null) });
   });
+  const fuel = (i: number) => drives[i].c?.fuelL ?? null;
+  // A drive's km for part of its fuel: in proportion - its km are not split
+  // at the stop, its fuel is.
+  const kmOf = (i: number, litres: number) => {
+    const c = drives[i].c!;
+    return c.fuelL ? ((c.fuelKm ?? 0) * litres) / c.fuelL : 0;
+  };
   const out: FillInterval[] = [];
   for (let k = 0; k + 1 < marks.length; k++) {
     const a = marks[k], b = marks[k + 1];
-    if (!a.parked || !b.parked || b.at <= a.at) continue;
-    const span = drives.slice(a.at, b.at);
-    if (span.some((d) => d.c?.fuelL == null)) continue;   // a drive without the figure: no sum
-    const carL = span.reduce((s, d) => s + (d.c!.fuelL ?? 0), 0);
-    const km = span.reduce((s, d) => s + (d.c!.fuelKm ?? 0), 0);
+    if (a.off === null || b.off === null) continue;
+    // Every drive it touches with the car's figure, or no sum.
+    let ok = true;
+    for (let i = a.at; i <= Math.min(b.at, drives.length - 1); i++) if (fuel(i) === null && !(i === b.at && b.off === 0)) ok = false;
+    if (!ok) continue;
+    let carL: number, km: number;
+    if (a.at === b.at) {
+      carL = b.off - a.off;
+      km = kmOf(a.at, carL);
+    } else {
+      carL = fuel(a.at)! - a.off + b.off;
+      km = kmOf(a.at, fuel(a.at)! - a.off) + (b.off ? kmOf(b.at, b.off) : 0);
+      for (let i = a.at + 1; i < b.at; i++) {
+        carL += fuel(i)!;
+        km += drives[i].c!.fuelKm ?? 0;
+      }
+    }
+    if (carL <= 0) continue;
+    // The drives it touches: from a's to b's, b's only if part of it counts.
+    const touched = b.at - a.at + (b.off ? 1 : 0);
     const p = pump[fillId(b.fill)];
     const tank = (pct: number) => (pct / 100) * TANK_L;
     const burnedL =
       p != null
         ? p + tank(a.fill.toPct) - tank(b.fill.toPct)
         : tank(a.fill.toPct) - tank(b.fill.fromPct);
-    out.push({ from: a.fill, to: b.fill, carL, km, burnedL: burnedL > 0 ? burnedL : null, by: p != null ? 'pump' : 'tank', drives: span.length });
+    out.push({ from: a.fill, to: b.fill, carL, km, burnedL: burnedL > 0 ? burnedL : null, by: p != null ? 'pump' : 'tank', drives: touched });
   }
   return out;
 }

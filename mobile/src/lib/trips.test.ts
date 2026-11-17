@@ -269,6 +269,19 @@ test('csv: a fill-up is a fuller tank across a stop, read with the engine runnin
   const r = s.refuels[0];
   assert.deepEqual([r.fromPct, r.toPct, r.pt], [10, 100, [14.4, 50.1]]);
   assert.equal(r.at, Date.UTC(2026, 9, 22, 19, 4, 59));   // the engine's last running second
+  assert.equal(r.fuelBeforeL, null);                        // no fuel column: no figure to split
+});
+
+test('csv: a fill-up during a drive keeps the drive\'s fuel up to the pump', () => {
+  // 36 l/h running for 300 s is 3 l; stopped at the pump; on again, fuller.
+  let csv = 'utc,ms,rpm,fuelPct,fuelLh\r\n';
+  const row = (ms: number, rpm: number, pct: number, lh: number) =>
+    `${new Date(Date.UTC(2026, 9, 22, 19) + ms).toISOString().slice(0, 19)}Z,${ms},${rpm},${pct},${lh}\r\n`;
+  for (let ms = 0; ms < 300_000; ms += 500) csv += row(ms, 1500, 10, 36);
+  for (let ms = 300_000; ms < 420_000; ms += 500) csv += row(ms, 0, 40, 0);
+  for (let ms = 420_000; ms < 700_000; ms += 500) csv += row(ms, 1500, 100, 36);
+  const r = parseCsv(csv).refuels[0];
+  assert.ok(Math.abs(r.fuelBeforeL! - 3) < 0.01, String(r.fuelBeforeL));
 });
 
 test('csv: a stop with no fill, and a short one, are no fill-ups', () => {

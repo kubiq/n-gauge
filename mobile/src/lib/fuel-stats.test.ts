@@ -69,12 +69,21 @@ test('a drive with no tank level between the fill-ups still counts in the stretc
   assert.deepEqual([s[0].drives, s[0].carL], [3, 26]);
 });
 
-test('a fill-up during a drive splits it where the sum cannot: no stretch across it', () => {
+test('fill-ups during drives - the gauge awake at the pump - split them by the fuel so far', () => {
+  // a: 1 l to the pump, then 3 l more. b: whole, 6 l. c: 5 l to the pump.
   const during = [
-    drive('a', 0, { fuelL: 4, fuelKm: 50, fuelStartPct: 30, fuelEndPct: 80, refuels: [{ at: H / 4, pt: null, fromPct: 25, toPct: 85 }] }),
-    drive('b', 24, { fuelL: 6, fuelKm: 70, fuelStartPct: 95, fuelEndPct: 90 }),
+    drive('a', 0, { fuelL: 4, fuelKm: 40, fuelStartPct: 20, fuelEndPct: 80, refuels: [{ at: H / 4, pt: null, fromPct: 15, toPct: 90, fuelBeforeL: 1 }] }),
+    drive('b', 24, { fuelL: 6, fuelKm: 70, fuelStartPct: 80, fuelEndPct: 66 }),
+    drive('c', 48, { fuelL: 7, fuelKm: 80, fuelStartPct: 66, fuelEndPct: 95, refuels: [{ at: 48 * H + H / 4, pt: null, fromPct: 60, toPct: 98, fuelBeforeL: 5 }] }),
   ];
   const fills = fillsByDrive([...during].reverse());
-  assert.equal(fillIntervals(during, fills, {}).length, 0);
+  const s = fillIntervals(during, fills, {});
+  assert.equal(s.length, 1);
+  assert.equal(s[0].carL, 3 + 6 + 5);
+  assert.equal(s[0].drives, 3);
+  assert.equal(s[0].burnedL, ((90 - 60) / 100) * TANK_L);
+  // From a summary before the split was kept: not placed, no stretch.
+  const old = during.map((d) => ({ ...d, c: { ...d.c!, refuels: d.c!.refuels.map(({ fuelBeforeL: _, ...r }) => r) } }));
+  assert.equal(fillIntervals(old, fillsByDrive([...old].reverse()), {}).length, 0);
   assert.equal(carFactor([]), null);
 });
