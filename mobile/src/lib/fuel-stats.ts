@@ -57,6 +57,25 @@ export function fillsByDrive(drives: readonly FuelDrive[]): Record<string, Refue
   return fills;
 }
 
+/**
+ * The tank's usable litres, from the pump: each fill-up's litres over its
+ * level's rise, summed (the bigger rises weigh more - a small one's level
+ * steps say little). 2026-11-17, five receipts: 46-47.5 l, not the 50 of
+ * the book - the level's 0 % is not empty. TANK_L without any.
+ */
+export function tankFromPump(fills: readonly Refuel[], pump: Record<string, number>): { litres: number; fills: number } {
+  let litres = 0, rise = 0, n = 0;
+  for (const f of fills) {
+    const p = pump[fillId(f)];
+    const r = (f.toPct - f.fromPct) / 100;
+    if (p == null || r < 0.2) continue;
+    litres += p;
+    rise += r;
+    n++;
+  }
+  return n ? { litres: litres / rise, fills: n } : { litres: TANK_L, fills: 0 };
+}
+
 /** One drive's consumption: the car's figure. */
 export type DrivePoint = { key: string; at: number; litres: number; km: number; l100: number };
 
@@ -115,6 +134,15 @@ export type FillInterval = {
 };
 
 /**
+ * A stretch between two fill-ups that cannot be summed, and why - said on
+ * the screen (2026-11-17: six stretches possible, one shown, no telling
+ * why): `nofuel` a drive in it without the car's figure (a track with no
+ * car data, or none read), at `at`; `unplaced` a fill-up not placeable in
+ * its drive's fuel (a summary from before that was kept).
+ */
+export type SkippedStretch = { from: Refuel; to: Refuel; why: 'nofuel' | 'unplaced'; at: number | null };
+
+/**
  * Each stretch between two fill-ups - made while parked, or during a drive
  * (that drive's fuel split at the stop at the pump, Refuel.fuelBeforeL): the
  * car's figure over it, against what was burned - by the pump's litres at the
@@ -125,6 +153,8 @@ export function fillIntervals(
   drives: readonly FuelDrive[],
   fills: Record<string, Refuel[]>,
   pump: Record<string, number>,
+  skipped: SkippedStretch[] = [],
+  tankL = TANK_L,
 ): FillInterval[] {
   // Where each fill-up falls in the drives' fuel: drive `at`, `off` litres
   // into it - 0 for one made while parked (before the drive), the drive's
@@ -136,21 +166,33 @@ export function fillIntervals(
   drives.forEach((d, i) => {
     for (const f of fills[d.key] ?? []) marks.push({ fill: f, at: i, off: f.parked ? 0 : (f.fuelBeforeL ?? null) });
   });
-  const fuel = (i: number) => drives[i].c?.fuelL ?? null;
+  // A drive with no car data at all - a track alone - had the car silent: the
+  // gauge opens the car's file at its first frame. Nothing burned (2026-11-01,
+  // five minutes of GPS jitter in one spot - a wake by motion, parked). One
+  // with car data but no fuel figure (older logs) is not known.
+  const fuel = (i: number) => (drives[i].c ? (drives[i].c!.fuelL ?? null) : 0);
   // A drive's km for part of its fuel: in proportion - its km are not split
   // at the stop, its fuel is.
   const kmOf = (i: number, litres: number) => {
-    const c = drives[i].c!;
-    return c.fuelL ? ((c.fuelKm ?? 0) * litres) / c.fuelL : 0;
+    const c = drives[i].c;
+    return c?.fuelL ? ((c.fuelKm ?? 0) * litres) / c.fuelL : 0;
   };
   const out: FillInterval[] = [];
   for (let k = 0; k + 1 < marks.length; k++) {
     const a = marks[k], b = marks[k + 1];
-    if (a.off === null || b.off === null) continue;
+    if (a.off === null || b.off === null) {
+      skipped.push({ from: a.fill, to: b.fill, why: 'unplaced', at: null });
+      continue;
+    }
     // Every drive it touches with the car's figure, or no sum.
-    let ok = true;
-    for (let i = a.at; i <= Math.min(b.at, drives.length - 1); i++) if (fuel(i) === null && !(i === b.at && b.off === 0)) ok = false;
-    if (!ok) continue;
+    let missing = -1;
+    for (let i = a.at; i <= Math.min(b.at, drives.length - 1); i++) {
+      if (fuel(i) === null && !(i === b.at && b.off === 0)) missing = i;
+    }
+    if (missing >= 0) {
+      skipped.push({ from: a.fill, to: b.fill, why: 'nofuel', at: drives[missing].start });
+      continue;
+    }
     let carL: number, km: number;
     if (a.at === b.at) {
       carL = b.off - a.off;
@@ -160,14 +202,14 @@ export function fillIntervals(
       km = kmOf(a.at, fuel(a.at)! - a.off) + (b.off ? kmOf(b.at, b.off) : 0);
       for (let i = a.at + 1; i < b.at; i++) {
         carL += fuel(i)!;
-        km += drives[i].c!.fuelKm ?? 0;
+        km += drives[i].c?.fuelKm ?? 0;
       }
     }
     if (carL <= 0) continue;
     // The drives it touches: from a's to b's, b's only if part of it counts.
     const touched = b.at - a.at + (b.off ? 1 : 0);
     const p = pump[fillId(b.fill)];
-    const tank = (pct: number) => (pct / 100) * TANK_L;
+    const tank = (pct: number) => (pct / 100) * tankL;
     const burnedL =
       p != null
         ? p + tank(a.fill.toPct) - tank(b.fill.toPct)
@@ -188,7 +230,11 @@ export function carFactor(intervals: readonly FillInterval[], minL = 5): { facto
   const pumped = ok.filter((i) => i.by === 'pump');
   const use = pumped.length ? pumped : ok;
   if (!use.length) return null;
-  const burned = use.reduce((s, i) => s + i.burnedL!, 0);
-  const car = use.reduce((s, i) => s + i.carL, 0);
-  return { factor: burned / car, stretches: use.length, by: pumped.length ? 'pump' : 'tank' };
+  // The median of the stretches' ratios, not the sum's: one stretch with a
+  // drive's data missing, or a partial fill's level read off, pulled the sum
+  // far (2026-11-17: x1.00, x1.02, x1.02 - and x1.17, x1.70 - read "9 % low").
+  const r = use.map((i) => i.burnedL! / i.carL).sort((a, b) => a - b);
+  const mid = r.length >> 1;
+  const factor = r.length % 2 ? r[mid] : (r[mid - 1] + r[mid]) / 2;
+  return { factor, stretches: use.length, by: pumped.length ? 'pump' : 'tank' };
 }

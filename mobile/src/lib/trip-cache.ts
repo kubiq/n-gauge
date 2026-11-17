@@ -57,7 +57,8 @@ const VERSION = 9;
 // 2: the series carries the car's state, off / engine off / running (2026-10-22).
 // 3: whether the drive ended - the gauge's end row (2026-11-13).
 // 4: a fill-up during a drive keeps the drive's fuel up to it (2026-11-17).
-const CSV_VERSION = 4;
+// 5: the engine never running: 0 l burned, not unknown (2026-11-17).
+const CSV_VERSION = 5;
 const csvV = VERSION * 1000 + CSV_VERSION;
 
 function read<T>(f: File, size: number, v = VERSION): T | null {

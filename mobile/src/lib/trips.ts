@@ -403,6 +403,13 @@ export function parseCsv(text: string): CsvSummary {
   }
   // uptime ms can restart if the pod rebooted mid-drive; never negative.
   if (!Number.isNaN(firstMs)) s.durationS = Math.max(0, (lastMs - firstMs) / 1000);
+  // The fuel column there, but no rate in it, and the engine never running:
+  // nothing burned - not unknown (2026-11-14 07:24, the ignition on a minute
+  // and a half before the start: a stretch between fill-ups left out for it).
+  if (iFuel >= 0 && s.fuelL === null && !runs.length) {
+    s.fuelL = 0;
+    s.fuelKm = 0;
+  }
   const levels = runs.map((r) => ({ r, head: fuelLevelOf(r.pts, false), tail: fuelLevelOf(r.pts, true) }));
   s.fuelStartPct = levels.find((l) => l.head !== null)?.head ?? null;
   s.fuelEndPct = levels.findLast((l) => l.tail !== null)?.tail ?? null;

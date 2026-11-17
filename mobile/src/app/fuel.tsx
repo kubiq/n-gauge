@@ -7,12 +7,12 @@
 
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ConsumptionChart, WeeklyChart } from '@/components/fuel-charts';
 import { Card, Note, Row, Screen, useUi } from '@/components/ui';
 import { t } from '@/i18n';
-import { shortWhen } from '@/lib/format';
+import { shortWhen, when } from '@/lib/format';
 import { fillId, fuelByDrive, fuelLabel, type Fuels, totalsByFuel } from '@/lib/fuel-grade';
 import {
   byWeek,
@@ -22,10 +22,12 @@ import {
   fillIntervals,
   fillsByDrive,
   rolling,
-  TANK_L,
+  type FillInterval,
+  type SkippedStretch,
+  tankFromPump,
 } from '@/lib/fuel-stats';
 import { endName, loadNames } from '@/lib/names';
-import { loadFillLitres, loadFuels, saveFillLitres } from '@/lib/store';
+import { loadFillLitres, loadFuelFrom, loadFuels, saveFillLitres, saveFuelFrom } from '@/lib/store';
 import { cachedCsv, cachedGpx, summarise, tripFiles } from '@/lib/trip-cache';
 import type { Refuel } from '@/lib/trips';
 import { distance } from '@/lib/units';
@@ -37,6 +39,8 @@ type Data = {
   unread: number;
   fuels: Fuels;
   pump: Record<string, number>;
+  /** The fill-up the comparison counts from (store.ts); null: all. */
+  from: string | null;
 };
 
 function load(): Data {
@@ -48,7 +52,7 @@ function load(): Data {
     if (t.csv && !c) unread++;
     drives.push({ key: t.key, start: g?.start ?? t.start, end: g?.end ?? null, to: g?.to, toPlace: g?.toPlace, c: c ?? undefined });
   }
-  return { drives, unread, fuels: loadFuels(), pump: loadFillLitres() };
+  return { drives, unread, fuels: loadFuels(), pump: loadFillLitres(), from: loadFuelFrom() };
 }
 
 export default function FuelScreen() {
@@ -89,12 +93,26 @@ export default function FuelScreen() {
   const weeks = byWeek(points);
   const fuelOf = fuelByDrive(oldest.map((d) => ({ key: d.key, fills: fills[d.key] })), data.fuels);
   const byFuel = totalsByFuel(oldest.map((d) => ({ fuel: fuelOf[d.key], fuelL: d.c?.fuelL ?? null, fuelKm: d.c?.fuelKm ?? null })));
-  const intervals = fillIntervals(oldest, fills, data.pump);
-  const factor = carFactor(intervals);
-  const litres = points.reduce((s, p) => s + p.litres, 0);
-  const km = points.reduce((s, p) => s + p.km, 0);
   // Every fill-up, newest first, for the pump's litres.
   const allFills: Refuel[] = data.drives.flatMap((d) => [...(fills[d.key] ?? [])].reverse());
+  // The level's 0-100 % in litres, from the receipts: the level reads 0 with
+  // litres still in (2026-11-17: ~46 of the book's 50).
+  const tank = tankFromPump(allFills, data.pump);
+  const skipped: SkippedStretch[] = [];
+  const intervals = fillIntervals(oldest, fills, data.pump, skipped, tank.litres);
+  // Counted from the fill-up picked (asked 2026-11-17: the stretches from
+  // while the gauge was built - in and out of the car - spoil the figure);
+  // the ones before it are shown, not counted.
+  const fromFill = data.from ? allFills.find((f) => fillId(f) === data.from) : undefined;
+  const counts = (i: FillInterval) => !fromFill?.at || (i.from.at !== null && i.from.at >= fromFill.at);
+  const factor = carFactor(intervals.filter(counts));
+  const pickFrom = (f: Refuel) => {
+    const id = data.from === fillId(f) ? null : fillId(f);
+    saveFuelFrom(id);
+    setData((d) => ({ ...d, from: id }));
+  };
+  const litres = points.reduce((s, p) => s + p.litres, 0);
+  const km = points.reduce((s, p) => s + p.km, 0);
   const names = loadNames();
 
   const setPump = (f: Refuel, text: string) => {
@@ -151,8 +169,8 @@ export default function FuelScreen() {
           <Note>{t('Two fill-ups made while parked are needed, with drives between them.')}</Note>
         )}
         {intervals.map((i) => (
-          <View key={fillId(i.to)} style={styles.stretch}>
-            <Text style={styles.stretchHead}>
+          <View key={fillId(i.to)} style={[styles.stretch, !counts(i) && styles.notCounted]}>
+            <Text style={counts(i) ? styles.stretchHead : styles.skipHead}>
               {`${i.from.at ? shortWhen(i.from.at) : '?'} → ${i.to.at ? shortWhen(i.to.at) : '?'}  ·  ${Math.round(i.km)} km`}
             </Text>
             <Text style={ui.note}>
@@ -164,6 +182,22 @@ export default function FuelScreen() {
             </Text>
           </View>
         ))}
+        {/* The ones left out, and why - so a gap is not a mystery. */}
+        {skipped.map((s) => (
+          <View key={`skip-${fillId(s.to)}`} style={styles.stretch}>
+            <Text style={styles.skipHead}>
+              {`${s.from.at ? shortWhen(s.from.at) : '?'} → ${s.to.at ? shortWhen(s.to.at) : '?'}`}
+            </Text>
+            <Text style={ui.note}>
+              {s.why === 'nofuel'
+                ? t('left out: a drive in it has no car data ({at})', { at: s.at ? when(s.at) : t('undated') })
+                : t('left out: a fill-up in it cannot be placed in its drive')}
+            </Text>
+          </View>
+        ))}
+        {tank.fills ? (
+          <Note>{t('The tank holds {l} l from 0 to 100 % of its level, by {n} receipts.', { l: tank.litres.toFixed(1), n: tank.fills })}</Note>
+        ) : null}
       </Card>
 
       {allFills.length ? (
@@ -176,8 +210,16 @@ export default function FuelScreen() {
                 <View style={styles.fillText}>
                   <Text style={styles.stretchHead}>{`${f.at ? shortWhen(f.at) : t('Undated')}${where ? `  ·  ${where}` : ''}`}</Text>
                   <Text style={ui.note}>
-                    {`${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${Math.round(((f.toPct - f.fromPct) / 100) * TANK_L)} l`}
+                    {`${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${Math.round(((f.toPct - f.fromPct) / 100) * tank.litres)} l`}
                   </Text>
+                  {/* Where the comparison counts from: a tap picks, again unpicks. */}
+                  {f.at !== null ? (
+                    <Pressable onPress={() => pickFrom(f)} hitSlop={8}>
+                      <Text style={data.from === id ? styles.fromOn : styles.from}>
+                        {data.from === id ? t('counted from here') : t('count from here')}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 <TextInput
                   style={[ui.input, styles.litres]}
@@ -201,6 +243,10 @@ const useStyles = themed((C) =>
     factor: { color: C.text, fontSize: 15, fontWeight: '600' },
     stretch: { gap: 2 },
     stretchHead: { color: C.text, fontSize: 14, fontWeight: '600' },
+    skipHead: { color: C.dim, fontSize: 14, fontWeight: '600' },
+    notCounted: { opacity: 0.5 },
+    from: { color: C.link, fontSize: 13 },
+    fromOn: { color: C.accent, fontSize: 13, fontWeight: '700' },
     fill: { flexDirection: 'row', alignItems: 'center', gap: S.md },
     fillText: { flex: 1, gap: 2 },
     litres: { width: 110, textAlign: 'right' },

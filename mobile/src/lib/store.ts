@@ -256,6 +256,25 @@ export function saveFillLitres(id: string, litres: number | null): Record<string
   return all;
 }
 
+// The fill-up the car's figure is compared from (the fuel screen): the
+// stretches before it are not counted - the gauge was in and out of the
+// car while it was built (asked 2026-11-17), drives went unlogged. Its
+// fillId; absent, all count.
+const fuelFromFile = new File(Paths.document, 'fuel-from.txt');
+
+export function loadFuelFrom(): string | null {
+  try {
+    return fuelFromFile.exists ? fuelFromFile.textSync().trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveFuelFrom(id: string | null): void {
+  if (id) fuelFromFile.write(id);
+  else if (fuelFromFile.exists) fuelFromFile.delete();
+}
+
 // Drives merged into one (merge.ts): groups of file names.
 const mergesFile = new File(Paths.document, 'merges.json');
 

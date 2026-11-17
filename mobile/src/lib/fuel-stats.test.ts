@@ -3,7 +3,18 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { fillId } from './fuel-grade.ts';
-import { byWeek, carFactor, drivePoints, type FuelDrive, fillIntervals, fillsByDrive, rolling, TANK_L } from './fuel-stats.ts';
+import {
+  byWeek,
+  carFactor,
+  drivePoints,
+  type FuelDrive,
+  fillIntervals,
+  fillsByDrive,
+  rolling,
+  type SkippedStretch,
+  TANK_L,
+  tankFromPump,
+} from './fuel-stats.ts';
 import type { CsvSummary } from './trips.ts';
 
 const csv = (o: Partial<CsvSummary>): CsvSummary => ({
@@ -54,6 +65,15 @@ test('between two fill-ups: the car\'s figure against the tank, then the pump', 
   assert.equal(f.factor, pumped[0].burnedL! / 25);
 });
 
+test('the factor: the median of the stretches, not thrown by one with data missing', () => {
+  // The real five of 2026-11-17, by the pump.
+  const s = (car: number, burned: number) =>
+    ({ from: {} as never, to: {} as never, carL: car, km: 100, burnedL: burned, by: 'pump' as const, drives: 3 });
+  const f = carFactor([s(40.6, 40.8), s(9.0, 15.2), s(36.7, 43.1), s(32.6, 33.2), s(39.3, 40.0)])!;
+  assert.ok(Math.abs(f.factor - 1.02) < 0.01, String(f.factor));
+  assert.equal(f.stretches, 5);
+});
+
 test('a drive with no tank level between the fill-ups still counts in the stretch', () => {
   // As the real list 2026-11-17: seven fill-ups, no stretch found.
   const D2 = [
@@ -69,6 +89,17 @@ test('a drive with no tank level between the fill-ups still counts in the stretc
   assert.deepEqual([s[0].drives, s[0].carL], [3, 26]);
 });
 
+test('the tank, from the pump: litres over the level\'s rise; the book\'s without receipts', () => {
+  // The real five receipts of 2026-11-17.
+  const f = (from: number, to: number, at: number) => ({ at, pt: null, fromPct: from, toPct: to });
+  const fills = [f(13, 100, 1), f(30, 100, 2), f(8, 100, 3), f(8, 100, 4), f(13, 43, 5)];
+  const pump = { '1': 40.03, '2': 33.22, '3': 43.12, '4': 41.85, '5': 14.16 };
+  const t = tankFromPump(fills, pump);
+  assert.equal(t.fills, 5);
+  assert.ok(t.litres > 46 && t.litres < 47.5, String(t.litres));
+  assert.deepEqual(tankFromPump(fills, {}), { litres: TANK_L, fills: 0 });
+});
+
 test('fill-ups during drives - the gauge awake at the pump - split them by the fuel so far', () => {
   // a: 1 l to the pump, then 3 l more. b: whole, 6 l. c: 5 l to the pump.
   const during = [
@@ -82,8 +113,20 @@ test('fill-ups during drives - the gauge awake at the pump - split them by the f
   assert.equal(s[0].carL, 3 + 6 + 5);
   assert.equal(s[0].drives, 3);
   assert.equal(s[0].burnedL, ((90 - 60) / 100) * TANK_L);
-  // From a summary before the split was kept: not placed, no stretch.
+  // From a summary before the split was kept: not placed, no stretch - and said so.
   const old = during.map((d) => ({ ...d, c: { ...d.c!, refuels: d.c!.refuels.map(({ fuelBeforeL: _, ...r }) => r) } }));
-  assert.equal(fillIntervals(old, fillsByDrive([...old].reverse()), {}).length, 0);
+  const why: SkippedStretch[] = [];
+  assert.equal(fillIntervals(old, fillsByDrive([...old].reverse()), {}, why).length, 0);
+  assert.deepEqual(why.map((w) => w.why), ['unplaced']);
+  // A track alone between - the car silent, a wake by motion - burned nothing.
+  const gap = [...during.slice(0, 2), { key: 'gpx', start: 30 * H, end: 30 * H + H / 10 }, during[2]];
+  const s2 = fillIntervals(gap, fillsByDrive([...gap].reverse()), {});
+  assert.equal(s2.length, 1);
+  assert.equal(s2[0].carL, 3 + 6 + 5);
+  // Car data without the fuel figure (older logs): not known - left out, and said why.
+  const old2 = [...during.slice(0, 2), drive('nofuel', 30, { fuelStartPct: 66, fuelEndPct: 62 }), during[2]];
+  const why2: SkippedStretch[] = [];
+  assert.equal(fillIntervals(old2, fillsByDrive([...old2].reverse()), {}, why2).length, 0);
+  assert.deepEqual(why2.map((w) => [w.why, w.at]), [['nofuel', 30 * H]]);
   assert.equal(carFactor([]), null);
 });

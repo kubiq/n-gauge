@@ -15,9 +15,20 @@ import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
 import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
-import { type Inbox, type ListFacts, loadFinished, loadFuels, loadInbox, loadListFacts, loadMerges, saveFuel, saveMerges } from '@/lib/store';
+import {
+  type Inbox,
+  type ListFacts,
+  loadFillLitres,
+  loadFinished,
+  loadFuels,
+  loadInbox,
+  loadListFacts,
+  loadMerges,
+  saveFuel,
+  saveMerges,
+} from '@/lib/store';
 import { entriesOf, mergeCsv, mergeGpx, type MergeGroups, withMerged } from '@/lib/merge';
-import { fillsByDrive, TANK_L } from '@/lib/fuel-stats';
+import { fillsByDrive, tankFromPump } from '@/lib/fuel-stats';
 import { cachedCsv, cachedGpx, type GpxStats, summarise, tripFiles } from '@/lib/trip-cache';
 import {
   type CsvSummary,
@@ -59,6 +70,8 @@ export default function TripsScreen() {
   // The fuel picked at each fill-up (fuel-grade.ts).
   const [fuels, setFuels] = useState<Fuels>(loadFuels);
   const pickFuel = (id: string, fuel: Fuel | null) => setFuels(saveFuel(id, fuel));
+  // The pump's litres at fill-ups, typed in on the fuel screen.
+  const [pump, setPump] = useState<Record<string, number>>(loadFillLitres);
   // Drives marked as finished on their screen: no "cut off" note.
   const [finished, setFinished] = useState<ReadonlySet<string>>(loadFinished);
   // Drives merged into one (merge.ts), and the ones being chosen to merge.
@@ -112,6 +125,7 @@ export default function TripsScreen() {
       setFacts(loadListFacts());
       setFinished(loadFinished());
       setMerges(loadMerges());
+      setPump(loadFillLitres());
       setNames(forgetStaleTitles(list));
       setSums(have);
       setProblems({});
@@ -253,6 +267,8 @@ export default function TripsScreen() {
   const fills = fillsByDrive(
     rows.map((r) => ({ key: r.t.key, start: r.t.start, end: r.g?.end ?? null, to: r.g?.to, toPlace: r.g?.toPlace, c: r.c })),
   );
+  // The receipts' litres (typed in on the fuel screen) and the tank they give.
+  const tank = tankFromPump(Object.values(fills).flat(), pump);
   // The fuel each drive ran on - the rows are newest first - and the
   // consumption per fuel, of every drive read (the short ones too: what
   // counts is the litres over the km).
@@ -392,6 +408,8 @@ export default function TripsScreen() {
                     name={r.name}
                     facts={facts}
                     fills={fills[r.t.key]}
+                    pump={pump}
+                    tankL={tank.litres}
                     fuel={fuelOf[r.t.key]}
                     fuels={fuels}
                     onFuel={pickFuel}
@@ -446,6 +464,8 @@ function TripRow({
   name,
   facts,
   fills,
+  pump,
+  tankL,
   fuel,
   fuels,
   onFuel,
@@ -465,6 +485,9 @@ function TripRow({
   name: string | null;
   facts: ListFacts;
   fills?: Refuel[];
+  /** The receipts' litres by fillId, and the tank they give (fuel-stats.ts). */
+  pump: Record<string, number>;
+  tankL: number;
   /** What it ran on, if known (fuel-grade.ts). */
   fuel: Fuel | null;
   fuels: Fuels;
@@ -527,6 +550,8 @@ function TripRow({
           names={names}
           fuel={fuels[fillId(f)] ?? null}
           onFuel={(v) => onFuel(fillId(f), v)}
+          pumpL={pump[fillId(f)]}
+          tankL={tankL}
         />
       ))}
       {parts > 1 ? <Note>{tn(parts, 'Merged from 1 drive', 'Merged from {n} drives')}</Note> : null}
@@ -550,17 +575,24 @@ function FillLine({
   names,
   fuel,
   onFuel,
+  pumpL,
+  tankL,
 }: {
   f: Refuel;
   names: Names;
   fuel: Fuel | null;
   onFuel: (fuel: Fuel | null) => void;
+  /** The receipt's litres, typed in on the fuel screen; undefined without. */
+  pumpL?: number;
+  /** The level's 0-100 % in litres (fuel-stats.ts tankFromPump). */
+  tankL: number;
 }) {
   const ui = useUi();
   const styles = useStyles();
   const [open, setOpen] = useState(false);
   const place = endName(f.pt, f.place ?? null, names);
-  const litres = Math.round(((f.toPct - f.fromPct) / 100) * TANK_L);
+  // The receipt's, exact; else from the level's rise, about.
+  const litres = pumpL != null ? `${pumpL.toFixed(2)} l` : `≈ ${Math.round(((f.toPct - f.fromPct) / 100) * tankL)} l`;
   const chip = (label: string, on: boolean, onPress: () => void, off = false) => (
     <Pressable
       key={label}
@@ -577,7 +609,7 @@ function FillLine({
         {t('Filled up')}
         {fuel ? `  ·  ${fuelLabel(fuel)}` : ''}
         <Text style={styles.fuelFacts}>
-          {`  ·  ${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ≈ ${litres} l`}
+          {`  ·  ${Math.round(f.fromPct)} → ${Math.round(f.toPct)} %  ·  ${litres}`}
         </Text>
         {!fuel && !open ? <Text style={styles.fuelAsk}>{`  ·  ${t('which fuel?')}`}</Text> : null}
       </Text>

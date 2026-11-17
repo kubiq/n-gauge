@@ -272,6 +272,15 @@ test('csv: a fill-up is a fuller tank across a stop, read with the engine runnin
   assert.equal(r.fuelBeforeL, null);                        // no fuel column: no figure to split
 });
 
+test('csv: the fuel column, the engine never running: 0 l, not unknown', () => {
+  assert.deepEqual(
+    [parseCsv('utc,ms,rpm,fuelLh\r\n,1000,,\r\n,1500,,\r\n').fuelL, parseCsv('utc,ms,rpm,fuelLh\r\n,1000,,\r\n').fuelKm],
+    [0, 0],
+  );
+  // Without the column, as before: not known.
+  assert.equal(parseCsv('utc,ms,rpm\r\n,1000,800\r\n').fuelL, null);
+});
+
 test('csv: a fill-up during a drive keeps the drive\'s fuel up to the pump', () => {
   // 36 l/h running for 300 s is 3 l; stopped at the pump; on again, fuller.
   let csv = 'utc,ms,rpm,fuelPct,fuelLh\r\n';

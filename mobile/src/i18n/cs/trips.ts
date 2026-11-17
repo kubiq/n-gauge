@@ -40,6 +40,13 @@ export const trips: Record<string, string> = {
     'Jsou potřeba dvě tankování při stání a jízdy mezi nimi.',
   'car {car} l  ·  burned {burned}': 'auto {car} l  ·  spáleno {burned}',
   'Fill-ups': 'Tankování',
+  'count from here': 'počítat od tohoto',
+  'counted from here': 'počítá se od tohoto',
+  'left out: a drive in it has no car data ({at})': 'vynecháno: jedna jízda v něm nemá data z auta ({at})',
+  'undated': 'bez data',
+  'left out: a fill-up in it cannot be placed in its drive': 'vynecháno: tankování v něm nejde zařadit do jeho jízdy',
+  'The tank holds {l} l from 0 to 100 % of its level, by {n} receipts.':
+    'Nádrž pojme {l} l od 0 do 100 % ukazatele, podle {n} účtenek.',
   'litres': 'litry',
   'Consumption per drive': 'Spotřeba po jízdách',
   '{n} drives, {v} l/100 overall': '{n} jízd, celkem {v} l/100',
