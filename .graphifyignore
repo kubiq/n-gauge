@@ -1,0 +1,19 @@
+# What graphify (knowledge-graph tool) leaves out: code that is not ours
+# and files that only add library names to the graph. Gitignore syntax.
+
+# Vendored libraries and assets generated from pictures
+firmware/lib/
+firmware/car_gauge_v1/monocypher*
+firmware/car_gauge_v1/font_*.c
+firmware/car_gauge_v1/icon_*.c
+firmware/car_gauge_v1/car_img.c
+firmware/car_gauge_v1/n_logo_img.c
+
+# Config: package.json, CI, app.json - dependency and key names, no logic
+*.json
+*.yml
+*.yaml
+
+# Fake Arduino/ESP headers: firmware calls would resolve to them
+sim/stubs/
+tests/replay/stubs/

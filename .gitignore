@@ -73,3 +73,7 @@ firmware/wgtest/secrets.h
 # The WiFi/GPS test build's hotspot password - the template is
 # wifitest_secrets.example.h.
 firmware/car_gauge_v1/wifitest_secrets.h
+
+# graphify knowledge graph: rebuilt locally (graphify update), never committed.
+# What it leaves out is in .graphifyignore.
+graphify-out/
