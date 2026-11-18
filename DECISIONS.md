@@ -900,12 +900,25 @@ Only the pod's own logs are synced (it had been pulling firmware `.bin`s).
 The pod serves one request at a time: a settings save or firmware upload
 stops a sync first.
 
-**No log server.** (Removed 2026-10-18.) The app could upload the logs to a
-small server of our own (`backend/`, Node in Docker) - built, never
-deployed, switched off behind a flag. Logs leave the phone as files instead
-("Save all to a folder", synced on from there), so it went: the server, the
-app's Upload card and server screen, and the inbox's uploaded/pending split
-(read as one byte count by older phones' `inbox.json`).
+**No app-side log server.** (Removed 2026-10-18; superseded 2026-11-06 by
+the upload server below.) The app could upload the logs to a small server of
+our own (`backend/`, Node in Docker) - built, never deployed, switched off
+behind a flag. Logs leave the phone as files instead ("Save all to a
+folder", synced on from there), so it went: the server, the app's Upload
+card and server screen, and the inbox's uploaded/pending split (read as one
+byte count by older phones' `inbox.json`).
+
+**The gauge uploads home itself.** (2026-11-06, 0bd1885, a3f833d.) Not the
+app this time: as the car starts, the gauge joins the phone's hotspot, brings
+up a WireGuard tunnel into the home network and sends what the card holds
+that the server does not - so the logs get home without opening the app.
+The server (`server/`, Python standard library in Docker) is plain HTTP
+inside the tunnel plus a bearer token, resumes by size like the phone's sync
+(`/plan`, then `PUT` from the offset held), and stores the files as written:
+encrypted ones stay ciphertext unless `LOG_KEY` asks for plain copies. The
+phone pulls from it too. It also hands on signed firmware from the latest
+GitHub release (2026-11-09, b400d4b; proxied since 4ecf3b5), so the gauge
+needs no TLS. Details in `server/README.md`.
 
 **A drive deleted on the phone is deleted on the gauge.** (2026-10-14,
 d45a40c.) Its names go on a delete-on-gauge list; every sync asks the gauge
