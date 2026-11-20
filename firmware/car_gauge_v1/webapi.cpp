@@ -1440,6 +1440,12 @@ static bool startServer() {
 }
 
 void wifi_netifs_down() {
+  // Not with the WiFi off: lwIP may not even be started - its core lock is
+  // made with the first WiFi start - and the lock taken asserted (2026-11-18:
+  // 5e9b27a crashed on its first upload, the AP never up that wake - "only
+  // from its screen" - and was rolled back). Off, nothing is on the air: the
+  // AP's entries went when it stopped (web_stop calls this first).
+  if (WiFi.getMode() == WIFI_MODE_NULL) return;
   LOCK_TCPIP_CORE();
   struct netif *n;
   NETIF_FOREACH(n) {
@@ -1529,6 +1535,8 @@ static void dhcpWatch(uint32_t now) {
 static uint32_t apRefused = 0;
 uint32_t web_ap_refused() { return apRefused; }
 
+static void beaconApply();          // the beacon's element, on loop() (below)
+
 void web_start() {
   if (up) return;
   loopTask = xTaskGetCurrentTaskHandle();   // called from loop()
@@ -1610,7 +1618,7 @@ void web_start() {
   const bool dnsOk = dns.start(53, "*", WiFi.softAPIP());
 
   up = true;
-  web_beacon_update();
+  beaconApply();                    // here, on loop(): the AP just up
   Serial.printf("[OK] settings AP '%s' up at http://%s/  portal:dhcp=%s dns=%s\n",
                 settings.apSsid, ipText.c_str(),
                 portalOk ? "yes" : "NO", dnsOk ? "yes" : "NO");
@@ -1629,7 +1637,16 @@ void web_start() {
 //   0xDD len | OUI 02 4E 47 ("NG", locally administered) | type 1 | 8 bytes
 static constexpr uint8_t BEACON_OUI[3] = {0x02, 0x4E, 0x47};
 
-void web_beacon_update() {
+// Asked for from any task - the logger as a drive opens (log_names.cpp),
+// the server's for a new key - and done on loop() (web_task), the task that
+// starts and stops the WiFi: from the logger it ran into web_stop() taking
+// the driver down, and the gauge aborted in the driver's mutex
+// (IllegalInstruction, 2026-11-18 and 11-20).
+static volatile bool beaconDue = false;
+void web_beacon_update() { beaconDue = true; }
+
+static void beaconApply() {
+  beaconDue = false;
   if (!up) return;
   char session[7];
   if (!settings_last_drive(session)) return;      // no drive yet: nothing to say
@@ -1661,6 +1678,7 @@ void web_task() {
     ota_reboot();
   }
   if (!up) return;
+  if (beaconDue) beaconApply();   // asked for from another task (web_beacon_update)
   dhcpWatch(millis());        // a phone that joined and got no address
   if (!up) return;            // ... and the AP restarted for it
   // A non-blocking poll. The portal sheet only appears if the name lookup is

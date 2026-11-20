@@ -52,7 +52,9 @@ struct WebSyncPlan { uint16_t at, of; uint32_t done, total; };
 bool web_sync_plan(WebSyncPlan *p);
 // The AP's beacons carry the last drive's fingerprint (logcrypt_beacon), for
 // the phone to see new drives without joining. Call when the last drive or
-// the log key changes; a no-op while the AP is down (it is set on start).
+// the log key changes, from any task: it is done on loop() (web_task), never
+// in the caller's - the WiFi driver is loop()'s. Nothing while the AP is down
+// (it is set on start).
 void web_beacon_update();
 // Times since boot web_start() declined: under AP_MIN_INTERNAL_HEAP free.
 uint32_t web_ap_refused();
