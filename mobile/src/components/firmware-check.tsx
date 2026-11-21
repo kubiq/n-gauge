@@ -35,21 +35,22 @@ export function FirmwareCheck({ onFound }: { onFound?: () => void }) {
         setSaid({ text: r, good: false });
       }
     } catch (e) {
-      setSaid({ text: String((e as Error).message), good: false });
+      // On the gauge's WiFi there is no internet: said so, not a raw error.
+      setSaid({
+        text: pod.state === 'connected' ? t('Not while on the gauge’s WiFi - it has no internet.') : String((e as Error).message),
+        good: false,
+      });
     } finally {
       setLooking(false);
     }
   };
   return (
     <>
-      <Button
-        title={t('Check for a new gauge firmware')}
-        kind="plain"
-        busy={looking}
-        disabled={pod.state !== 'idle'}
-        onPress={look}
-      />
-      {pod.state !== 'idle' ? <Note>{t('Not while on the gauge’s WiFi - it has no internet.')}</Note> : null}
+      {/* Always pressable (asked 2026-11-21: it sat disabled while the
+          screen was connecting): on the gauge's WiFi the look just fails,
+          and says why. */}
+      <Button title={t('Check for a new gauge firmware')} kind="plain" busy={looking} onPress={look} />
+      {pod.state === 'connected' ? <Note>{t('Not while on the gauge’s WiFi - it has no internet.')}</Note> : null}
       {said ? <Note tone={said.good ? 'good' : undefined}>{said.text}</Note> : null}
     </>
   );
