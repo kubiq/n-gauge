@@ -1118,6 +1118,9 @@ out:
   WiFi.disconnect(true);
   Serial.println(F("[..] upload: hotspot left"));
   WiFi.mode(WIFI_OFF);
+  // Again, the radio off: leaving the hotspot can make an entry after the
+  // first clearing (its DHCP release) - 87a637a still crashed, 2026-11-21.
+  wifi_netifs_down();
   Serial.println(F("[..] upload: radio off"));
   free(buf);
   free(plan);

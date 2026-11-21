@@ -17,7 +17,8 @@
 #include <WiFi.h>
 #include <esp_wifi.h>       // esp_wifi_set_vendor_ie: the beacon
 #include <lwip/netif.h>     // wifi_netifs_down: each interface down,
-#include <lwip/tcpip.h>     // ... under the TCPIP lock
+#include <lwip/tcpip.h>     // ... under the TCPIP lock,
+#include <netif/etharp.h>   // ... its ARP entries cleared
 #include <esp_http_server.h>
 #include <DNSServer.h>   // captive portal; see the note on dns below
 #include <stdlib.h>
@@ -1440,19 +1441,26 @@ static bool startServer() {
 }
 
 void wifi_netifs_down() {
-  // Not with the WiFi off: lwIP may not even be started - its core lock is
-  // made with the first WiFi start - and the lock taken asserted (2026-11-18:
-  // 5e9b27a crashed on its first upload, the AP never up that wake - "only
-  // from its screen" - and was rolled back). Off, nothing is on the air: the
-  // AP's entries went when it stopped (web_stop calls this first).
-  if (WiFi.getMode() == WIFI_MODE_NULL) return;
+  // Not before the WiFi has run this boot: lwIP's core lock is made with the
+  // first WiFi start, and taking it before asserted (2026-11-18: 5e9b27a
+  // crashed on its first upload, the AP never up that wake - "only from its
+  // screen" - and was rolled back). Once it has run, also with the WiFi off:
+  // called after the radio stops too, for entries the teardown itself made.
+  static bool lwipStarted = false;
+  if (WiFi.getMode() != WIFI_MODE_NULL) lwipStarted = true;
+  if (!lwipStarted) return;
   LOCK_TCPIP_CORE();
   struct netif *n;
   NETIF_FOREACH(n) {
     // The WiFi ones: ARP on them (not the loopback, not a tunnel's).
     if (!(n->flags & NETIF_FLAG_ETHARP)) continue;
     netif_set_link_down(n);
-    netif_set_down(n);              // clears its ARP entries (etharp_cleanup_netif)
+    netif_set_down(n);
+    // And the entries cleared outright: netif_set_down() does it only for
+    // an interface still up, and leaving the hotspot can add one after (its
+    // DHCP release asks for the router) - 87a637a still crashed so, 30 s
+    // after an upload's close (2026-11-21).
+    etharp_cleanup_netif(n);
   }
   UNLOCK_TCPIP_CORE();
 }
@@ -1473,6 +1481,7 @@ void web_stop() {
   wifi_netifs_down();               // the phone's ARP entry goes with the AP
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
+  wifi_netifs_down();               // ... and any the teardown made
   up = false;
   ipText = "";
   Serial.println(F("[..] settings AP stopped"));
