@@ -3,6 +3,7 @@ import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { FirmwareCheck } from '@/components/firmware-check';
 import { ScreenOrderCard } from '@/components/screen-order-card';
 import { SystemCard } from '@/components/system-card';
 import { UploadCard } from '@/components/upload-card';
@@ -297,6 +298,16 @@ export default function GaugeSettingsScreen() {
           <Button title={t('Connect')} busy={pod.state === 'connecting'} onPress={() => pod.connect()} />
           {pod.error ? <Note tone="bad">{pod.error}</Note> : null}
         </Card>
+        {/* Its firmware, and a look for a newer one - here, off the gauge's
+            WiFi, where the phone has internet (asked 2026-11-21: the button
+            was only in Settings' About). */}
+        <Card title={t('Firmware')}>
+          {fw ? <Row label={t('On the gauge')} value={fw.build} /> : null}
+          {ready ? (
+            <Row label={t('Ready to install')} value={ready.commit ? `${ready.tag} · ${ready.commit}` : ready.tag} tone="good" />
+          ) : null}
+          <FirmwareCheck onFound={() => setReady(loadReadyFw())} />
+        </Card>
         {s ? (
           <>
             <Note>
@@ -304,11 +315,6 @@ export default function GaugeSettingsScreen() {
                 when: shortWhen(snap.settingsAt ?? 0),
               })}
             </Note>
-            {fw ? (
-              <Card title={t('Gauge')}>
-                <Row label={t('Firmware')} value={fw.build} />
-              </Card>
-            ) : null}
             {GROUPS.map((g) => (
               <Card key={g} title={t(GROUP_TITLES[g])}>
                 {SETTINGS.filter((d) => d.group === g).map((d) => (
@@ -414,6 +420,7 @@ export default function GaugeSettingsScreen() {
             'Once a day, while the app is open with internet, it looks for a newer release on GitHub, checks its signature against this gauge’s key and keeps it until it is installed here.',
           )}
         </Note>
+        {!offer ? <Note>{t('To look now, use “Check for a new gauge firmware” here while not connected - on the gauge’s WiFi the phone has no internet.')}</Note> : null}
         <Note>{t('Or pick a car_gauge_v1 .bin from the phone’s files. If the new build fails, the gauge rolls back by itself.')}</Note>
         <Button title={t('Update firmware')} kind="plain" busy={busy === 'fw'} onPress={firmware} />
       </Card>

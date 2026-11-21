@@ -32,7 +32,12 @@ export const app: Record<string, string> = {
   App: 'Aplikace',
   'older firmware': 'starší firmware',
   '{build}, read {when}': '{build}, zjištěno {when}',
-  'Look for a newer gauge firmware': 'Hledat novější firmware budíku',
+  'Check for a new gauge firmware': 'Zkontrolovat nový firmware budíku',
+  'Up to date - {tag} is the latest release.': 'Aktuální - {tag} je nejnovější verze.',
+  'On the gauge': 'V budíku',
+  'Ready to install': 'Připraveno k instalaci',
+  'To look now, use “Check for a new gauge firmware” here while not connected - on the gauge’s WiFi the phone has no internet.':
+    'Pro kontrolu teď použijte „Zkontrolovat nový firmware budíku“ zde bez připojení - na WiFi budíku telefon nemá internet.',
   'Backup': 'Záloha',
   'Your places, drive names, fuel picks and settings, as one file - what reinstalling the app would lose. The drives come back by themselves, and the log key is in your password manager.':
     'Vaše místa, názvy jízd, zvolená paliva a nastavení jako jeden soubor - to, co by přeinstalace aplikace smazala. Jízdy se vrátí samy a klíč k logům máte ve správci hesel.',
@@ -48,8 +53,8 @@ export const app: Record<string, string> = {
   'Close the app and open it again, so every screen reads it.':
     'Zavřete aplikaci a otevřete ji znovu, aby ji načetly všechny obrazovky.',
   'Not while on the gauge’s WiFi - it has no internet.': 'Ne na WiFi budíku - ta nemá internet.',
-  '{tag} downloaded and checked - install it in Gauge settings.':
-    '{tag} stažena a ověřena - nainstalujte ji v Nastavení budíku.',
+  '{tag} downloaded and checked - connect to the gauge to install it.':
+    '{tag} stažena a ověřena - pro instalaci se připojte k budíku.',
   'Place names © GeoNames (geonames.org), CC BY 4.0.': 'Názvy míst © GeoNames (geonames.org), CC BY 4.0.',
   'City quarter boundaries © ČÚZK (RÚIAN), via ČSÚ open data, CC BY 4.0.':
     'Hranice městských částí © ČÚZK (RÚIAN), z otevřených dat ČSÚ, CC BY 4.0.',
