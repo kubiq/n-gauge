@@ -1,8 +1,9 @@
 // ============================================================================
 // ui_overview.cpp  —  the overview: everything the car tells, on one screen
 // (asked 2026-11-13). Oil and coolant as the oil screen has them, the two
-// rings and their colours; the gear large in the centre, boost under it
-// while there is some (2026-11-17, was boost alone); the fuel - this
+// rings and their colours; the rpm large in the centre, boost under it
+// while there is some (2026-11-21; the gear 2026-11-17, boost alone before);
+// the fuel - this
 // drive's average large, the instant value and the tank small; the tyres
 // round a small car at the bottom. First in the default order; the other
 // screens stay, for the detail. See ui_priv.h.
@@ -16,7 +17,7 @@ extern "C" const lv_image_dsc_t icon_coolant;
 extern "C" const lv_image_dsc_t car_top;
 
 static lv_obj_t *oilArc, *coolArc, *oilIcon, *coolIcon, *oilVal, *coolVal;
-static lv_obj_t *gearVal, *boostSmall, *fuelAvg, *fuelSmall;
+static lv_obj_t *rpmVal, *boostSmall, *fuelAvg, *fuelSmall;
 static lv_obj_t *tyreVal[WHEEL_COUNT];
 
 static lv_obj_t *smallIconRow(lv_obj_t *s, int dx, int dy, const lv_image_dsc_t *icon, int iconH,
@@ -38,11 +39,12 @@ lv_obj_t *ui_build_overview() {
   smallIconRow(s, -62, -112, &icon_oil, 46, &oilIcon, &oilVal);
   smallIconRow(s, 62, -112, &icon_coolant, 40, &coolIcon, &coolVal);
 
-  // The gear, large (asked 2026-11-17: boost alone read 0.00 all through
-  // town); boost small under it while there is some.
-  gearVal = make_tyre_val(s, 0, -52);
-  lv_obj_set_style_text_font(gearVal, &font_big_72, 0);
-  lv_obj_set_style_text_color(gearVal, COL_INK, 0);
+  // The rpm, large (asked 2026-11-21; the gear before it, 2026-11-17, and
+  // boost alone before that read 0.00 all through town); boost small under
+  // it while there is some.
+  rpmVal = make_tyre_val(s, 0, -52);
+  lv_obj_set_style_text_font(rpmVal, &font_big_72, 0);
+  lv_obj_set_style_text_color(rpmVal, COL_INK, 0);
   boostSmall = make_name(s, "", -8);
   lv_obj_set_style_text_color(boostSmall, COL_BLUE, 0);
 
@@ -84,10 +86,10 @@ void ui_update_overview(const Overview &o) {
   set_arc_color(coolArc, coolC);
   set_recolor(coolIcon, o.haveCool ? coolC : COL_DIM);
 
-  // The gear: "-" standing or in a long shift (font_big_72 has the digits
-  // and "-" only).
-  if (o.gear > 0) snprintf(t, sizeof(t), "%d", o.gear);
-  put(gearVal, o.gear > 0 ? t : "-", o.gear > 0 ? COL_INK : COL_DIM);
+  // The rpm: "-" with the engine off (font_big_72 has the digits and "-"
+  // only).
+  if (o.haveRpm) snprintf(t, sizeof(t), "%d", o.rpm);
+  put(rpmVal, o.haveRpm ? t : "-", o.haveRpm ? COL_INK : COL_DIM);
   // Boost under it, only while the turbo is giving some.
   const bool boosting = o.haveBoost && o.boostBar >= OVERVIEW_BOOST_FROM;
   if (boosting) snprintf(t, sizeof(t), "boost %.2f bar", o.boostBar);
