@@ -142,7 +142,7 @@ struct Overview {
   bool  haveOil;  int oilC;  uint8_t oilState;   // 0 cold, 1 ready, 2 too hot
   bool  haveCool; int coolC; bool coolHot;
   bool  haveBoost; float boostBar;
-  bool  haveRpm;  int rpm;                        // the engine's; false off or stale
+  bool  havePower; int powerKw;                   // estimated; false engine off or stale
   bool  haveAvg;  float avgL100;                  // this drive's average
   bool  haveNow;  float now; bool nowPerHour;     // instant: l/100, or l/h standing
   bool  haveTank; int tankPct;

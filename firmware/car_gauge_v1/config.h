@@ -985,9 +985,7 @@
 // instant fuel per 100 km from this speed, per hour below it.
 #define OVERVIEW_REFRESH_MS   250
 #define OVERVIEW_ROLLING_KMH  5
-// The overview's rpm shown to this step, so the last digit does not flicker.
-#define OVERVIEW_RPM_STEP     10
-// Boost shown under the rpm only from this (bar): in town it sat at 0.00.
+// Boost shown beside the power only from this (bar): in town it sat at 0.00.
 #define OVERVIEW_BOOST_FROM   0.10f
 // The status screen (ui_status.cpp): its words rebuilt this often while shown.
 #define STATUS_REFRESH_MS  250
