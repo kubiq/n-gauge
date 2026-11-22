@@ -16,9 +16,9 @@
 #include <dirent.h>         // readdir(): the card's names without a String each
 #include <WiFi.h>
 #include <esp_wifi.h>       // esp_wifi_set_vendor_ie: the beacon
-#include <lwip/netif.h>     // wifi_netifs_down: each interface down,
-#include <lwip/tcpip.h>     // ... under the TCPIP lock,
-#include <netif/etharp.h>   // ... its ARP entries cleared
+#include <lwip/netif.h>     // wifi_before_off: each WiFi interface's
+#include <lwip/tcpip.h>     // ... ARP entries cleared, under the TCPIP lock
+#include <netif/etharp.h>
 #include <esp_http_server.h>
 #include <DNSServer.h>   // captive portal; see the note on dns below
 #include <stdlib.h>
@@ -1440,28 +1440,41 @@ static bool startServer() {
   return true;
 }
 
-void wifi_netifs_down() {
-  // Not before the WiFi has run this boot: lwIP's core lock is made with the
-  // first WiFi start, and taking it before asserted (2026-11-18: 5e9b27a
-  // crashed on its first upload, the AP never up that wake - "only from its
-  // screen" - and was rolled back). Once it has run, also with the WiFi off:
-  // called after the radio stops too, for entries the teardown itself made.
-  static bool lwipStarted = false;
-  if (WiFi.getMode() != WIFI_MODE_NULL) lwipStarted = true;
-  if (!lwipStarted) return;
+// The WiFi interfaces as they were before the radio went off, for
+// wifi_after_off(): WiFi.mode(WIFI_OFF) destroys them (netif_remove).
+static struct netif *offNetifs[4];
+static int offCount = 0;
+
+void wifi_before_off() {
+  // Only once the WiFi is on: lwIP's core lock is made with the first WiFi
+  // start, and taking it before asserted (2026-11-18: 5e9b27a).
+  if (WiFi.getMode() == WIFI_MODE_NULL) return;
+  // No DHCP release on the way out: sent as the station stops, it asked for
+  // the router's address - an ARP entry made during the teardown, after
+  // every clearing.
+  if (esp_netif_t *sta = WiFi.STA.netif()) esp_netif_dhcpc_stop(sta);
   LOCK_TCPIP_CORE();
+  offCount = 0;
   struct netif *n;
   NETIF_FOREACH(n) {
-    // The WiFi ones: ARP on them (not the loopback, not a tunnel's).
+    // The WiFi ones: ARP on them (not the loopback, not a tunnel's). Left
+    // UP: netif_remove() clears an interface's entries only if it is still
+    // up - taking it down by hand (6f0a7f0 .. b4c7cc0) skipped that, and
+    // turned a now-and-then crash into one after every upload.
     if (!(n->flags & NETIF_FLAG_ETHARP)) continue;
-    netif_set_link_down(n);
-    netif_set_down(n);
-    // And the entries cleared outright: netif_set_down() does it only for
-    // an interface still up, and leaving the hotspot can add one after (its
-    // DHCP release asks for the router) - 87a637a still crashed so, 30 s
-    // after an upload's close (2026-11-21).
     etharp_cleanup_netif(n);
+    if (offCount < (int)(sizeof(offNetifs) / sizeof(offNetifs[0]))) offNetifs[offCount++] = n;
   }
+  UNLOCK_TCPIP_CORE();
+}
+
+void wifi_after_off() {
+  if (!offCount) return;
+  // Any entry still naming an interface that is gone: cleared. The lookup is
+  // by pointer only - the interface itself is not touched.
+  LOCK_TCPIP_CORE();
+  for (int i = 0; i < offCount; i++) etharp_cleanup_netif(offNetifs[i]);
+  offCount = 0;
   UNLOCK_TCPIP_CORE();
 }
 
@@ -1478,10 +1491,10 @@ void web_stop() {
   dlBusy = false;
   apRestartAt = 0;
   dns.stop();
-  wifi_netifs_down();               // the phone's ARP entry goes with the AP
+  wifi_before_off();                // ARP entries cleared, interfaces noted
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
-  wifi_netifs_down();               // ... and any the teardown made
+  wifi_after_off();                 // ... and any left on the ones now gone
   up = false;
   ipText = "";
   Serial.println(F("[..] settings AP stopped"));
@@ -1607,9 +1620,10 @@ void web_start() {
   ipText = WiFi.softAPIP().toString();
   if (!startServer()) {
     Serial.println(F("[ERR] web server did not start"));
-    wifi_netifs_down();
+    wifi_before_off();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
+    wifi_after_off();
     return;
   }
 

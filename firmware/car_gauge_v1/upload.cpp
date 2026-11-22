@@ -997,9 +997,6 @@ static void uploadTask(void *arg) {
   // ESP32's "esp32s3-xxxxxx": DHCP sends it as it joins. Set before the
   // interface starts - after, it is not used until the next start.
   WiFi.setHostname(WIFI_STA_HOSTNAME);
-  // Every WiFi interface down in lwIP before the mode changes - the AP's
-  // phone among them (webapi.h wifi_netifs_down: the crash after uploads).
-  wifi_netifs_down();
   WiFi.mode(WIFI_STA);
   WiFi.begin(c.ssid, c.pass);
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < UP_JOIN_MS && !giveWay) delay(250);
@@ -1110,17 +1107,13 @@ out:
   Serial.printf("[..] upload: closing (%s)\n", r.ok ? "done" : r.msg);
   if (wgUp) wg.end();
   Serial.println(F("[..] upload: tunnel closed"));
-  // The hotspot's and the AP's interfaces down in lwIP before the radio
-  // stops: their ARP entries cleared, nothing for the timer to re-ask
-  // through a driver that has gone (webapi.h wifi_netifs_down). The station
-  // alone (6f0a7f0) was not enough: the gauge still crashed, 2026-11-17.
-  wifi_netifs_down();
+  // No ARP entry left to outlive the interfaces WIFI_OFF destroys - the
+  // crash a second after every upload's close (webapi.h wifi_before_off).
+  wifi_before_off();
   WiFi.disconnect(true);
   Serial.println(F("[..] upload: hotspot left"));
   WiFi.mode(WIFI_OFF);
-  // Again, the radio off: leaving the hotspot can make an entry after the
-  // first clearing (its DHCP release) - 87a637a still crashed, 2026-11-21.
-  wifi_netifs_down();
+  wifi_after_off();
   Serial.println(F("[..] upload: radio off"));
   free(buf);
   free(plan);
