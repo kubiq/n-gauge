@@ -24,8 +24,9 @@ import { S, themed, useColors } from '@/theme';
 
 const GROUPS = [...new Set(SETTINGS.map((d) => d.group))];
 // A change goes to the gauge this long after the last one: switches flipped
-// together, a number typed digit by digit, go as one save.
-const SAVE_AFTER_MS = 1000;
+// together, a number typed digit by digit, go as one save. 2 s (asked
+// 2026-11-17: at 1 s it saved between changes, and changing several fought it).
+const SAVE_AFTER_MS = 2000;
 
 // The gauge's own screen, from the main ⋮ (under Settings, which is the
 // phone's): setting it up, its settings and screen order, its firmware and
@@ -155,10 +156,13 @@ export default function GaugeSettingsScreen() {
   // after the last change, everything changed and valid in one /save - a
   // number still being typed, or out of range, waits (it is marked). What
   // was sent leaves the edits once the gauge has it; anything changed
-  // meanwhile stays, and goes with the next save.
+  // meanwhile stays, and goes with the next save. No sync from here: one
+  // stopped for the save is picked up again, none is started (a sync after
+  // each save held the gauge, and the next change had to stop it).
   const save = async () => {
     const sent = { ...changes };
     const sentViews = viewsChanged ? views : null;
+    const wasSyncing = sync.phase !== 'idle';
     setBusy('save');
     setSaved(null);
     try {
@@ -183,7 +187,7 @@ export default function GaugeSettingsScreen() {
       setSaved(String((e as Error).message));
     } finally {
       setBusy(null);
-      sync.sync();
+      if (wasSyncing) sync.sync();
     }
   };
   // Re-run on every change (changeKey), so the timer holds this render's
