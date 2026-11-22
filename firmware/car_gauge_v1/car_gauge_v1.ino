@@ -429,11 +429,12 @@ static void gaugesTask(uint32_t now) {
       o.haveCool = obd_coolant_fresh();  o.coolC = obd.coolantC;  o.coolHot = tempOverCool;
       o.haveBoost = obd_boost_fresh();   o.boostBar = obd.boostBar;
       // Power in the centre (asked 2026-11-22: rpm flickered and the car
-      // has its own rev counter): the torque estimate times rpm, kW = Nm *
-      // rpm / 9549. Off the throttle the load, and so the power, is ~0.
+      // has its own rev counter): the torque estimate times rpm, scaled to
+      // the rated peak (POWER_KW). Off the throttle the load, and so the
+      // power, is ~0.
       o.havePower = obd_rpm_fresh() && obd.rpm > 0 && obd_absload_fresh();
       if (o.havePower) {
-        const float kw = TORQUE_NM_FROM_LOAD(obd.absLoadPct) * obd.rpm / 9549.0f;
+        const float kw = POWER_KW(TORQUE_NM_FROM_LOAD(obd.absLoadPct), (float)obd.rpm);
         o.powerKw = kw > 0 ? (int)(kw + 0.5f) : 0;
       }
       // The average from a kilometre on: a short hop's reads absurd (trips.ts).

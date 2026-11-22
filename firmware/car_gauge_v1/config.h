@@ -317,6 +317,13 @@
 #define TORQUE_PEAK_LOAD_PCT   230.0f
 #define TORQUE_NM_FROM_LOAD(p) ((p) * TORQUE_RATED_NM / TORQUE_PEAK_LOAD_PCT)
 #define TORQUE_ARC_MAX_NM      400    // full scale of the inner arc
+// Power from that torque (the overview): Nm * rpm / 9549 peaked at ~225 kW
+// at 6200-6400 rpm over every drive logged to 2026-11-22 - torque is not
+// proportional to load that high up, where the engine is less efficient.
+// Scaled so the hardest pull reads the car's rated 206 kW.
+#define POWER_RATED_KW         206
+#define POWER_PEAK_EST_KW      225.0f
+#define POWER_KW(nm, rpm) ((nm) * (rpm) / 9549.0f * POWER_RATED_KW / POWER_PEAK_EST_KW)
 // Full scale of the boost arc, bar. Was 2.00, and the car's real peak -
 // 1.26-1.34 bar per session on the 2026-10-17 track day, 1.34 the most the
 // owner could get out of it - filled only two thirds of the arc. Above it
