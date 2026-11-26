@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { asFuel, type Fuel, fillId, fuelByDrive, fuelLabel, totalsByFuel } from './fuel-grade.ts';
+import { asFuel, type Fuel, fillId, fuelByDrive, fuelLabel, GRADES, sameFuel, totalsByFuel } from './fuel-grade.ts';
 import type { Refuel } from './trips.ts';
 
 const fill = (at: number | null, fromPct = 20, toPct = 90): Refuel => ({ at, pt: null, fromPct, toPct });
@@ -25,8 +25,24 @@ test('labels: octane, and the ethanol when known', () => {
 test('stored values are checked', () => {
   assert.deepEqual(asFuel({ octane: 98, ethanol: 5 }), F98);
   assert.deepEqual(asFuel({ octane: 100 }), V100);
-  assert.deepEqual(asFuel({ octane: 95, ethanol: 85 }), { octane: 95, ethanol: null });
+  assert.deepEqual(asFuel({ octane: 98, ethanol: 85 }), { octane: 98, ethanol: null });
   assert.equal(asFuel({ octane: 91 }), null);
+});
+
+test('a 95 reads as E10: no other is sold here', () => {
+  assert.deepEqual(asFuel({ octane: 95, ethanol: 5 }), F95);
+  assert.deepEqual(asFuel({ octane: 95 }), F95);
+  assert.deepEqual(asFuel({ octane: 95, ethanol: 10 }), F95);
+});
+
+test('the picker offers the grades sold here, each told apart', () => {
+  assert.deepEqual(GRADES.map(fuelLabel), ['95 E10', '98 E10', '98 E5', '100']);
+  assert.ok(sameFuel(GRADES[2], F98));
+  assert.ok(!sameFuel(GRADES[1], F98));
+  assert.ok(!sameFuel(null, F98));
+});
+
+test('unknown values are refused', () => {
   assert.equal(asFuel('98'), null);
   assert.equal(asFuel(null), null);
 });

@@ -14,7 +14,7 @@ import { LogKeyError } from '@/lib/logtext';
 import { endName, forgetStaleTitles, type Names, tripName } from '@/lib/names';
 import { groupByWeek, mondayOf, weekLabel } from '@/lib/weeks';
 import { allLogNames, saveLogsToFolder, savedText } from '@/lib/share';
-import { ETHANOLS, type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, OCTANES, totalsByFuel } from '@/lib/fuel-grade';
+import { type Fuel, fillId, fuelByDrive, fuelLabel, type Fuels, GRADES, sameFuel, totalsByFuel } from '@/lib/fuel-grade';
 import {
   type Inbox,
   type ListFacts,
@@ -567,8 +567,8 @@ function TripRow({
 // where. The litres are the levels' difference over the tank, so roughly:
 // the car reads the level in steps.
 //
-// A tap opens the fuel that went in (fuel-grade.ts): the octane, then if
-// known the ethanol; a picked one tapped again is cleared. Not set, the
+// A tap opens the fuel that went in (fuel-grade.ts): the grades sold here,
+// one tap each (GRADES); a picked one tapped again is cleared. Not set, the
 // line asks for it.
 function FillLine({
   f,
@@ -616,20 +616,7 @@ function FillLine({
       {place ? <Text style={ui.note}>{place}</Text> : null}
       {open ? (
         <View style={styles.chips}>
-          {OCTANES.map((o) =>
-            chip(String(o), fuel?.octane === o, () =>
-              onFuel(fuel?.octane === o ? null : { octane: o, ethanol: fuel?.ethanol ?? null }),
-            ),
-          )}
-          <View style={styles.chipGap} />
-          {ETHANOLS.map((e) =>
-            chip(
-              `E${e}`,
-              fuel?.ethanol === e,
-              () => fuel && onFuel({ ...fuel, ethanol: fuel.ethanol === e ? null : e }),
-              !fuel,
-            ),
-          )}
+          {GRADES.map((g) => chip(fuelLabel(g), sameFuel(fuel, g), () => onFuel(sameFuel(fuel, g) ? null : g)))}
         </View>
       ) : null}
     </Pressable>
@@ -666,7 +653,6 @@ const useStyles = themed((C) =>
     fuelAsk: { color: C.link, fontWeight: '400' },
     // The fuel's choices: the octanes, a gap, the ethanol.
     chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: S.sm, marginTop: S.sm },
-    chipGap: { width: S.md },
     chip: {
       minWidth: 48,
       minHeight: 36,

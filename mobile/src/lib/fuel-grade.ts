@@ -21,16 +21,37 @@ export type Ethanol = (typeof ETHANOLS)[number];
 export type Fuel = { octane: Octane; ethanol: Ethanol | null };
 export type Fuels = Record<string, Fuel>;
 
+/**
+ * What the pumps where the car fills up sell (asked 2026-11-17, answered
+ * 2026-11-26): 95 only as E10, 98 mostly E10 and sometimes E5, 100 with its
+ * ethanol not known. The picker offers these, one tap each.
+ */
+export const GRADES: readonly Fuel[] = [
+  { octane: 95, ethanol: 10 },
+  { octane: 98, ethanol: 10 },
+  { octane: 98, ethanol: 5 },
+  { octane: 100, ethanol: null },
+];
+
+export function sameFuel(a: Fuel | null, b: Fuel | null): boolean {
+  return !!a && !!b && a.octane === b.octane && a.ethanol === b.ethanol;
+}
+
 /** "98 E5", or "98" with the ethanol not known. Also what fuels are told apart by. */
 export function fuelLabel(f: Fuel): string {
   return f.ethanol ? `${f.octane} E${f.ethanol}` : String(f.octane);
 }
 
-/** A stored value, if it is one - the file may be from another version. */
+/**
+ * A stored value, if it is one - the file may be from another version. A 95
+ * reads as E10, whatever was picked: no other 95 is sold here (GRADES), so
+ * an old "95 E5" or a bare "95" was a pick that could not be right.
+ */
 export function asFuel(v: unknown): Fuel | null {
   if (!v || typeof v !== 'object') return null;
   const { octane, ethanol } = v as Record<string, unknown>;
   if (!(OCTANES as readonly unknown[]).includes(octane)) return null;
+  if (octane === 95) return { octane: 95, ethanol: 10 };
   return { octane: octane as Octane, ethanol: (ETHANOLS as readonly unknown[]).includes(ethanol) ? (ethanol as Ethanol) : null };
 }
 
