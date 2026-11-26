@@ -6,7 +6,9 @@
 #include "config.h"
 #include "calc.h"         // ISO-TP reassembly, the Mode 01 walk and formulas
 #include "taskwdt.h"
+#include "logger.h"       // logger_note_boot: the bus-off storm lines
 #include <Arduino.h>
+#include <stdarg.h>
 #include "driver/gpio.h"   // RX idle-level report, Rs pad hold
 #include "driver/twai.h"
 #include <string.h>
@@ -14,6 +16,7 @@
 ObdState obd;
 
 static void obdTask(void *arg);   // defined below, spawned from obd_init()
+static bool canInstall(twai_mode_t mode);
 
 // CAN ID of the module whose reply handleUds() is parsing: only the engine
 // ECU (0x7E8) and the TPMS module end the request in flight.
@@ -92,29 +95,8 @@ void obd_init() {
   // enabled and we can actually transmit. Must run before twai_start().
   obd_transceiver_standby(false);
 
-  twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
-      (gpio_num_t)CAN_TX_GPIO, (gpio_num_t)CAN_RX_GPIO, TWAI_MODE_NORMAL);
-  // The default rx_queue_len is 5, but one oil-temp reply is 7 frames (First
-  // Frame + 6 Consecutive) arriving back-to-back, and lv_timer_handler() can
-  // block this loop for tens of ms while rendering. That overflowed the queue,
-  // dropped a Consecutive Frame and aborted the reassembly - which presented
-  // as oil temp updating only occasionally.
-  g.rx_queue_len = 32;
-  g.tx_queue_len = 10;
-  twai_timing_config_t t = TWAI_TIMING_CONFIG_500KBITS();
-  // Accept everything, and keep it that way - it is load-bearing for sleep,
-  // not a filter left for later. After a wake the pod listens WAKE_SAMPLE_MS
-  // for a live bus before it has sent a single request (power.cpp), so what
-  // it must see then is whatever frame woke it, not a reply to itself. A
-  // filter narrowed to the replies (0x7E8, 0x7A8) would find nothing there,
-  // and the pod would go back to sleep with the car running.
-  twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-  obd.linkUp = (twai_driver_install(&g, &t, &f) == ESP_OK) &&
-               (twai_start() == ESP_OK);
+  obd.linkUp = canInstall(TWAI_MODE_NORMAL);
   if (!obd.linkUp) return;
-  twai_reconfigure_alerts(TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_BUS_OFF |
-                          TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_RECOVERED,
-                          NULL);
 
   // Report the idle level of the RX line, because it decides whether the
   // CAN-edge wake can arm at all - and that decision was previously only
@@ -133,6 +115,31 @@ void obd_init() {
   // Core 0: the Arduino loop (and therefore LVGL) is pinned to core 1 by
   // CONFIG_ARDUINO_RUNNING_CORE, so this keeps CAN off the rendering core.
   xTaskCreatePinnedToCore(obdTask, "obd", TASK_OBD_STACK, NULL, TASK_OBD_PRIO, NULL, TASK_CORE);
+}
+
+// The driver installed and started in `mode`: normal at boot, listen-only
+// for a spell after a bus-off storm (and normal again after it).
+static bool canInstall(twai_mode_t mode) {
+  twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
+      (gpio_num_t)CAN_TX_GPIO, (gpio_num_t)CAN_RX_GPIO, mode);
+  // The default rx_queue_len is 5, but one oil-temp reply is 7 frames (First
+  // Frame + 6 Consecutive) arriving back-to-back, and lv_timer_handler() can
+  // block this loop for tens of ms while rendering. That overflowed the queue,
+  // dropped a Consecutive Frame and aborted the reassembly - which presented
+  // as oil temp updating only occasionally.
+  g.rx_queue_len = 32;
+  g.tx_queue_len = 10;
+  twai_timing_config_t t = TWAI_TIMING_CONFIG_500KBITS();
+  // Accept everything, and keep it that way - it is load-bearing for sleep,
+  // not a filter left for later. After a wake the pod listens WAKE_SAMPLE_MS
+  // for a live bus before it has sent a single request (power.cpp), so what
+  // it must see then is whatever frame woke it, not a reply to itself. A
+  // filter narrowed to the replies (0x7E8, 0x7A8) would find nothing there,
+  // and the pod would go back to sleep with the car running.
+  twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+  g.alerts_enabled = TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_BUS_OFF |
+                     TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_RECOVERED;
+  return twai_driver_install(&g, &t, &f) == ESP_OK && twai_start() == ESP_OK;
 }
 
 // --- request senders --------------------------------------------------------
@@ -374,6 +381,94 @@ static void handleFrame(const twai_message_t &m) {
   }
 }
 
+// --- bus-off storms: listen-only, and what the boot log is told -------------
+// Frames received since boot, any ID: what a listen-only spell heard.
+static uint32_t framesRx = 0;
+
+// Lines for the boot log, written by obd_note_task() on loop(): the card is
+// not this task's. One writer (here), one reader; a full ring drops the line.
+static const int NOTE_SLOTS = 4;
+static char notes[NOTE_SLOTS][192];
+static volatile uint32_t noteHead = 0, noteTail = 0;
+static uint8_t notesThisBoot = 0;             // a bad morning: a line a spell
+
+static void note(const char *fmt, ...) {
+  if (noteHead - noteTail >= NOTE_SLOTS || notesThisBoot >= 20) return;
+  notesThisBoot++;
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(notes[noteHead % NOTE_SLOTS], sizeof(notes[0]), fmt, ap);
+  va_end(ap);
+  noteHead = noteHead + 1;
+}
+
+void obd_note_task() {
+  if (noteTail == noteHead) return;
+  if (logger_note_boot(notes[noteTail % NOTE_SLOTS])) noteTail = noteTail + 1;
+}
+
+// CAN_STORM_BUSOFFS bus-offs within CAN_STORM_WINDOW_MS, this one included.
+static bool stormed(uint32_t now) {
+  static uint32_t at[CAN_STORM_BUSOFFS];
+  static uint8_t i = 0;
+  at[i] = now;
+  i = (i + 1) % CAN_STORM_BUSOFFS;
+  const uint32_t oldest = at[i];              // the one CAN_STORM_BUSOFFS ago
+  return obd.busOffs >= CAN_STORM_BUSOFFS && now - oldest <= CAN_STORM_WINDOW_MS;
+}
+
+static uint32_t listenFromMs = 0, listenFramesFrom = 0, listenRxErrMax = 0;
+
+// From bus-off (the driver may be uninstalled there) to listen-only. The
+// controller's counters go to the boot log first - they are reset by the
+// reinstall - to say next time what failed: our frames (tx errors, bus
+// errors on what we sent) or the bus itself.
+static void toListenOnly(uint32_t now) {
+  twai_status_info_t st = {};
+  twai_get_status_info(&st);
+  note("CAN: bus-off storm (%lu bus-offs since boot) -> listen-only %lu s | "
+       "tx err %lu, rx err %lu, bus errors %lu, tx failed %lu, arb lost %lu, "
+       "rx missed %lu, frames heard %lu",
+       (unsigned long)obd.busOffs, (unsigned long)(CAN_LISTEN_HOLD_MS / 1000),
+       (unsigned long)st.tx_error_counter, (unsigned long)st.rx_error_counter,
+       (unsigned long)st.bus_error_count, (unsigned long)st.tx_failed_count,
+       (unsigned long)st.arb_lost_count, (unsigned long)st.rx_missed_count,
+       (unsigned long)framesRx);
+  if (twai_driver_uninstall() != ESP_OK) {   // not in bus-off after all
+    twai_stop();
+    twai_driver_uninstall();
+  }
+  obd.listenOnly = true;
+  obd.listenSpells++;
+  obd.busOff = false;
+  reqInFlight = false;
+  listenFromMs = now ? now : 1;
+  listenFramesFrom = framesRx;
+  listenRxErrMax = 0;
+  if (!canInstall(TWAI_MODE_LISTEN_ONLY)) note("CAN: listen-only would not start");
+}
+
+// While listening: the worst receive error level seen, and after
+// CAN_LISTEN_HOLD_MS back to normal - a line saying what the spell heard.
+// Frames heard with rx errors ~0 = the bus is fine and our own sending was
+// failing; rx errors climbing too = the bus, or our connection to it.
+static void listenOnlyTask(uint32_t now) {
+  twai_status_info_t st = {};
+  if (twai_get_status_info(&st) == ESP_OK && st.rx_error_counter > listenRxErrMax)
+    listenRxErrMax = st.rx_error_counter;
+  if (now - listenFromMs < CAN_LISTEN_HOLD_MS) return;
+  note("CAN: listen-only %lu s heard %lu frames, rx err max %lu, bus errors %lu, "
+       "rx missed %lu -> normal",
+       (unsigned long)((now - listenFromMs) / 1000),
+       (unsigned long)(framesRx - listenFramesFrom), (unsigned long)listenRxErrMax,
+       (unsigned long)st.bus_error_count, (unsigned long)st.rx_missed_count);
+  twai_stop();
+  twai_driver_uninstall();
+  obd.listenOnly = false;
+  reqDoneMs = now;
+  if (!canInstall(TWAI_MODE_NORMAL)) note("CAN: normal mode would not start");
+}
+
 // Runs on its own task - see the note in obd.h.
 static void obdPoll() {
   // Block briefly on the queue rather than spinning: this is a dedicated task,
@@ -391,6 +486,7 @@ static void obdPoll() {
     // with the car off, so its replies - and any broadcast traffic - are the
     // signal. This also stops a parked wake from opening a drive log.
     if (m.identifier != TPMS_REQ_ID + 8) obd.lastFrameMs = millis();
+    framesRx++;
     handleFrame(m);
   }
 
@@ -412,7 +508,12 @@ static void obdPoll() {
     if (alerts & TWAI_ALERT_BUS_OFF) {
       obd.busOffs++;
       obd.busOff = true;
-      twai_initiate_recovery();       // takes 128 idle bus occurrences
+      if (stormed(now)) {
+        needStart = false;
+        toListenOnly(now);
+      } else {
+        twai_initiate_recovery();     // takes 128 idle bus occurrences
+      }
     }
     // Recovery leaves the driver STOPPED; it must be started again.
     if (alerts & TWAI_ALERT_BUS_RECOVERED) needStart = true;
@@ -431,6 +532,11 @@ static void obdPoll() {
     }
   }
 
+  // Listening only: nothing is asked until the spell is over.
+  if (obd.listenOnly) {
+    listenOnlyTask(now);
+    return;
+  }
   // Nothing else is worth attempting while the controller is down.
   if (obd.busOff) return;
 

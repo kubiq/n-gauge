@@ -202,6 +202,17 @@
 // After a bus-off recovery the driver must be started again; a start that
 // fails is retried this often, never given up (obd.cpp, "controller health").
 #define CAN_START_RETRY_MS  1000
+// A bus-off storm - CAN_STORM_BUSOFFS within CAN_STORM_WINDOW_MS - drops the
+// controller to listen-only for CAN_LISTEN_HOLD_MS, then normal is tried
+// again. 2026-11-26, 0 °C: ~6 bus-offs a second for 4 minutes from the wake,
+// the gauge deaf to a running car ("waiting for engine") the whole time - a
+// bus-off stops reception too. Listen-only never transmits, so it cannot go
+// bus-off, and still hears the car; the requested values wait for normal.
+// Cause unknown (our own frames failing: wiring/contact, transceiver,
+// supply?) - each spell's line in the boot log says what it heard.
+#define CAN_STORM_BUSOFFS    5
+#define CAN_STORM_WINDOW_MS  2000
+#define CAN_LISTEN_HOLD_MS   30000
 // The oil DID (oil, and coolant as the dash shows it) once a second: both
 // change by well under 1 °C/s, and the over-temp warnings can afford 1 s.
 // Every other slot goes to the 6-PID request, so boost gets nearly all of

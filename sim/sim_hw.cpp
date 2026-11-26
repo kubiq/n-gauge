@@ -33,6 +33,7 @@ ObdState obd;
 // obd_*_fresh(): the firmware's own, obd_fresh.cpp.
 void obd_init() { obd.linkUp = true; }   // the CAN driver "started"
 void obd_transceiver_standby(bool) {}
+void obd_note_task() {}
 
 // ---- GPS --------------------------------------------------------------------
 GpsState gps;

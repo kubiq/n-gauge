@@ -95,6 +95,10 @@ struct ObdState {
   uint32_t busOffs       = 0;       // times we hit bus-off
   uint32_t recoveries    = 0;       // successful recoveries
   uint32_t errPassive    = 0;       // error-passive warnings (bus degrading)
+  // Listen-only after a bus-off storm (CAN_STORM_BUSOFFS): hearing the car,
+  // asking nothing.
+  bool     listenOnly    = false;
+  uint32_t listenSpells  = 0;       // times dropped to listen-only since boot
 };
 
 extern ObdState obd;
@@ -151,3 +155,8 @@ bool obd_tyre_fresh(int wheel);
 // hold and restores high-speed mode, because a deep-sleep wake always comes
 // back through setup().
 void obd_transceiver_standby(bool on);
+
+// Every loop() pass: writes what the CAN task left for the boot log - a
+// bus-off storm with the controller's error counters, and what each
+// listen-only spell heard - from loop(), as the card is not the CAN task's.
+void obd_note_task();

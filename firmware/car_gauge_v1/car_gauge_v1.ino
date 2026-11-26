@@ -502,8 +502,9 @@ static void gaugesTask(uint32_t now) {
     // And the car's link - "not connected to CAN bus" here, not as a rim
     // over every screen (2026-11-12).
     const PodState &ps = podstate();
-    ui_update_status_car((ps.faults & PS_FAULT_CAN) ? 2 : ps.car == PS_CAR_OFF ? 0 : 1,
+    ui_update_status_car((ps.faults & PS_FAULT_CAN) || obd.listenOnly ? 2 : ps.car == PS_CAR_OFF ? 0 : 1,
                          (ps.faults & PS_FAULT_CAN) ? "not connected to CAN bus"
+                         : obd.listenOnly           ? "CAN errors - listening only"
                          : ps.car == PS_CAR_RUNNING ? "car: engine running"
                          : ps.car == PS_CAR_ON      ? "car: talking"
                                                     : "car: silent");
@@ -829,6 +830,7 @@ void loop() {
     const uint32_t now = millis();
     passTiming(now);
     bootlog_task(now);
+    obd_note_task();
     bench_task(now);
     // No gps_task() and no logger_task() here: the GNSS and the logger run on
     // their own tasks on core 0, as CAN does.
