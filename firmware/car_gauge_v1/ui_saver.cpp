@@ -1,14 +1,12 @@
 // ============================================================================
-// ui_saver.cpp  —  the screen saver: the N badge alone, dimmed, in place of
-// gauges with nothing to show - the car silent - which read "--" and looked
-// broken (asked 2026-11-12). Still: drawn once, nothing moves or redraws -
-// not the boot splash, whose arcs sweep. Dim, as an AMOLED left on wants:
-// almost every pixel off. Shown and taken away by saverTask in the sketch.
-// See ui_priv.h.
+// ui_saver.cpp  —  the screen saver: a black screen in place of gauges with
+// nothing to show - the car silent - which read "--" and looked broken
+// (asked 2026-11-12). All black since 2026-11-26 (asked: the dimmed N badge
+// it had did not read as off): on an AMOLED every pixel off, and nothing
+// drawn or redrawn. A touch anywhere still brings the gauges back. Shown and
+// taken away by saverTask in the sketch. See ui_priv.h.
 // ============================================================================
 #include "ui_priv.h"
-
-extern "C" const lv_image_dsc_t n_logo;   // the splash's N badge (n_logo_img.c)
 
 static volatile bool saverTouched = false;
 
@@ -19,10 +17,9 @@ static void saver_touch_cb(lv_event_t *e) {
 
 lv_obj_t *ui_build_saver() {
   lv_obj_t *s = make_screen();
-  lv_obj_t *badge = lv_image_create(s);
-  lv_image_set_src(badge, &n_logo);
-  lv_obj_set_style_image_opa(badge, SAVER_OPA, 0);
-  lv_obj_center(badge);
+  // Pure black, not the screens' COL_BG (0x0d1116): that dark blue-grey
+  // lights every pixel faintly, and showed in a dark car.
+  lv_obj_set_style_bg_color(s, lv_color_hex(0x000000), 0);
   lv_obj_add_event_cb(s, saver_touch_cb, LV_EVENT_PRESSED, NULL);
   return s;
 }

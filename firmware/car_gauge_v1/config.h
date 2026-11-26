@@ -1009,9 +1009,9 @@
 #define STATUS_REFRESH_MS  250
 // The screen saver (saverTask, ui_saver.cpp): with the car silent, a gauge
 // screen gives way to it after this long untouched; a touch brings the
-// gauges back for as long again. The badge at this opacity, 0-255.
+// gauges back for as long again. All black (2026-11-26; was the N badge,
+// dimmed, which did not read as off).
 #define SAVER_AFTER_MS     60000
-#define SAVER_OPA          90
 // The sync screen (syncTask): a sync has ended this long after the last file
 // was sent - the phone asks for the next one at once, so a gap means done.
 #define SYNC_QUIET_MS      5000
