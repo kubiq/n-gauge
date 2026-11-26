@@ -11,7 +11,7 @@
 
 extern "C" const lv_image_dsc_t n_logo;   // the splash's N badge (n_logo_img.c)
 
-static lv_obj_t *syncCount, *syncOuter;
+static lv_obj_t *syncCount, *syncLeft, *syncOuter;
 static volatile bool syncTouched = false;
 
 static void sync_touch_cb(lv_event_t *e) {
@@ -33,6 +33,8 @@ lv_obj_t *ui_build_sync() {
   make_name(s, "Syncing with the phone", 50);
   syncCount = make_name(s, "", 80);
   lv_obj_set_style_text_color(syncCount, COL_DIM, 0);
+  syncLeft = make_name(s, "", 106);
+  lv_obj_set_style_text_color(syncLeft, COL_DIM, 0);
   lv_obj_add_event_cb(s, sync_touch_cb, LV_EVENT_PRESSED, NULL);
   return s;
 }
@@ -71,8 +73,15 @@ void ui_update_sync(uint16_t files, uint32_t bytes, const UiSyncPlan *plan) {
     fmtSize(total, sizeof(total), plan->total);
     // A comma, not a dot: the small font may lack "·" (ui_overview.cpp).
     lv_label_set_text_fmt(syncCount, "file %u of %u, %s of %s", plan->at, plan->of, got, total);
+    // And what is left, the file being sent counted in (asked 2026-11-22).
+    const unsigned leftFiles = plan->of >= plan->at ? plan->of - plan->at + 1 : 0;
+    char left[16];
+    fmtSize(left, sizeof(left), plan->total > plan->done ? plan->total - plan->done : 0);
+    lv_label_set_text_fmt(syncLeft, "%u %s, %s left", leftFiles, leftFiles == 1 ? "file" : "files", left);
   } else {
+    // An app that does not say its plan: what is left is not known.
     lv_label_set_text_fmt(syncCount, "%u files, %s", files, got);
+    lv_label_set_text(syncLeft, "");
   }
 }
 
